@@ -123,7 +123,9 @@ pub fn render_pdf(meta: &ReportMeta, issues: &[Issue], filter: &ReportFilter) ->
         cursor_mm -= 3.0;
     }
 
-    doc.save_to_bytes().unwrap_or_default()
+    let mut buf = std::io::BufWriter::new(Vec::new());
+    doc.save(&mut buf).ok();
+    buf.into_inner().unwrap_or_default()
 }
 
 fn put_line(
