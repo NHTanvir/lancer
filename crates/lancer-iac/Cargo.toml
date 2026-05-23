@@ -1,0 +1,15 @@
+[package]
+name = "lancer-iac"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Container/IaC awareness — parse Dockerfile, docker-compose, k8s manifests, Terraform for additional attack surface."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+regex.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+once_cell.workspace = true

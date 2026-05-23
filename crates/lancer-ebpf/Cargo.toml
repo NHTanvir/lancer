@@ -1,0 +1,17 @@
+[package]
+name = "lancer-ebpf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "eBPF-based traffic capture (Linux-only, opt-in)."
+
+[dependencies]
+serde.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+
+[features]
+default = []
+# Real implementation pulls in `aya` once the linux feature is enabled.
+linux = []

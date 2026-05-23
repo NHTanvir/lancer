@@ -8,6 +8,7 @@ pub mod dom;
 pub mod engagement;
 pub mod export;
 pub mod history;
+pub mod iac;
 pub mod import;
 pub mod intruder;
 pub mod mobile;

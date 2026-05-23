@@ -71,6 +71,8 @@ enum Cmd {
     Dom(commands::dom::DomArgs),
     /// Mobile testing assistants (Android ADB, iOS profile, Frida snippets).
     Mobile(commands::mobile::MobileArgs),
+    /// Parse IaC files (Dockerfile / compose / k8s / Terraform) for attack surface.
+    Iac(commands::iac::IacArgs),
 }
 
 fn main() -> Result<()> {
@@ -109,6 +111,7 @@ fn main() -> Result<()> {
             Cmd::Export(a) => commands::export::run(a).await,
             Cmd::Dom(a) => commands::dom::run(a).await,
             Cmd::Mobile(a) => commands::mobile::run(a).await,
+            Cmd::Iac(a) => commands::iac::run(a).await,
         }
     })
 }

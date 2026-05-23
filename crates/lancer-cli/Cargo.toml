@@ -22,6 +22,8 @@ lancer-session = { path = "../lancer-session" }
 lancer-plugin = { path = "../lancer-plugin" }
 lancer-dom = { path = "../lancer-dom" }
 lancer-mobile = { path = "../lancer-mobile" }
+lancer-iac = { path = "../lancer-iac" }
+lancer-collab = { path = "../lancer-collab" }
 
 tokio.workspace = true
 clap.workspace = true
