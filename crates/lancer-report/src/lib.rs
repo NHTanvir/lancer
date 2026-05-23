@@ -10,7 +10,12 @@
 //! `ReportMeta` (title, project name, generated_at).
 
 pub mod exporters;
+pub mod pdf;
 pub mod templates;
+pub mod tera_tpl;
+
+pub use pdf::render_pdf;
+pub use tera_tpl::{render as render_tera, DEFAULT_TEMPLATE as DEFAULT_TERA_TEMPLATE};
 
 use chrono::{DateTime, Utc};
 use lancer_storage::issues::{Confidence, Issue, Severity};

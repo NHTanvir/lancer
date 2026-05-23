@@ -73,6 +73,12 @@ enum Cmd {
     Mobile(commands::mobile::MobileArgs),
     /// Parse IaC files (Dockerfile / compose / k8s / Terraform) for attack surface.
     Iac(commands::iac::IacArgs),
+    /// Param Miner / Autorize / AuthMatrix.
+    Miner(commands::miner::MinerArgs),
+    /// SAML Raider (decode / encode / strip-signature / XSW).
+    Saml(commands::saml::SamlArgs),
+    /// JSON ↔ XML body converter.
+    Convert(commands::convert::ConvertArgs),
 }
 
 fn main() -> Result<()> {
@@ -112,6 +118,9 @@ fn main() -> Result<()> {
             Cmd::Dom(a) => commands::dom::run(a).await,
             Cmd::Mobile(a) => commands::mobile::run(a).await,
             Cmd::Iac(a) => commands::iac::run(a).await,
+            Cmd::Miner(a) => commands::miner::run(a).await,
+            Cmd::Saml(a) => commands::saml::run(a).await,
+            Cmd::Convert(a) => commands::convert::run(a).await,
         }
     })
 }

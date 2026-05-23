@@ -179,6 +179,48 @@ fn count(node: &PathNode, n: &mut usize) {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteMapDiff {
+    pub added: Vec<(String, String, String)>,
+    pub removed: Vec<(String, String, String)>,
+    pub status_changes: Vec<(String, String, String, Option<u16>, Option<u16>)>,
+}
+
+impl SiteMap {
+    /// Compare two site maps and produce an added/removed/changed diff.
+    pub fn diff(&self, other: &SiteMap) -> SiteMapDiff {
+        use std::collections::{BTreeMap, BTreeSet};
+        let mine: BTreeSet<(String, String, String)> = self
+            .flatten()
+            .into_iter()
+            .map(|(h, p, e)| (h, p, e.method))
+            .collect();
+        let theirs: BTreeSet<(String, String, String)> = other
+            .flatten()
+            .into_iter()
+            .map(|(h, p, e)| (h, p, e.method))
+            .collect();
+        let added: Vec<_> = theirs.difference(&mine).cloned().collect();
+        let removed: Vec<_> = mine.difference(&theirs).cloned().collect();
+        let my_status: BTreeMap<(String, String, String), Option<u16>> = self
+            .flatten()
+            .into_iter()
+            .map(|(h, p, e)| ((h, p, e.method), e.status.map(|s| s as u16)))
+            .collect();
+        let mut status_changes = Vec::new();
+        for (h, p, e) in other.flatten() {
+            let key = (h.clone(), p.clone(), e.method.clone());
+            if let Some(prev) = my_status.get(&key) {
+                let new_status = e.status.map(|s| s as u16);
+                if prev != &new_status {
+                    status_changes.push((h, p, e.method, *prev, new_status));
+                }
+            }
+        }
+        SiteMapDiff { added, removed, status_changes }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
