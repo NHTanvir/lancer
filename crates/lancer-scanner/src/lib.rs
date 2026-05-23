@@ -8,11 +8,13 @@
 //! crawling, insertion-point detection, throttling, and result collection.
 
 pub mod active;
+pub mod bcheck;
 pub mod collaborator;
 pub mod config;
 pub mod engine;
 pub mod insertion;
 pub mod passive;
+pub mod waf;
 
 use async_trait::async_trait;
 use lancer_core::{HttpRequest, HttpResponse};

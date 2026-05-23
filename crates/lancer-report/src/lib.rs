@@ -9,6 +9,8 @@
 //! All formats take a slice of `Issue` (from `lancer_storage`) plus a
 //! `ReportMeta` (title, project name, generated_at).
 
+pub mod exporters;
+
 use chrono::{DateTime, Utc};
 use lancer_storage::issues::{Confidence, Issue, Severity};
 use serde::{Deserialize, Serialize};

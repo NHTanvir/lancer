@@ -2,6 +2,7 @@
 
 pub mod api_spec;
 pub mod client;
+pub mod cloud_metadata;
 pub mod comparer;
 pub mod crawler;
 pub mod decoder;
@@ -10,6 +11,7 @@ pub mod grep;
 pub mod intruder;
 pub mod logger;
 pub mod organizer_tools;
+pub mod payload_library;
 pub mod payload_processor;
 pub mod positions;
 pub mod repeater;

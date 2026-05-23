@@ -59,6 +59,14 @@ enum Cmd {
     Crawl(commands::crawl::CrawlArgs),
     /// Import an OpenAPI 3.x spec or Postman 2.1 collection.
     Import(commands::import::ImportArgs),
+    /// BCheck DSL (list/lint/run).
+    Bcheck(commands::bcheck::BCheckArgs),
+    /// WAF fingerprinting against a URL.
+    Waf(commands::waf::WafArgs),
+    /// Built-in payload encyclopedia (list/search).
+    Payloads(commands::payloads::PayloadsArgs),
+    /// Export findings as Jira / Linear / GitHub / DefectDojo payloads.
+    Export(commands::export::ExportArgs),
 }
 
 fn main() -> Result<()> {
@@ -91,6 +99,10 @@ fn main() -> Result<()> {
             Cmd::Ai(a) => commands::ai::run(a).await,
             Cmd::Crawl(a) => commands::crawl::run(a).await,
             Cmd::Import(a) => commands::import::run(a).await,
+            Cmd::Bcheck(a) => commands::bcheck::run(a).await,
+            Cmd::Waf(a) => commands::waf::run(a).await,
+            Cmd::Payloads(a) => commands::payloads::run(a).await,
+            Cmd::Export(a) => commands::export::run(a).await,
         }
     })
 }
