@@ -45,6 +45,8 @@ enum Cmd {
     Engagement(commands::engagement::EngagementArgs),
     /// Saved-request library (Organizer).
     Organizer(commands::organizer::OrganizerArgs),
+    /// Passive + active scanner.
+    Scan(commands::scan::ScanArgs),
 }
 
 fn main() -> Result<()> {
@@ -70,6 +72,7 @@ fn main() -> Result<()> {
             Cmd::Sequencer(a) => commands::sequencer::run(a).await,
             Cmd::Engagement(a) => commands::engagement::run(a).await,
             Cmd::Organizer(a) => commands::organizer::run(a).await,
+            Cmd::Scan(a) => commands::scan::run(a).await,
         }
     })
 }

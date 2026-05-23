@@ -8,4 +8,5 @@ pub mod organizer;
 pub mod project;
 pub mod proxy;
 pub mod repeater;
+pub mod scan;
 pub mod sequencer;

@@ -22,5 +22,7 @@ regex.workspace = true
 async-trait.workspace = true
 url.workspace = true
 parking_lot.workspace = true
+once_cell.workspace = true
+hex.workspace = true
 
 [lib]
