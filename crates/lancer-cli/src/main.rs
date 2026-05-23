@@ -35,6 +35,12 @@ enum Cmd {
     Decode(commands::decode::DecodeArgs),
     /// Quick word/byte diff between two files.
     Compare(commands::compare::CompareArgs),
+    /// Send a single request (Repeater).
+    Repeater(commands::repeater::RepeaterArgs),
+    /// Run an Intruder attack from a request template + payload sets.
+    Intruder(commands::intruder::IntruderArgs),
+    /// Analyze token randomness (Sequencer).
+    Sequencer(commands::sequencer::SequencerArgs),
 }
 
 fn main() -> Result<()> {
@@ -55,6 +61,9 @@ fn main() -> Result<()> {
             Cmd::History(a) => commands::history::run(a).await,
             Cmd::Decode(a) => commands::decode::run(a).await,
             Cmd::Compare(a) => commands::compare::run(a).await,
+            Cmd::Repeater(a) => commands::repeater::run(a).await,
+            Cmd::Intruder(a) => commands::intruder::run(a).await,
+            Cmd::Sequencer(a) => commands::sequencer::run(a).await,
         }
     })
 }

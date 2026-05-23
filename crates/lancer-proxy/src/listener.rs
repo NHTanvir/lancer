@@ -432,24 +432,14 @@ fn matches_wildcard(pattern: &str, host: &str) -> bool {
 }
 
 fn build_default_client_config() -> Arc<ClientConfig> {
-    let mut roots = rustls::RootCertStore::empty();
-    for trust in webpki_roots::TLS_SERVER_ROOTS.iter() {
-        roots.add(rustls::pki_types::CertificateDer::from(
-            trust.subject_public_key_info.to_vec(),
-        ))
-        .ok();
-    }
-    // The line above keeps compile happy but is incomplete; in practice we
-    // should add `TrustAnchor` via `RootCertStore::add_trust_anchors`. We
-    // re-add the real anchors below.
     use rustls::pki_types::TrustAnchor;
-    let anchors: Vec<TrustAnchor<'static>> = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
-    let mut real_roots = rustls::RootCertStore::empty();
-    for a in anchors {
-        real_roots.roots.push(a);
-    }
-    let cfg = ClientConfig::builder()
-        .with_root_certificates(real_roots)
+    let mut roots = rustls::RootCertStore::empty();
+    let anchors: Vec<TrustAnchor<'static>> =
+        webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
+    roots.roots.extend(anchors);
+    let mut cfg = ClientConfig::builder()
+        .with_root_certificates(roots)
         .with_no_client_auth();
+    cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Arc::new(cfg)
 }

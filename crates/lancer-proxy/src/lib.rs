@@ -20,6 +20,7 @@ pub mod match_replace;
 pub mod mitm;
 pub mod settings;
 pub mod upstream;
+pub mod websocket;
 
 pub use ca::{CertificateAuthority, CaConfig};
 pub use cert_cache::CertCache;

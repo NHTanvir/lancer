@@ -2,5 +2,8 @@ pub mod cert;
 pub mod compare;
 pub mod decode;
 pub mod history;
+pub mod intruder;
 pub mod project;
 pub mod proxy;
+pub mod repeater;
+pub mod sequencer;

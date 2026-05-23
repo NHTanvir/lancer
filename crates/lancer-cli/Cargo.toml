@@ -31,3 +31,4 @@ uuid.workspace = true
 parking_lot.workspace = true
 console.workspace = true
 indicatif.workspace = true
+hex.workspace = true
