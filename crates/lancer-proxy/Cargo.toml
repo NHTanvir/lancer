@@ -47,3 +47,18 @@ base64.workspace = true
 md-5.workspace = true
 hex.workspace = true
 rand.workspace = true
+sha2.workspace = true
+
+# Optional: HTTP/3 transport
+quinn = { workspace = true, optional = true }
+h3 = { workspace = true, optional = true }
+h3-quinn = { workspace = true, optional = true }
+
+# Optional: embedded webview
+wry = { workspace = true, optional = true }
+tao = { workspace = true, optional = true }
+
+[features]
+default = []
+http3 = ["dep:quinn", "dep:h3", "dep:h3-quinn"]
+embedded-browser = ["dep:wry", "dep:tao"]

@@ -78,11 +78,27 @@ impl HistoryStore {
     }
 
     /// Attach (or replace) the response on an existing history row.
+    ///
+    /// HTTP 304 Not Modified responses preserve the previously stored body —
+    /// we only update the status / mime / elapsed fields, never overwrite
+    /// `response_blob` with empty bytes.
     pub async fn attach_response(
         &self,
         id: Uuid,
         resp: &HttpResponse,
     ) -> anyhow::Result<()> {
+        if resp.status == 304 {
+            sqlx::query(
+                "UPDATE history SET status = ?, mime = ?, elapsed_ms = ? WHERE id = ?",
+            )
+            .bind(resp.status as i64)
+            .bind(resp.header("Content-Type"))
+            .bind(resp.elapsed_ms.map(|x| x as i64))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+            return Ok(());
+        }
         let resp_blob = serde_json::to_vec(resp)?;
         sqlx::query(
             "UPDATE history SET status = ?, response_length = ?, mime = ?,

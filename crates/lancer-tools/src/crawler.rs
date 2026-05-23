@@ -7,11 +7,12 @@
 //! This is the Phase-1 crawler — no JS rendering, no form auto-submission.
 //! A Chromium-driven crawler can plug in via the same `CrawlSink` interface.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use sha2::{Digest as _, Sha256};
 use async_trait::async_trait;
 use lancer_core::scope::Scope;
 use lancer_core::sitemap::{NodeKind, SiteMap};
@@ -77,6 +78,10 @@ impl Crawler {
     ) -> Result<usize> {
         let mut queue: VecDeque<(String, usize)> = VecDeque::new();
         let mut seen: HashSet<String> = HashSet::new();
+        // Location fingerprints (response-shape hashes) keyed by their first
+        // canonical URL. Subsequent URLs whose response hashes the same way
+        // are recorded but not re-crawled.
+        let mut fingerprints: HashMap<String, String> = HashMap::new();
         queue.push_back((entry_url.to_string(), 0));
         seen.insert(entry_url.to_string());
 
@@ -111,8 +116,9 @@ impl Crawler {
                     tokio::time::sleep(Duration::from_millis(throttle)).await;
                 }
                 let resp = client.send(&req).await.ok()?;
-                sink2.observed(&req, &resp).await;
                 let body = resp.body_text().unwrap_or("").to_string();
+                let fingerprint = location_fingerprint(&body, resp.status);
+                sink2.observed(&req, &resp).await;
                 let mut found = Vec::new();
                 for href in find_anchors(&body, &url_clone) {
                     if same_host(&href, entry_host.as_deref(), follow_subs) {
@@ -126,10 +132,22 @@ impl Crawler {
                         }
                     }
                 }
-                Some(found)
+                Some((found, fingerprint))
             });
             count += 1;
-            let next = handle.await.ok().flatten().unwrap_or_default();
+            let (next, fingerprint) = match handle.await.ok().flatten() {
+                Some(x) => x,
+                None => continue,
+            };
+            // Skip queuing children if we've already seen the same response
+            // shape under a different URL — this is the "Location
+            // fingerprinting" item from plan.md §5.1.
+            if let Some(prev) = fingerprints.get(&fingerprint) {
+                tracing::debug!(this = %url, mirrors = %prev, "skipping; same location fingerprint");
+                continue;
+            } else {
+                fingerprints.insert(fingerprint, url.clone());
+            }
             if depth + 1 > self.config.max_depth {
                 continue;
             }
@@ -141,6 +159,33 @@ impl Crawler {
         }
         Ok(count)
     }
+}
+
+/// Canonicalise a response body to a stable fingerprint so two URLs that
+/// render the "same page" don't both get crawled. We strip whitespace and
+/// digit runs (so per-render IDs / CSRF tokens don't change the hash), then
+/// SHA-256.
+fn location_fingerprint(body: &str, status: u16) -> String {
+    let mut buf = String::with_capacity(body.len());
+    buf.push_str(&format!("{status}|"));
+    let mut last_was_digit = false;
+    for c in body.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        if c.is_ascii_digit() {
+            if !last_was_digit {
+                buf.push('#');
+                last_was_digit = true;
+            }
+            continue;
+        }
+        last_was_digit = false;
+        buf.push(c);
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(buf.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 fn same_host(candidate: &str, entry: Option<&str>, follow_subdomains: bool) -> bool {
