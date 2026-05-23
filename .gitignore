@@ -33,3 +33,6 @@ node_modules/
 
 # Local-only notes
 plan.md
+
+# Tool-local state
+.claude/

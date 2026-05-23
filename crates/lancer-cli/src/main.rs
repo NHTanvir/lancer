@@ -55,6 +55,10 @@ enum Cmd {
     Plugin(commands::plugin::PluginArgs),
     /// Send a prompt to the configured BYO-LLM provider.
     Ai(commands::ai::AiArgs),
+    /// BFS crawler starting from a URL.
+    Crawl(commands::crawl::CrawlArgs),
+    /// Import an OpenAPI 3.x spec or Postman 2.1 collection.
+    Import(commands::import::ImportArgs),
 }
 
 fn main() -> Result<()> {
@@ -85,6 +89,8 @@ fn main() -> Result<()> {
             Cmd::Palette(a) => commands::palette::run(a).await,
             Cmd::Plugin(a) => commands::plugin::run(a).await,
             Cmd::Ai(a) => commands::ai::run(a).await,
+            Cmd::Crawl(a) => commands::crawl::run(a).await,
+            Cmd::Import(a) => commands::import::run(a).await,
         }
     })
 }

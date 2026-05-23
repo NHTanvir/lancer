@@ -32,4 +32,5 @@ rustls.workspace = true
 webpki-roots.workspace = true
 tokio-rustls.workspace = true
 quick-xml.workspace = true
+serde_yaml.workspace = true
 rand = "0.8"
