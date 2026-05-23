@@ -16,6 +16,10 @@ lancer-proxy.workspace = true
 lancer-tools.workspace = true
 lancer-scanner.workspace = true
 lancer-script.workspace = true
+lancer-report = { path = "../lancer-report" }
+lancer-ai = { path = "../lancer-ai" }
+lancer-session = { path = "../lancer-session" }
+lancer-plugin = { path = "../lancer-plugin" }
 
 tokio.workspace = true
 clap.workspace = true

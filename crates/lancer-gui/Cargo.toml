@@ -1,0 +1,44 @@
+[package]
+name = "lancer-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tauri-based GUI shell for Lancer."
+
+[[bin]]
+name = "lancer-gui"
+path = "src/main.rs"
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+lancer-proxy.workspace = true
+lancer-tools.workspace = true
+lancer-scanner.workspace = true
+lancer-script.workspace = true
+lancer-report = { path = "../lancer-report" }
+lancer-ai = { path = "../lancer-ai" }
+lancer-session = { path = "../lancer-session" }
+lancer-plugin = { path = "../lancer-plugin" }
+
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+bytes.workspace = true
+
+[features]
+default = []
+# Real Tauri integration is gated behind this feature so the workspace can
+# build without pulling in webkit / native deps. Enable with `--features tauri`
+# once Tauri 2.x is available on the build host.
+tauri = []

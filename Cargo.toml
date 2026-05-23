@@ -7,6 +7,11 @@ members = [
     "crates/lancer-tools",
     "crates/lancer-scanner",
     "crates/lancer-script",
+    "crates/lancer-report",
+    "crates/lancer-ai",
+    "crates/lancer-session",
+    "crates/lancer-plugin",
+    "crates/lancer-gui",
     "crates/lancer-cli",
 ]
 
@@ -101,6 +106,10 @@ lancer-proxy = { path = "crates/lancer-proxy" }
 lancer-tools = { path = "crates/lancer-tools" }
 lancer-scanner = { path = "crates/lancer-scanner" }
 lancer-script = { path = "crates/lancer-script" }
+lancer-report = { path = "crates/lancer-report" }
+lancer-ai = { path = "crates/lancer-ai" }
+lancer-session = { path = "crates/lancer-session" }
+lancer-plugin = { path = "crates/lancer-plugin" }
 
 [profile.release]
 opt-level = 3

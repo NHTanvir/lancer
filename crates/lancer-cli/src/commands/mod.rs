@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod cert;
 pub mod compare;
 pub mod decode;
@@ -5,8 +6,11 @@ pub mod engagement;
 pub mod history;
 pub mod intruder;
 pub mod organizer;
+pub mod palette;
+pub mod plugin;
 pub mod project;
 pub mod proxy;
 pub mod repeater;
+pub mod report;
 pub mod scan;
 pub mod sequencer;

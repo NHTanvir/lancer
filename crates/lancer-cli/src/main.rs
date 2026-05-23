@@ -47,6 +47,14 @@ enum Cmd {
     Organizer(commands::organizer::OrganizerArgs),
     /// Passive + active scanner.
     Scan(commands::scan::ScanArgs),
+    /// Render a scanner report (HTML / JSON / Markdown / SARIF / XML).
+    Report(commands::report::ReportArgs),
+    /// Search the command palette.
+    Palette(commands::palette::PaletteArgs),
+    /// Plugin management.
+    Plugin(commands::plugin::PluginArgs),
+    /// Send a prompt to the configured BYO-LLM provider.
+    Ai(commands::ai::AiArgs),
 }
 
 fn main() -> Result<()> {
@@ -73,6 +81,10 @@ fn main() -> Result<()> {
             Cmd::Engagement(a) => commands::engagement::run(a).await,
             Cmd::Organizer(a) => commands::organizer::run(a).await,
             Cmd::Scan(a) => commands::scan::run(a).await,
+            Cmd::Report(a) => commands::report::run(a).await,
+            Cmd::Palette(a) => commands::palette::run(a).await,
+            Cmd::Plugin(a) => commands::plugin::run(a).await,
+            Cmd::Ai(a) => commands::ai::run(a).await,
         }
     })
 }
