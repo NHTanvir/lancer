@@ -17,6 +17,7 @@ members = [
     "crates/lancer-mobile",
     "crates/lancer-collab",
     "crates/lancer-ebpf",
+    "crates/lancer-jvm",
     "crates/lancer-iac",
     "crates/lancer-gui",
     "crates/lancer-cli",
