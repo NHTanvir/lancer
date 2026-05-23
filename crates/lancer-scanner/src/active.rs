@@ -1,22 +1,32 @@
 //! Active scan checks.
 
+pub mod cache_poison;
+pub mod clickjacking;
 pub mod cmd_injection;
 pub mod cors;
 pub mod crlf;
+pub mod deserialization;
 pub mod graphql;
 pub mod host_header;
 pub mod jwt;
 pub mod ldap;
 pub mod mass_assignment;
 pub mod nosqli;
+pub mod oauth;
 pub mod open_redirect;
+pub mod proto_pollution;
+pub mod race;
+pub mod react2shell;
 pub mod ssrf;
 pub mod sqli;
+pub mod smuggling;
 pub mod ssti;
 pub mod subdomain_takeover;
 pub mod traversal;
+pub mod web_llm;
 pub mod xpath;
 pub mod xss;
+pub mod xxe;
 
 use std::sync::Arc;
 
@@ -41,5 +51,15 @@ pub fn registry() -> Vec<Arc<dyn ActiveCheck>> {
         Arc::new(graphql::GraphQlCheck),
         Arc::new(subdomain_takeover::SubdomainTakeoverCheck),
         Arc::new(mass_assignment::MassAssignmentCheck),
+        Arc::new(xxe::XxeCheck),
+        Arc::new(smuggling::SmugglingCheck),
+        Arc::new(cache_poison::CachePoisonCheck),
+        Arc::new(clickjacking::ClickjackingCheck),
+        Arc::new(deserialization::DeserializationCheck),
+        Arc::new(proto_pollution::ProtoPollutionCheck),
+        Arc::new(race::RaceConditionCheck),
+        Arc::new(oauth::OAuthCheck),
+        Arc::new(web_llm::WebLlmCheck),
+        Arc::new(react2shell::React2ShellCheck),
     ]
 }
