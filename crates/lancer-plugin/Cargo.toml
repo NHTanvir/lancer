@@ -18,8 +18,12 @@ parking_lot.workspace = true
 uuid.workspace = true
 toml.workspace = true
 
+wasmtime = { workspace = true, optional = true }
+mlua = { workspace = true, optional = true }
+pyo3 = { workspace = true, optional = true }
+
 [features]
 default = []
-wasm = []
-lua = []
-python = []
+wasm = ["dep:wasmtime"]
+lua = ["dep:mlua"]
+python = ["dep:pyo3"]
