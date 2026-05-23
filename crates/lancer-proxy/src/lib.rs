@@ -11,7 +11,9 @@
 //! The listener does not concern itself with the UI; it speaks to subscribers
 //! through an async event channel.
 
+pub mod browser;
 pub mod ca;
+pub mod ca_import;
 pub mod cert_cache;
 pub mod events;
 pub mod intercept;

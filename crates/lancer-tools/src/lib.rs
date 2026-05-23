@@ -16,6 +16,7 @@ pub mod payload_processor;
 pub mod positions;
 pub mod repeater;
 pub mod sequencer;
+pub mod simulate_browse;
 
 pub use api_spec::{parse_openapi, parse_postman, ImportedRequest};
 pub use client::HttpClient;

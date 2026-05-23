@@ -164,6 +164,32 @@ fn confidence_label(c: Confidence) -> &'static str {
     }
 }
 
+/// Faraday-compatible CSV export. One row per issue.
+pub fn faraday_csv(issues: &[Issue]) -> String {
+    let mut out = String::from("name,severity,host,target,description,resolution,external_id\n");
+    for i in issues {
+        out.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            csv_field(&i.name),
+            i.severity.as_str(),
+            csv_field(&i.host),
+            csv_field(&i.url),
+            csv_field(&i.description),
+            csv_field(i.remediation.as_deref().unwrap_or("")),
+            i.id,
+        ));
+    }
+    out
+}
+
+fn csv_field(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
 fn build_description(i: &Issue) -> String {
     let mut s = String::new();
     s.push_str(&format!("**Host:** {}\n", i.host));

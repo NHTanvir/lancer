@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, ValueEnum};
-use lancer_report::exporters::{defectdojo, github, jira, linear};
+use lancer_report::exporters::{defectdojo, faraday_csv, github, jira, linear};
 use lancer_storage::Storage;
 
 #[derive(Debug, Args)]
@@ -26,6 +26,7 @@ enum Target {
     Linear,
     Github,
     Defectdojo,
+    Faraday,
 }
 
 pub async fn run(args: ExportArgs) -> Result<()> {
@@ -39,6 +40,7 @@ pub async fn run(args: ExportArgs) -> Result<()> {
         Target::Linear => serde_json::to_string_pretty(&linear(&issues))?,
         Target::Github => serde_json::to_string_pretty(&github(&issues))?,
         Target::Defectdojo => serde_json::to_string_pretty(&defectdojo(&issues))?,
+        Target::Faraday => faraday_csv(&issues),
     };
     match args.out {
         Some(p) => {

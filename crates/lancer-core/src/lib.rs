@@ -11,6 +11,7 @@ pub mod project;
 pub mod scope;
 pub mod sitemap;
 pub mod transform;
+pub mod workspace;
 
 pub use error::{Error, Result};
 pub use http_msg::{

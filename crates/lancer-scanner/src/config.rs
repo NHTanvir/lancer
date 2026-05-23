@@ -53,9 +53,58 @@ impl ScanConfig {
         if self.disabled_checks.iter().any(|d| d == id) {
             return false;
         }
+        if let Some(list) = self.preset_allowed_ids() {
+            if !list.contains(&id) {
+                return false;
+            }
+        }
         match &self.enabled_checks {
             Some(list) => list.iter().any(|e| e == id),
             None => true,
+        }
+    }
+
+    /// For presets that map to a fixed check subset, return the allow-list.
+    /// `None` means "no preset filtering, use the user's enabled_checks".
+    fn preset_allowed_ids(&self) -> Option<&'static [&'static str]> {
+        match self.preset {
+            ScanPreset::OwaspTop10 => Some(&[
+                "passive.security_headers",
+                "passive.cookie_flags",
+                "passive.info_disclosure",
+                "active.sqli",
+                "active.xss",
+                "active.traversal",
+                "active.cmd_injection",
+                "active.ssti",
+                "active.ssrf",
+                "active.xxe",
+                "active.deserialization",
+                "active.jwt",
+                "active.open_redirect",
+                "active.cors",
+                "active.host_header",
+            ]),
+            ScanPreset::Lightweight => Some(&[
+                "passive.security_headers",
+                "passive.cookie_flags",
+                "passive.info_disclosure",
+                "passive.software_disclosure",
+                "active.open_redirect",
+                "active.crlf",
+            ]),
+            ScanPreset::AuditOnly => Some(&[
+                "active.sqli",
+                "active.xss",
+                "active.traversal",
+                "active.cmd_injection",
+                "active.ssti",
+                "active.ssrf",
+                "active.xxe",
+                "active.jwt",
+                "active.cors",
+            ]),
+            _ => None,
         }
     }
 }

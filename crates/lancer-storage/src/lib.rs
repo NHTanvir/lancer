@@ -16,6 +16,7 @@ pub mod issues;
 pub mod migrations;
 pub mod organizer;
 pub mod project;
+pub mod snapshot;
 pub mod websocket;
 
 use std::path::Path;

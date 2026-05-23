@@ -10,6 +10,7 @@
 //! `ReportMeta` (title, project name, generated_at).
 
 pub mod exporters;
+pub mod templates;
 
 use chrono::{DateTime, Utc};
 use lancer_storage::issues::{Confidence, Issue, Severity};
