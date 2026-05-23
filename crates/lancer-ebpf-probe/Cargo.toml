@@ -1,0 +1,33 @@
+[package]
+name = "lancer-ebpf-probe"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "BPF program for lancer-ebpf — kprobes on tcp_sendmsg/tcp_recvmsg + uprobes on SSL_read/SSL_write."
+
+# Intentionally NOT part of the main workspace — this builds for the
+# `bpfel-unknown-none` target with a no_std toolchain.
+#
+# Build (Linux only, requires nightly):
+#   cd crates/lancer-ebpf-probe
+#   cargo +nightly build --release --target bpfel-unknown-none -Z build-std=core
+#
+# Output: target/bpfel-unknown-none/release/lancer-ebpf-probe
+# Then point lancer-ebpf's PROG_OBJECT include_bytes_aligned! at it.
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/main.rs"
+
+[dependencies]
+aya-ebpf = "0.1.1"
+aya-log-ebpf = "0.1.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[features]
+default = []

@@ -21,6 +21,10 @@ members = [
     "crates/lancer-gui",
     "crates/lancer-cli",
 ]
+exclude = [
+    # Built separately for the bpfel-unknown-none target.
+    "crates/lancer-ebpf-probe",
+]
 
 [workspace.package]
 version = "0.1.0"

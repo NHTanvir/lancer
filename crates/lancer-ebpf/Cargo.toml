@@ -7,11 +7,15 @@ description = "eBPF-based traffic capture (Linux-only, opt-in)."
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 async-trait.workspace = true
+tokio = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+aya = { workspace = true, optional = true }
 
 [features]
 default = []
-# Real implementation pulls in `aya` once the linux feature is enabled.
-linux = []
+linux = ["dep:aya", "dep:tokio", "dep:parking_lot", "dep:bytes"]
