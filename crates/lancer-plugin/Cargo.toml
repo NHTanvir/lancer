@@ -17,3 +17,9 @@ async-trait.workspace = true
 parking_lot.workspace = true
 uuid.workspace = true
 toml.workspace = true
+
+[features]
+default = []
+wasm = []
+lua = []
+python = []

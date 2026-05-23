@@ -21,6 +21,7 @@ lancer-ai = { path = "../lancer-ai" }
 lancer-session = { path = "../lancer-session" }
 lancer-plugin = { path = "../lancer-plugin" }
 lancer-dom = { path = "../lancer-dom" }
+lancer-mobile = { path = "../lancer-mobile" }
 
 tokio.workspace = true
 clap.workspace = true
@@ -37,3 +38,4 @@ parking_lot.workspace = true
 console.workspace = true
 indicatif.workspace = true
 hex.workspace = true
+base64.workspace = true

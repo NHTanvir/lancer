@@ -1,0 +1,12 @@
+[package]
+name = "lancer-mobile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Mobile-testing assistants (iOS / Android CA install, Frida SSL-pinning bypass snippets)."
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["process", "fs", "io-util", "macros", "rt-multi-thread"] }
+tracing.workspace = true

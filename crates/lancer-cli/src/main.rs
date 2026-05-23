@@ -69,6 +69,8 @@ enum Cmd {
     Export(commands::export::ExportArgs),
     /// DOM-XSS / postMessage / proto-gadget / clobbering static analysis.
     Dom(commands::dom::DomArgs),
+    /// Mobile testing assistants (Android ADB, iOS profile, Frida snippets).
+    Mobile(commands::mobile::MobileArgs),
 }
 
 fn main() -> Result<()> {
@@ -106,6 +108,7 @@ fn main() -> Result<()> {
             Cmd::Payloads(a) => commands::payloads::run(a).await,
             Cmd::Export(a) => commands::export::run(a).await,
             Cmd::Dom(a) => commands::dom::run(a).await,
+            Cmd::Mobile(a) => commands::mobile::run(a).await,
         }
     })
 }

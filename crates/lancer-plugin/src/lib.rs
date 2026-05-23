@@ -5,6 +5,7 @@
 //! scripts via `lancer_script`. A WASM runtime is planned for a later
 //! release.
 
+pub mod hosts;
 pub mod manifest;
 pub mod palette;
 pub mod registry;

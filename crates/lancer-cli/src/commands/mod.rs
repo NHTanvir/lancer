@@ -10,6 +10,7 @@ pub mod export;
 pub mod history;
 pub mod import;
 pub mod intruder;
+pub mod mobile;
 pub mod organizer;
 pub mod palette;
 pub mod payloads;
