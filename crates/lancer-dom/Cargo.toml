@@ -1,0 +1,19 @@
+[package]
+name = "lancer-dom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DOM Invader equivalent: source/sink tracing, postMessage logging, prototype pollution gadget scanner, DOM clobbering detection."
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true

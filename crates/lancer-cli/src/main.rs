@@ -67,6 +67,8 @@ enum Cmd {
     Payloads(commands::payloads::PayloadsArgs),
     /// Export findings as Jira / Linear / GitHub / DefectDojo payloads.
     Export(commands::export::ExportArgs),
+    /// DOM-XSS / postMessage / proto-gadget / clobbering static analysis.
+    Dom(commands::dom::DomArgs),
 }
 
 fn main() -> Result<()> {
@@ -103,6 +105,7 @@ fn main() -> Result<()> {
             Cmd::Waf(a) => commands::waf::run(a).await,
             Cmd::Payloads(a) => commands::payloads::run(a).await,
             Cmd::Export(a) => commands::export::run(a).await,
+            Cmd::Dom(a) => commands::dom::run(a).await,
         }
     })
 }

@@ -4,6 +4,7 @@ pub mod cert;
 pub mod compare;
 pub mod crawl;
 pub mod decode;
+pub mod dom;
 pub mod engagement;
 pub mod export;
 pub mod history;

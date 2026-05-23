@@ -13,6 +13,7 @@ members = [
     "crates/lancer-plugin",
     "crates/lancer-scheduler",
     "crates/lancer-api",
+    "crates/lancer-dom",
     "crates/lancer-gui",
     "crates/lancer-cli",
 ]
