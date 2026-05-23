@@ -41,6 +41,10 @@ enum Cmd {
     Intruder(commands::intruder::IntruderArgs),
     /// Analyze token randomness (Sequencer).
     Sequencer(commands::sequencer::SequencerArgs),
+    /// Engagement tools (find comments/scripts/anchors, CSRF PoC, content discovery, target analyzer).
+    Engagement(commands::engagement::EngagementArgs),
+    /// Saved-request library (Organizer).
+    Organizer(commands::organizer::OrganizerArgs),
 }
 
 fn main() -> Result<()> {
@@ -64,6 +68,8 @@ fn main() -> Result<()> {
             Cmd::Repeater(a) => commands::repeater::run(a).await,
             Cmd::Intruder(a) => commands::intruder::run(a).await,
             Cmd::Sequencer(a) => commands::sequencer::run(a).await,
+            Cmd::Engagement(a) => commands::engagement::run(a).await,
+            Cmd::Organizer(a) => commands::organizer::run(a).await,
         }
     })
 }

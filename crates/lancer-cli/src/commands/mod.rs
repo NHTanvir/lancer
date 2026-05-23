@@ -1,8 +1,10 @@
 pub mod cert;
 pub mod compare;
 pub mod decode;
+pub mod engagement;
 pub mod history;
 pub mod intruder;
+pub mod organizer;
 pub mod project;
 pub mod proxy;
 pub mod repeater;

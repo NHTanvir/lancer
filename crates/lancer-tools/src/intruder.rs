@@ -40,6 +40,16 @@ pub enum PayloadSet {
     /// Stream from a file on disk — generated as the attack runs (memory-mapped
     /// wordlists are loaded lazily by the runner).
     FromFile { path: std::path::PathBuf },
+    /// Dates in `YYYY-MM-DD` form within a range.
+    Dates { from: chrono::NaiveDate, to: chrono::NaiveDate },
+    /// All single-character substitutions of `base`. Useful for fuzzing.
+    CharFrobber { base: String },
+    /// Single-bit flips of `base`.
+    BitFlipper { base: String },
+    /// First+lastname pairs from the supplied lists.
+    UsernameGenerator { firsts: Vec<String>, lasts: Vec<String>, sep: String },
+    /// Iterate cases of `base`: lower, upper, capitalized, swapcase.
+    CaseModification { base: String },
 }
 
 impl PayloadSet {
@@ -69,7 +79,145 @@ impl PayloadSet {
                     Err(_) => Box::new(std::iter::empty()),
                 }
             }
+            PayloadSet::Dates { from, to } => Box::new(DateRangeIter::new(from, to)),
+            PayloadSet::CharFrobber { base } => Box::new(CharFrobberIter::new(base)),
+            PayloadSet::BitFlipper { base } => Box::new(BitFlipperIter::new(base)),
+            PayloadSet::UsernameGenerator { firsts, lasts, sep } => {
+                Box::new(firsts.into_iter().flat_map(move |f| {
+                    let f = f.clone();
+                    let sep = sep.clone();
+                    lasts.clone().into_iter().map(move |l| format!("{f}{sep}{l}"))
+                }))
+            }
+            PayloadSet::CaseModification { base } => {
+                let variants = vec![
+                    base.to_lowercase(),
+                    base.to_uppercase(),
+                    capitalize(&base),
+                    swapcase(&base),
+                ];
+                Box::new(variants.into_iter())
+            }
         }
+    }
+}
+
+fn capitalize(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars();
+    if let Some(c) = chars.next() {
+        out.extend(c.to_uppercase());
+    }
+    out.extend(chars.map(|c| c.to_ascii_lowercase()));
+    out
+}
+
+fn swapcase(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_uppercase() {
+                c.to_ascii_lowercase()
+            } else if c.is_ascii_lowercase() {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+struct DateRangeIter {
+    cursor: chrono::NaiveDate,
+    end: chrono::NaiveDate,
+    done: bool,
+}
+
+impl DateRangeIter {
+    fn new(from: chrono::NaiveDate, to: chrono::NaiveDate) -> Self {
+        Self { cursor: from, end: to, done: false }
+    }
+}
+
+impl Iterator for DateRangeIter {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        if self.done || self.cursor > self.end {
+            return None;
+        }
+        let s = self.cursor.format("%Y-%m-%d").to_string();
+        match self.cursor.succ_opt() {
+            Some(d) => self.cursor = d,
+            None => self.done = true,
+        }
+        Some(s)
+    }
+}
+
+struct CharFrobberIter {
+    base: Vec<u8>,
+    pos: usize,
+    delta: i16,
+}
+
+impl CharFrobberIter {
+    fn new(base: String) -> Self {
+        Self { base: base.into_bytes(), pos: 0, delta: -1 }
+    }
+}
+
+impl Iterator for CharFrobberIter {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        while self.pos < self.base.len() {
+            let mut out = self.base.clone();
+            let b = self.base[self.pos] as i16;
+            let n = b + self.delta;
+            if (0..=255).contains(&n) {
+                out[self.pos] = n as u8;
+                self.delta += 1;
+                if self.delta > 1 {
+                    self.delta = -1;
+                    self.pos += 1;
+                }
+                if let Ok(s) = String::from_utf8(out) {
+                    return Some(s);
+                }
+                continue;
+            }
+            self.delta += 1;
+            if self.delta > 1 {
+                self.delta = -1;
+                self.pos += 1;
+            }
+        }
+        None
+    }
+}
+
+struct BitFlipperIter {
+    base: Vec<u8>,
+    bit_idx: usize,
+}
+
+impl BitFlipperIter {
+    fn new(base: String) -> Self {
+        Self { base: base.into_bytes(), bit_idx: 0 }
+    }
+}
+
+impl Iterator for BitFlipperIter {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        let total_bits = self.base.len() * 8;
+        if self.bit_idx >= total_bits {
+            return None;
+        }
+        let byte = self.bit_idx / 8;
+        let bit = self.bit_idx % 8;
+        let mut out = self.base.clone();
+        out[byte] ^= 1 << bit;
+        self.bit_idx += 1;
+        Some(String::from_utf8_lossy(&out).into_owned())
     }
 }
 
