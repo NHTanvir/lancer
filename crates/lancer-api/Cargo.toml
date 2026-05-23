@@ -1,0 +1,32 @@
+[package]
+name = "lancer-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "REST API server for headless Lancer automation."
+
+[[bin]]
+name = "lancer-api"
+path = "src/main.rs"
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+lancer-tools.workspace = true
+lancer-scanner.workspace = true
+lancer-report = { path = "../lancer-report" }
+tokio.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+clap.workspace = true

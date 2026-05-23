@@ -1,0 +1,16 @@
+services:
+  lancer-api:
+    build: .
+    image: lancer:latest
+    ports:
+      - "9191:9191"   # REST API
+      - "8080:8080"   # Proxy
+    environment:
+      LANCER_LOG: info
+      LANCER_API_TOKEN: ${LANCER_API_TOKEN:-changeme}
+    volumes:
+      - lancer-data:/data
+    restart: unless-stopped
+
+volumes:
+  lancer-data: {}

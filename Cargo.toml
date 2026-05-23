@@ -11,6 +11,8 @@ members = [
     "crates/lancer-ai",
     "crates/lancer-session",
     "crates/lancer-plugin",
+    "crates/lancer-scheduler",
+    "crates/lancer-api",
     "crates/lancer-gui",
     "crates/lancer-cli",
 ]

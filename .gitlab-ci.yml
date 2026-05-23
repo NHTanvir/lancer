@@ -1,0 +1,35 @@
+stages:
+  - build
+  - scan
+
+variables:
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+
+cache:
+  paths:
+    - .cargo/registry
+    - target/
+
+build:
+  stage: build
+  image: rust:1.83
+  script:
+    - cargo build --release --bin lancer
+  artifacts:
+    paths: [target/release/lancer]
+    expire_in: 1 week
+
+dast:
+  stage: scan
+  image: rust:1.83
+  needs: [build]
+  script:
+    - ./target/release/lancer cert init --dir ./ca
+    - ./target/release/lancer project new --path ./scan.lancer --name "CI ${CI_JOB_ID}"
+    - ./target/release/lancer scan full "${TARGET_URL:-https://example.com/}" --project ./scan.lancer
+    - ./target/release/lancer report --project ./scan.lancer --format html --out lancer.html
+    - ./target/release/lancer report --project ./scan.lancer --format sarif --out lancer.sarif
+  artifacts:
+    paths: [lancer.html, lancer.sarif]
+    reports:
+      sast: lancer.sarif
