@@ -43,7 +43,7 @@ use crate::mitm::{
     hyper_request_to_owned, hyper_response_to_owned, owned_request_to_hyper, PipelineContext,
     PipelineHandles,
 };
-use crate::settings::{ProxySettings, UpstreamProxy};
+use crate::settings::ProxySettings;
 use crate::upstream;
 
 pub struct ProxyListener {
@@ -56,6 +56,7 @@ pub struct ProxyListener {
     pub history: Option<lancer_storage::HistoryStore>,
     pub events: ProxyEventSink,
     pub tls_client_config: Arc<ClientConfig>,
+    pub dns: Arc<crate::dns::DnsTable>,
 }
 
 impl ProxyListener {
@@ -70,6 +71,8 @@ impl ProxyListener {
     ) -> Self {
         let cert_cache = Arc::new(CertCache::new(ca.clone()));
         let tls_client_config = build_default_client_config();
+        let dns = Arc::new(crate::dns::DnsTable::new());
+        dns.replace(settings.dns_overrides.clone());
         Self {
             settings,
             ca,
@@ -80,6 +83,7 @@ impl ProxyListener {
             history,
             events,
             tls_client_config,
+            dns,
         }
     }
 
@@ -191,7 +195,7 @@ impl ProxyListener {
     /// pass-through list, e.g. things that pin certs).
     async fn do_tls_passthrough(&self, client_sock: TcpStream, host: &str, port: u16) -> Result<()> {
         let mut upstream =
-            upstream::dial(host, port, self.settings.upstream.as_ref()).await?;
+            upstream::dial(host, port, self.settings.upstream_for(host), Some(&self.dns)).await?;
         let (mut cr, mut cw) = tokio::io::split(client_sock);
         let (mut ur, mut uw) = tokio::io::split(&mut upstream);
         let c2u = tokio::io::copy(&mut cr, &mut uw);
@@ -216,7 +220,8 @@ impl ProxyListener {
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();
-        let upstream_proxy = self.settings.upstream.clone();
+        let settings = self.settings.clone();
+        let dns = self.dns.clone();
         let conn_io = TokioIo::new(tls);
 
         let svc = service_fn(move |req: Request<Incoming>| {
@@ -224,7 +229,8 @@ impl ProxyListener {
             let pipeline = pipeline.clone();
             let scope = scope.clone();
             let tls_client_config = tls_client_config.clone();
-            let upstream_proxy = upstream_proxy.clone();
+            let settings = settings.clone();
+            let dns = dns.clone();
             async move {
                 handle_mitm_request(
                     req,
@@ -234,7 +240,8 @@ impl ProxyListener {
                     pipeline,
                     scope,
                     tls_client_config,
-                    upstream_proxy,
+                    settings,
+                    dns,
                 )
                 .await
             }
@@ -259,15 +266,16 @@ impl ProxyListener {
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();
-        let upstream_proxy = self.settings.upstream.clone();
+        let settings = self.settings.clone();
+        let dns = self.dns.clone();
         let svc = service_fn(move |req: Request<Incoming>| {
             let pipeline = pipeline.clone();
             let scope = scope.clone();
             let tls_client_config = tls_client_config.clone();
-            let upstream_proxy = upstream_proxy.clone();
+            let settings = settings.clone();
+            let dns = dns.clone();
             async move {
-                handle_forward_request(req, pipeline, scope, tls_client_config, upstream_proxy)
-                    .await
+                handle_forward_request(req, pipeline, scope, tls_client_config, settings, dns).await
             }
         });
         if let Err(e) = hyper::server::conn::http1::Builder::new()
@@ -290,12 +298,13 @@ async fn handle_mitm_request(
     pipeline: PipelineHandles,
     scope: Arc<parking_lot::RwLock<Scope>>,
     tls_client_config: Arc<ClientConfig>,
-    upstream_proxy: Option<UpstreamProxy>,
+    settings: Arc<ProxySettings>,
+    dns: Arc<crate::dns::DnsTable>,
 ) -> Result<Response<Full<Bytes>>, anyhow::Error> {
     let (parts, body) = req.into_parts();
     let owned =
         hyper_request_to_owned(parts, body, scheme, &default_host, default_port).await?;
-    dispatch(owned, pipeline, scope, tls_client_config, upstream_proxy).await
+    dispatch(owned, pipeline, scope, tls_client_config, settings, dns).await
 }
 
 async fn handle_forward_request(
@@ -303,7 +312,8 @@ async fn handle_forward_request(
     pipeline: PipelineHandles,
     scope: Arc<parking_lot::RwLock<Scope>>,
     tls_client_config: Arc<ClientConfig>,
-    upstream_proxy: Option<UpstreamProxy>,
+    settings: Arc<ProxySettings>,
+    dns: Arc<crate::dns::DnsTable>,
 ) -> Result<Response<Full<Bytes>>, anyhow::Error> {
     let (parts, body) = req.into_parts();
     // Absolute URI for forward proxy: `GET http://host/x HTTP/1.1`
@@ -327,7 +337,7 @@ async fn handle_forward_request(
     let default_port = parts.uri.port_u16().unwrap_or(80);
     let owned =
         hyper_request_to_owned(parts, body, &scheme, &default_host, default_port).await?;
-    dispatch(owned, pipeline, scope, tls_client_config, upstream_proxy).await
+    dispatch(owned, pipeline, scope, tls_client_config, settings, dns).await
 }
 
 async fn dispatch(
@@ -335,7 +345,8 @@ async fn dispatch(
     pipeline: PipelineHandles,
     scope: Arc<parking_lot::RwLock<Scope>>,
     tls_client_config: Arc<ClientConfig>,
-    upstream_proxy: Option<UpstreamProxy>,
+    settings: Arc<ProxySettings>,
+    dns: Arc<crate::dns::DnsTable>,
 ) -> Result<Response<Full<Bytes>>, anyhow::Error> {
     let in_scope = scope.read().is_in_scope(&req);
     let ctx = PipelineContext {
@@ -355,7 +366,13 @@ async fn dispatch(
 
     // Outbound: open TCP/TLS to origin (or via upstream proxy) and ship request.
     let started = Instant::now();
-    let stream = upstream::dial(&ctx.host, ctx.port, upstream_proxy.as_ref()).await?;
+    let stream = upstream::dial(
+        &ctx.host,
+        ctx.port,
+        settings.upstream_for(&ctx.host),
+        Some(&dns),
+    )
+    .await?;
 
     let resp = if ctx.scheme == "https" {
         let connector = TlsConnector::from(tls_client_config.clone());

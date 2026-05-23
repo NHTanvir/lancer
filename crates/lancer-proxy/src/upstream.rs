@@ -10,22 +10,36 @@ use anyhow::{anyhow, Context, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+use crate::dns::DnsTable;
 use crate::settings::{UpstreamKind, UpstreamProxy};
 
-pub async fn dial(host: &str, port: u16, upstream: Option<&UpstreamProxy>) -> Result<TcpStream> {
+/// Direct or via-upstream-proxy connect, honouring DNS overrides.
+pub async fn dial(
+    host: &str,
+    port: u16,
+    upstream: Option<&UpstreamProxy>,
+    dns: Option<&DnsTable>,
+) -> Result<TcpStream> {
     match upstream {
-        None => {
-            let stream = TcpStream::connect((host, port))
-                .await
-                .with_context(|| format!("direct connect {host}:{port}"))?;
-            Ok(stream)
-        }
+        None => connect_direct(host, port, dns).await,
         Some(up) => match up.kind {
             UpstreamKind::Http => dial_http(host, port, up).await,
             UpstreamKind::Socks5 => dial_socks5(host, port, up).await,
             UpstreamKind::Socks4 => dial_socks4(host, port, up).await,
         },
     }
+}
+
+async fn connect_direct(host: &str, port: u16, dns: Option<&DnsTable>) -> Result<TcpStream> {
+    if let Some(ip) = dns.and_then(|d| d.resolve(host)) {
+        let addr = std::net::SocketAddr::new(ip, port);
+        return TcpStream::connect(addr)
+            .await
+            .with_context(|| format!("direct connect {host}->{ip}:{port}"));
+    }
+    TcpStream::connect((host, port))
+        .await
+        .with_context(|| format!("direct connect {host}:{port}"))
 }
 
 async fn dial_http(host: &str, port: u16, up: &UpstreamProxy) -> Result<TcpStream> {

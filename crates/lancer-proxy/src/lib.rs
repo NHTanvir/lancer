@@ -18,7 +18,10 @@ pub mod intercept;
 pub mod listener;
 pub mod match_replace;
 pub mod mitm;
+pub mod dns;
+pub mod platform_auth;
 pub mod settings;
+pub mod sse;
 pub mod upstream;
 pub mod websocket;
 
