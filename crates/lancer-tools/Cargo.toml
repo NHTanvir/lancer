@@ -1,0 +1,30 @@
+[package]
+name = "lancer-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Repeater, Decoder, Comparer, Sequencer, Intruder (and friends) — manual testing tools."
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+tokio.workspace = true
+bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+regex.workspace = true
+http.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+parking_lot.workspace = true
+async-trait.workspace = true
+url.workspace = true
+sha2.workspace = true
+md-5.workspace = true
+rand = "0.8"

@@ -1,0 +1,33 @@
+[package]
+name = "lancer-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Lancer command-line interface."
+
+[[bin]]
+name = "lancer"
+path = "src/main.rs"
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+lancer-proxy.workspace = true
+lancer-tools.workspace = true
+lancer-scanner.workspace = true
+lancer-script.workspace = true
+
+tokio.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+parking_lot.workspace = true
+console.workspace = true
+indicatif.workspace = true

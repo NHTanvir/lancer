@@ -1,0 +1,15 @@
+[package]
+name = "lancer-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Bambda-equivalent scripting (Rhai-based) for Lancer filters, custom columns, custom actions, custom scan checks."
+
+[dependencies]
+lancer-core.workspace = true
+rhai.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

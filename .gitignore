@@ -1,1 +1,32 @@
-plan.md
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Project artifacts
+*.lancer
+*.lancer-tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Local config / secrets
+.env
+.env.local
+local.toml
+*.pem.local
+*.key.local
+
+# CA cache directories
+ca/
+certs/cache/
+
+# Build artifacts
+dist/
+node_modules/
