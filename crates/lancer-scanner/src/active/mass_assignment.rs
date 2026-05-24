@@ -64,7 +64,7 @@ impl ActiveCheck for MassAssignmentCheck {
             serde_json::from_str(base.body_text().unwrap_or("{}")).unwrap_or_default();
         if let serde_json::Value::Object(map) = &mut v {
             for k in KEYS {
-                map.entry((*k).into())
+                map.entry((*k).to_string())
                     .or_insert(serde_json::Value::String(CANARY.into()));
             }
         }
@@ -83,7 +83,7 @@ impl ActiveCheck for MassAssignmentCheck {
                 self.name(),
                 Severity::High,
                 Confidence::Firm,
-                "server accepted and reflected a privileged-looking extra field".into(),
+                "server accepted and reflected a privileged-looking extra field",
             );
             i.remediation = Some(
                 "Bind only allow-listed fields; never deserialize directly into domain models.".into(),

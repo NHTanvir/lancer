@@ -192,7 +192,6 @@ fn counts(issues: &[&Issue]) -> (usize, usize, usize, usize, usize) {
 }
 
 fn keep(filter: &ReportFilter, i: &Issue) -> bool {
-    use lancer_storage::issues::Confidence;
     if !filter.include_fp && i.false_positive {
         return false;
     }

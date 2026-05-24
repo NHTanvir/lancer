@@ -10,7 +10,7 @@ use lancer_core::{HttpRequest, HttpResponse};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InterceptDecision {
     /// Send to the user-supplied intercept handler (UI / CLI prompt).
     Pause,

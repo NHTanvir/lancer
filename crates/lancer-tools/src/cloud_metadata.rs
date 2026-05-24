@@ -13,7 +13,7 @@ pub enum Cloud {
     Alibaba,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MetadataProbe {
     pub cloud: Cloud,
     pub label: &'static str,

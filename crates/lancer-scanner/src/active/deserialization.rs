@@ -21,7 +21,7 @@ impl ActiveCheck for DeserializationCheck {
         // insertion point.
         let v = &point.original_value;
         let java_rx = Regex::new(r"^rO0AB").unwrap(); // base64(0xACED 0x0005)
-        let php_rx = Regex::new(r"^O:\d+:\"\w+\":\d+:\{").unwrap();
+        let php_rx = Regex::new(r#"^O:\d+:"\w+":\d+:\{"#).unwrap();
         let dotnet_rx = Regex::new(r"AAEAAAD/////").unwrap();
         let python_pickle_rx = Regex::new(r"^(c__main__|c__builtin__|\x80\x04|gASV)").unwrap();
         let ruby_rx = Regex::new(r"^BAh7").unwrap();

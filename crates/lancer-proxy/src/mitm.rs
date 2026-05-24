@@ -17,6 +17,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 use bytes::Bytes;
+use http_body_util::Full;
 use lancer_core::{HttpRequest, HttpResponse, HttpVersion, MessageMeta, SerializableMethod};
 use lancer_storage::HistoryStore;
 use tracing::warn;
@@ -221,7 +222,7 @@ where
 
 /// Convert our owned `HttpRequest` back into a `hyper::Request<Bytes>`
 /// for outbound dispatch.
-pub fn owned_request_to_hyper(req: &HttpRequest) -> Result<http::Request<Bytes>> {
+pub fn owned_request_to_hyper(req: &HttpRequest) -> Result<http::Request<Full<Bytes>>> {
     let mut builder = http::Request::builder()
         .method(req.method.as_str())
         .uri(req.path.as_str())
@@ -236,7 +237,7 @@ pub fn owned_request_to_hyper(req: &HttpRequest) -> Result<http::Request<Bytes>>
         }
         builder = builder.header(h.name.as_str(), h.value.as_str());
     }
-    Ok(builder.body(req.body.clone())?)
+    Ok(builder.body(Full::new(req.body.clone()))?)
 }
 
 fn split_host_port(s: &str, default_port: u16) -> (String, u16) {

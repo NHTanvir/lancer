@@ -6,7 +6,7 @@
 use lancer_core::HttpResponse;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct WafSignature {
     pub name: &'static str,
     pub headers: &'static [(&'static str, &'static str)],

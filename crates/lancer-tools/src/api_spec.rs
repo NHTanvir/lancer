@@ -42,7 +42,7 @@ pub fn parse_openapi(body: &str, default_base: Option<&str>) -> Result<Vec<Impor
                 continue;
             }
             let url = format!("{}{}", base.trim_end_matches('/'), raw_path);
-            let Ok(mut req) = HttpRequest::builder(verb.to_uppercase(), &url) else {
+            let Ok(mut req) = HttpRequest::builder(verb.to_uppercase().as_str(), &url) else {
                 continue;
             };
             // Insert placeholders for any required query/path params.
@@ -145,7 +145,7 @@ fn walk_postman(
     if url_str.is_empty() {
         return;
     }
-    let Ok(mut http_req) = HttpRequest::builder(method.to_uppercase(), &url_str) else {
+    let Ok(mut http_req) = HttpRequest::builder(method.to_uppercase().as_str(), &url_str) else {
         return;
     };
     if let Some(headers) = req.get("header").and_then(|h| h.as_array()) {

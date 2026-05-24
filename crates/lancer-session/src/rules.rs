@@ -76,7 +76,7 @@ impl SessionEngine {
             for action in &r.actions {
                 match action {
                     SessionAction::SetHeader { name, value } => {
-                        req.set_header(name, value.clone());
+                        req.set_header(name.as_str(), value.clone());
                     }
                     SessionAction::SetCookie { name, value, .. } => {
                         let mut current = req.header("Cookie").unwrap_or("").to_string();

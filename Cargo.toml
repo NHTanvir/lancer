@@ -61,7 +61,7 @@ percent-encoding = "2.3"
 rustls = "0.23"
 rustls-pemfile = "2.1"
 webpki-roots = "0.26"
-rcgen = "0.13"
+rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
 x509-parser = "0.16"
 time = "0.3"
 rand = "0.8"

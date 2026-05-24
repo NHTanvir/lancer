@@ -20,7 +20,7 @@ static PATTERNS: Lazy<Vec<(&'static str, Option<&'static str>, Regex)>> = Lazy::
         ("eval() of merged config", None, Regex::new(r"eval\s*\(\s*\w+\.script").unwrap()),
         ("script.src = config.url", None, Regex::new(r"\.src\s*=\s*\w+\.url").unwrap()),
         ("innerHTML = config.html", None, Regex::new(r"\.innerHTML\s*=\s*\w+\.html").unwrap()),
-        ("AngularJS $on", Some("AngularJS"), Regex::new(r"\$rootScope\.\$on\s*\(\s*['\"]\$").unwrap()),
+        ("AngularJS $on", Some("AngularJS"), Regex::new(r#"\$rootScope\.\$on\s*\(\s*['"]\$"#).unwrap()),
     ]
 });
 

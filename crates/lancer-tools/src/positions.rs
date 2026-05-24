@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// Default marker, identical to Burp's. Configurable per-attack.
 pub const DEFAULT_MARKER: char = '§';
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PositionSlot {
     Path,
     Body,

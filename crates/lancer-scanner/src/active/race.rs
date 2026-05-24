@@ -38,7 +38,7 @@ impl ActiveCheck for RaceConditionCheck {
             }
         }
         if statuses.is_empty() { return Vec::new(); }
-        let success: usize = statuses.iter().filter(|s| (200..300).contains(s)).count();
+        let success: usize = statuses.iter().filter(|&&s| (200..300).contains(&s)).count();
         if success > 1 && success < statuses.len() {
             let mut i = Issue::new(base.meta.host.clone(), base.url(), self.name(),
                 Severity::Medium, Confidence::Tentative,

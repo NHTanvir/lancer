@@ -54,7 +54,7 @@ impl ActiveCheck for GraphQlCheck {
                     "GraphQL introspection enabled",
                     Severity::Medium,
                     Confidence::Firm,
-                    "the endpoint responded to a standard introspection query".into(),
+                    "the endpoint responded to a standard introspection query",
                 );
                 i.remediation = Some(
                     "Disable introspection in production; require authentication for schema queries.".into(),
@@ -75,7 +75,7 @@ impl ActiveCheck for GraphQlCheck {
                     "GraphQL field-suggestion leakage",
                     Severity::Low,
                     Confidence::Firm,
-                    "server emits `Did you mean ...` suggestions, which leak schema info".into(),
+                    "server emits `Did you mean ...` suggestions, which leak schema info",
                 );
                 i.remediation = Some(
                     "Disable suggestion responses in production GraphQL servers.".into(),

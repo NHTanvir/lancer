@@ -95,7 +95,7 @@ impl ActiveCheck for JwtCheck {
         }
         // Weak HS256 secret heuristic (offline)
         if alg.eq_ignore_ascii_case("HS256") || alg.eq_ignore_ascii_case("HS512") {
-            if let Some(cracked) = try_weak_hs(token, &WEAK_SECRETS) {
+            if let Some(cracked) = try_weak_hs(&token, &WEAK_SECRETS) {
                 issues.push(jwt_issue(
                     base,
                     "JWT signed with a weak HS secret",

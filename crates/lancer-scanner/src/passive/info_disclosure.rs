@@ -19,7 +19,7 @@ static PATTERNS: Lazy<Vec<(&'static str, Regex, Severity)>> = Lazy::new(|| {
         ),
         (
             "Python traceback",
-            Regex::new(r"(?m)^\s*File \".+\", line \d+,").unwrap(),
+            Regex::new(r#"(?m)^\s*File ".+", line \d+,"#).unwrap(),
             Severity::Low,
         ),
         (

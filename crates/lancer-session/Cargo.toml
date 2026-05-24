@@ -21,3 +21,5 @@ tracing.workspace = true
 regex.workspace = true
 url.workspace = true
 async-trait.workspace = true
+bytes.workspace = true
+arc-swap.workspace = true

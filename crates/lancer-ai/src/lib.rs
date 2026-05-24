@@ -1,13 +1,12 @@
 //! BYO-LLM trait + thin HTTP clients for the major providers.
-
-#![allow(dead_code)]
-
-pub mod payload_mutation;
-
 //!
 //! Lancer never ships an embedded model and never talks to a remote provider
 //! unless the user has explicitly configured one. The user supplies an
 //! `LlmProvider` and Lancer just delegates.
+
+#![allow(dead_code)]
+
+pub mod payload_mutation;
 
 use anyhow::Result;
 use async_trait::async_trait;
