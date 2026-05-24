@@ -72,6 +72,7 @@ h3 = "0.0.6"
 h3-quinn = "0.0.7"
 wry = "0.48"
 tao = "0.30"
+include_dir = "0.7"
 wasmtime = "26"
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 pyo3 = { version = "0.22", features = ["auto-initialize"] }

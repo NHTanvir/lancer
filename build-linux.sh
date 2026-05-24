@@ -12,6 +12,12 @@ VERSION="$(grep -m1 '^version' Cargo.toml | head -1 | cut -d'"' -f2 || echo 0.1.
 DIST=dist/lancer-linux-x86_64
 DEB=dist/lancer_${VERSION}_amd64.deb
 
+echo "=== Building Svelte SPA ==="
+pushd crates/lancer-gui/web > /dev/null
+[ -d node_modules ] || npm install
+npm run build
+popd > /dev/null
+
 echo "=== Building Lancer ${VERSION} (release) for Linux x86_64 ==="
 cargo build --release --workspace --no-default-features --bins
 

@@ -35,10 +35,9 @@ hyper.workspace = true
 hyper-util.workspace = true
 http-body-util.workspace = true
 bytes.workspace = true
+include_dir.workspace = true
+wry.workspace = true
+tao.workspace = true
 
 [features]
 default = []
-# Real Tauri integration is gated behind this feature so the workspace can
-# build without pulling in webkit / native deps. Enable with `--features tauri`
-# once Tauri 2.x is available on the build host.
-tauri = []
