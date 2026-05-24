@@ -1,4 +1,6 @@
 <script>
+  import { onMount } from "svelte";
+
   let subtab = "target";
   let requestLoaded = false;
 
@@ -10,6 +12,22 @@
   // Positions
   let attackType = "sniper";
   let requestTemplate = `GET /users?id=§1§ HTTP/1.1\nHost: example.com\nUser-Agent: Lancer/1.0\nAccept: */*\n\n`;
+
+  onMount(() => {
+    try {
+      const raw = localStorage.getItem("lancer.send.intruder");
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (p.scheme) scheme = p.scheme;
+        if (p.host) host = p.host;
+        if (p.port) port = String(p.port);
+        if (p.raw) requestTemplate = p.raw;
+        requestLoaded = true;
+        localStorage.removeItem("lancer.send.intruder");
+        subtab = "positions";
+      }
+    } catch {}
+  });
 
   // Payloads
   let payloadText = `1\n2\n3\nadmin\nroot\ntest\nguest\n' OR 1=1--\n../etc/passwd`;

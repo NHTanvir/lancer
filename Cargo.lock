@@ -2481,6 +2481,7 @@ name = "lancer-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "clap",
@@ -2488,9 +2489,11 @@ dependencies = [
  "hyper",
  "hyper-util",
  "lancer-core",
+ "lancer-plugin",
  "lancer-proxy",
  "lancer-report",
  "lancer-scanner",
+ "lancer-session",
  "lancer-storage",
  "lancer-tools",
  "parking_lot",

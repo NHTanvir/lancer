@@ -45,11 +45,34 @@
         interceptResp = !!d.intercept_responses;
       }
     } catch {}
+    try {
+      const ls = JSON.parse(localStorage.getItem("lancer.settings") || "{}");
+      if (typeof ls.maxThreads === "number") maxThreads = ls.maxThreads;
+      if (typeof ls.scanTimeout === "number") scanTimeout = ls.scanTimeout;
+      if (typeof ls.followRedirects === "boolean") followRedirects = ls.followRedirects;
+      if (typeof ls.processBody === "boolean") processBody = ls.processBody;
+      if (typeof ls.interceptOnlyInScope === "boolean") interceptOnlyInScope = ls.interceptOnlyInScope;
+    } catch {}
   });
 
-  function save() {
-    saved = true;
-    setTimeout(() => saved = false, 1800);
+  async function save() {
+    try {
+      const r = await fetch("/api/v1/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intercept_requests: interceptReq,
+          intercept_responses: interceptResp,
+        }),
+      });
+      if (r.ok) {
+        saved = true;
+        setTimeout(() => saved = false, 1800);
+        try { localStorage.setItem("lancer.settings", JSON.stringify({
+          maxThreads, scanTimeout, followRedirects, processBody, interceptOnlyInScope,
+        })); } catch {}
+      }
+    } catch {}
   }
 </script>
 

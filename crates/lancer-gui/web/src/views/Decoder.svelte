@@ -1,19 +1,51 @@
 <script>
-  // Each row: { input, output, encodeOp, decodeOp }
+  import { onMount } from "svelte";
+
+  // Each row: { input, output, opLabel, mode }
   let rows = [
-    { input: "", output: "", encodeOp: "", decodeOp: "", mode: "decode" }
+    { input: "", output: "", opLabel: "", mode: "decode" }
   ];
 
+  onMount(() => {
+    try {
+      const raw = localStorage.getItem("lancer.send.decoder");
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (v.input) rows[0].input = v.input;
+        localStorage.removeItem("lancer.send.decoder");
+      }
+    } catch {}
+  });
+
+  const enc = new TextEncoder();
+  const dec = new TextDecoder("utf-8", { fatal: false });
+
+  function strToBytes(s) { return enc.encode(s); }
+  function bytesToStr(b) { return dec.decode(b); }
+
+  // ── Base64 ─────────────────────────────────────────────
   function b64decode(s) {
-    try { return atob(s); } catch { return "(invalid Base64)"; }
+    try {
+      const bin = atob(s.replace(/\s+/g,""));
+      const buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      return bytesToStr(buf);
+    } catch { return "(invalid Base64)"; }
   }
   function b64encode(s) {
-    try { return btoa(unescape(encodeURIComponent(s))); } catch { return "(encoding error)"; }
+    try {
+      const buf = strToBytes(s);
+      let bin = "";
+      for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      return btoa(bin);
+    } catch { return "(encoding error)"; }
   }
+  // ── URL ────────────────────────────────────────────────
   function urlDecode(s) {
     try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch { return "(invalid URL encoding)"; }
   }
   function urlEncode(s) { return encodeURIComponent(s); }
+  // ── HTML ───────────────────────────────────────────────
   function htmlDecode(s) {
     try { const d = new DOMParser().parseFromString(s, "text/html"); return d.body.textContent || ""; } catch { return s; }
   }
@@ -22,46 +54,192 @@
     el.appendChild(document.createTextNode(s));
     return el.innerHTML;
   }
+  // ── Hex (lowercase, no separator) ──────────────────────
+  function hexEncode(s) {
+    return Array.from(strToBytes(s)).map(b => b.toString(16).padStart(2,"0")).join("");
+  }
+  function hexDecode(s) {
+    const t = s.replace(/[\s:,-]/g, "");
+    if (!/^[0-9a-fA-F]*$/.test(t) || t.length % 2 !== 0) return "(invalid hex)";
+    const buf = new Uint8Array(t.length / 2);
+    for (let i = 0; i < buf.length; i++) buf[i] = parseInt(t.substr(i*2, 2), 16);
+    return bytesToStr(buf);
+  }
+  // ── ASCII-hex (space separated) ────────────────────────
+  function asciiHexEncode(s) {
+    return Array.from(strToBytes(s)).map(b => b.toString(16).padStart(2,"0")).join(" ");
+  }
+  function asciiHexDecode(s) { return hexDecode(s); }
+  // ── Octal (per-byte, space separated) ──────────────────
+  function octalEncode(s) {
+    return Array.from(strToBytes(s)).map(b => b.toString(8).padStart(3,"0")).join(" ");
+  }
+  function octalDecode(s) {
+    const parts = s.trim().split(/\s+/);
+    try {
+      const buf = new Uint8Array(parts.map(p => {
+        const n = parseInt(p, 8);
+        if (Number.isNaN(n) || n < 0 || n > 255) throw new Error("bad");
+        return n;
+      }));
+      return bytesToStr(buf);
+    } catch { return "(invalid octal)"; }
+  }
+  // ── Binary (per-byte, space separated) ─────────────────
+  function binaryEncode(s) {
+    return Array.from(strToBytes(s)).map(b => b.toString(2).padStart(8,"0")).join(" ");
+  }
+  function binaryDecode(s) {
+    const parts = s.replace(/\s+/g," ").trim().split(" ");
+    try {
+      const buf = new Uint8Array(parts.map(p => {
+        if (!/^[01]+$/.test(p)) throw new Error("bad");
+        const n = parseInt(p, 2);
+        if (n > 255) throw new Error("bad");
+        return n;
+      }));
+      return bytesToStr(buf);
+    } catch { return "(invalid binary)"; }
+  }
+  // ── GZIP via DecompressionStream / CompressionStream ───
+  async function gzipEncode(s) {
+    if (typeof CompressionStream === "undefined") return "(CompressionStream not supported)";
+    const stream = new Blob([strToBytes(s)]).stream().pipeThrough(new CompressionStream("gzip"));
+    const buf = new Uint8Array(await new Response(stream).arrayBuffer());
+    // Show as base64 — GZIP output is binary
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    return "(base64) " + btoa(bin);
+  }
+  async function gzipDecode(s) {
+    if (typeof DecompressionStream === "undefined") return "(DecompressionStream not supported)";
+    let bytes;
+    const t = s.startsWith("(base64) ") ? s.slice(9) : s;
+    try {
+      const bin = atob(t.replace(/\s+/g,""));
+      bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    } catch { return "(input must be base64-encoded gzip)"; }
+    try {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+      const buf = new Uint8Array(await new Response(stream).arrayBuffer());
+      return bytesToStr(buf);
+    } catch (e) { return "(gzip decode failed: " + e.message + ")"; }
+  }
+  // ── Hash via Web Crypto API ────────────────────────────
+  async function hashHex(name, s) {
+    if (!crypto || !crypto.subtle) return "(SubtleCrypto unavailable)";
+    try {
+      const buf = await crypto.subtle.digest(name, strToBytes(s));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+    } catch (e) { return "(hash failed: " + e.message + ")"; }
+  }
+  // MD5 is not in SubtleCrypto — pure-JS fallback (RFC 1321)
+  function md5(s) {
+    const bytes = strToBytes(s);
+    const r = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+    const k = new Uint32Array(64);
+    for (let i = 0; i < 64; i++) k[i] = Math.floor(Math.abs(Math.sin(i+1)) * 0x100000000) >>> 0;
+    const ml = bytes.length;
+    const bits = ml * 8;
+    const padded = new Uint8Array(((ml + 9 + 63) >>> 6) << 6);
+    padded.set(bytes);
+    padded[ml] = 0x80;
+    const dv = new DataView(padded.buffer);
+    dv.setUint32(padded.length - 8, bits >>> 0, true);
+    dv.setUint32(padded.length - 4, Math.floor(bits / 0x100000000) >>> 0, true);
+    let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+    for (let off = 0; off < padded.length; off += 64) {
+      const m = new Uint32Array(16);
+      for (let j = 0; j < 16; j++) m[j] = dv.getUint32(off + j*4, true);
+      let a = a0, b = b0, c = c0, d = d0;
+      for (let i = 0; i < 64; i++) {
+        let f, g;
+        if (i < 16) { f = (b & c) | (~b & d); g = i; }
+        else if (i < 32) { f = (d & b) | (~d & c); g = (5*i + 1) % 16; }
+        else if (i < 48) { f = b ^ c ^ d; g = (3*i + 5) % 16; }
+        else { f = c ^ (b | ~d); g = (7*i) % 16; }
+        f = (f + a + k[i] + m[g]) >>> 0;
+        a = d; d = c; c = b;
+        b = (b + ((f << r[i]) | (f >>> (32 - r[i])))) >>> 0;
+      }
+      a0 = (a0 + a) >>> 0; b0 = (b0 + b) >>> 0; c0 = (c0 + c) >>> 0; d0 = (d0 + d) >>> 0;
+    }
+    function hex32(n) {
+      return ((n & 0xff).toString(16).padStart(2,"0")) +
+             (((n >>> 8) & 0xff).toString(16).padStart(2,"0")) +
+             (((n >>> 16) & 0xff).toString(16).padStart(2,"0")) +
+             (((n >>> 24) & 0xff).toString(16).padStart(2,"0"));
+    }
+    return hex32(a0) + hex32(b0) + hex32(c0) + hex32(d0);
+  }
 
   const encodeOps = [
-    { label: "Base64",    fn: b64encode },
-    { label: "URL",       fn: urlEncode  },
-    { label: "HTML",      fn: htmlEncode },
+    { label: "Base64", fn: b64encode },
+    { label: "URL",    fn: urlEncode },
+    { label: "HTML",   fn: htmlEncode },
+    { label: "Hex",    fn: hexEncode },
+    { label: "ASCII hex", fn: asciiHexEncode },
+    { label: "Octal",  fn: octalEncode },
+    { label: "Binary", fn: binaryEncode },
+    { label: "GZIP",   fn: gzipEncode, async: true },
   ];
   const decodeOps = [
-    { label: "Base64",    fn: b64decode },
-    { label: "URL",       fn: urlDecode  },
-    { label: "HTML",      fn: htmlDecode },
+    { label: "Base64", fn: b64decode },
+    { label: "URL",    fn: urlDecode },
+    { label: "HTML",   fn: htmlDecode },
+    { label: "Hex",    fn: hexDecode },
+    { label: "ASCII hex", fn: asciiHexDecode },
+    { label: "Octal",  fn: octalDecode },
+    { label: "Binary", fn: binaryDecode },
+    { label: "GZIP",   fn: gzipDecode, async: true },
+  ];
+  const hashOps = [
+    { label: "MD5",      fn: (s) => Promise.resolve(md5(s)) },
+    { label: "SHA-1",    fn: (s) => hashHex("SHA-1", s) },
+    { label: "SHA-256",  fn: (s) => hashHex("SHA-256", s) },
+    { label: "SHA-384",  fn: (s) => hashHex("SHA-384", s) },
+    { label: "SHA-512",  fn: (s) => hashHex("SHA-512", s) },
   ];
 
-  function applyEncode(i, op) {
-    rows[i].encodeOp = op.label;
-    rows[i].mode = "encode";
-    rows[i].output = op.fn(rows[i].input);
+  async function apply(i, op, mode) {
+    const r = rows[i];
+    try {
+      const out = op.async || op.fn.constructor.name === "AsyncFunction"
+        ? await op.fn(r.input)
+        : op.fn(r.input);
+      r.output = out;
+    } catch (e) {
+      r.output = "(error: " + e.message + ")";
+    }
+    r.opLabel = op.label;
+    r.mode = mode;
     rows = rows;
   }
 
-  function applyDecode(i, op) {
-    rows[i].decodeOp = op.label;
-    rows[i].mode = "decode";
-    rows[i].output = op.fn(rows[i].input);
-    rows = rows;
-  }
+  function applyEncode(i, op) { return apply(i, op, "encode"); }
+  function applyDecode(i, op) { return apply(i, op, "decode"); }
+  function applyHash(i, op)   { return apply(i, op, "hash"); }
 
   function smartDecode(i) {
     const s = rows[i].input;
-    // try base64 first, then url
     try {
-      const r = atob(s);
+      const r = atob(s.replace(/\s+/g,""));
       rows[i].output = r;
-      rows[i].decodeOp = "Base64 (smart)";
+      rows[i].opLabel = "Base64";
     } catch {
       try {
         rows[i].output = decodeURIComponent(s.replace(/\+/g," "));
-        rows[i].decodeOp = "URL (smart)";
+        rows[i].opLabel = "URL";
       } catch {
-        rows[i].output = s;
-        rows[i].decodeOp = "none";
+        const t = s.replace(/\s+/g,"");
+        if (/^[0-9a-fA-F]+$/.test(t) && t.length % 2 === 0) {
+          rows[i].output = hexDecode(t);
+          rows[i].opLabel = "Hex";
+        } else {
+          rows[i].output = s;
+          rows[i].opLabel = "none";
+        }
       }
     }
     rows[i].mode = "smart";
@@ -69,12 +247,12 @@
   }
 
   function addRow(i) {
-    const next = { input: rows[i].output, output: "", encodeOp: "", decodeOp: "", mode: "decode" };
+    const next = { input: rows[i].output, output: "", opLabel: "", mode: "decode" };
     rows = [...rows.slice(0, i + 1), next, ...rows.slice(i + 1)];
   }
 
   function clearRow(i) {
-    rows[i] = { input: "", output: "", encodeOp: "", decodeOp: "", mode: "decode" };
+    rows[i] = { input: "", output: "", opLabel: "", mode: "decode" };
     rows = rows;
   }
 </script>
@@ -106,7 +284,7 @@
             {#each decodeOps as op}
               <button
                 class="op-btn"
-                class:op-active={row.mode === "decode" && row.decodeOp === op.label}
+                class:op-active={row.mode === "decode" && row.opLabel === op.label}
                 on:click={() => applyDecode(i, op)}
                 disabled={!row.input}
               >{op.label}</button>
@@ -118,8 +296,20 @@
             {#each encodeOps as op}
               <button
                 class="op-btn"
-                class:op-active={row.mode === "encode" && row.encodeOp === op.label}
+                class:op-active={row.mode === "encode" && row.opLabel === op.label}
                 on:click={() => applyEncode(i, op)}
+                disabled={!row.input}
+              >{op.label}</button>
+            {/each}
+          </div>
+          <div class="ops-sep"></div>
+          <div class="ops-group">
+            <span class="ops-label">Hash</span>
+            {#each hashOps as op}
+              <button
+                class="op-btn"
+                class:op-active={row.mode === "hash" && row.opLabel === op.label}
+                on:click={() => applyHash(i, op)}
                 disabled={!row.input}
               >{op.label}</button>
             {/each}
@@ -137,9 +327,9 @@
           <div class="io-header">
             <span class="io-label">
               Output
-              {#if row.decodeOp || row.encodeOp}
+              {#if row.opLabel}
                 <span class="op-tag">
-                  {row.mode === "encode" ? "Encoded: " + row.encodeOp : row.mode === "smart" ? "Smart: " + row.decodeOp : "Decoded: " + row.decodeOp}
+                  {row.mode === "encode" ? "Encoded: " + row.opLabel : row.mode === "smart" ? "Smart: " + row.opLabel : row.mode === "hash" ? "Hash: " + row.opLabel : "Decoded: " + row.opLabel}
                 </span>
               {/if}
             </span>

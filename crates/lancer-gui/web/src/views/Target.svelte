@@ -42,17 +42,82 @@
 
   function closeCtx() { ctxMenu = null; }
 
+  function entryToSendPayload(e) {
+    const raw = formatRequest(e);
+    return {
+      method: e.method || "GET",
+      scheme: e.scheme || "http",
+      host: e.host || "",
+      port: e.port || (e.scheme === "https" ? 443 : 80),
+      path: e.path || e.url || "/",
+      raw,
+    };
+  }
+
   function ctxSendToRepeater() {
     if (!ctxMenu) return;
-    const e = ctxMenu.entry;
-    const raw = e.raw_request || e.request || "";
-    localStorage.setItem("repeater_prefill", JSON.stringify({
-      method: e.method || "GET",
-      host: e.host || "",
-      path: e.path || e.url || "/",
-      raw
-    }));
+    const payload = entryToSendPayload(ctxMenu.entry);
+    localStorage.setItem("repeater_prefill", JSON.stringify(payload));
+    localStorage.setItem("lancer.send.repeater", JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "repeater" }));
+    closeCtx();
+  }
+
+  function ctxSendToIntruder() {
+    if (!ctxMenu) return;
+    const payload = entryToSendPayload(ctxMenu.entry);
+    localStorage.setItem("lancer.send.intruder", JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "intruder" }));
+    closeCtx();
+  }
+
+  function ctxSendToComparer(role) {
+    if (!ctxMenu) return;
+    const e = ctxMenu.entry;
+    const item = role === "response" ? formatResponse(e) : formatRequest(e);
+    const existing = JSON.parse(localStorage.getItem("lancer.send.comparer") || "{}");
+    if (!existing.item1) existing.item1 = item;
+    else existing.item2 = item;
+    localStorage.setItem("lancer.send.comparer", JSON.stringify(existing));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "comparer" }));
+    closeCtx();
+  }
+
+  function ctxSendToDecoder() {
+    if (!ctxMenu) return;
+    const e = ctxMenu.entry;
+    const text = e.body || e.response_body || formatResponse(e);
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: text }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
+    closeCtx();
+  }
+
+  async function ctxSendToScanner() {
+    if (!ctxMenu) return;
+    const e = ctxMenu.entry;
+    const url = e.url || `${e.scheme || "http"}://${e.host}${e.path || "/"}`;
+    try {
+      await fetch("/api/v1/scan/full", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+    } catch {}
+    closeCtx();
+  }
+
+  function ctxCopyAsCurl() {
+    if (!ctxMenu) return;
+    const e = ctxMenu.entry;
+    const url = e.url || `${e.scheme || "http"}://${e.host}${e.path || "/"}`;
+    let curl = `curl -X ${e.method || "GET"} '${url}'`;
+    if (e.request && Array.isArray(e.request.headers)) {
+      for (const h of e.request.headers) {
+        if (["host","content-length","accept-encoding"].includes(h.name.toLowerCase())) continue;
+        curl += ` \\\n  -H '${h.name}: ${h.value.replace(/'/g,"'\\''")}'`;
+      }
+    }
+    navigator.clipboard.writeText(curl).catch(() => {});
     closeCtx();
   }
 
@@ -63,7 +128,23 @@
     closeCtx();
   }
 
-  function ctxAddScope() { closeCtx(); }
+  async function ctxAddScope() {
+    if (!ctxMenu) return;
+    const e = ctxMenu.entry;
+    const rule = {
+      kind: "Include",
+      protocol: e.scheme || null,
+      host: e.host || "",
+      port: e.port || null,
+      path: null,
+      enabled: true,
+      regex: false,
+    };
+    if (!rule.host) { closeCtx(); return; }
+    scopeRules = [...scopeRules, rule];
+    await saveScope();
+    closeCtx();
+  }
   function ctxDelete() {
     if (!ctxMenu) return;
     history = history.filter(h => h !== ctxMenu.entry);
@@ -118,9 +199,78 @@
     } catch {}
   }
 
+  // ── Scope state ──────────────────────────────────────────
+  let scopeRules = [];
+  let scopeSaving = false;
+  let scopeError = "";
+  let newRule = { kind: "Include", protocol: "", host: "", port: "", path: "", enabled: true, regex: false };
+
+  async function fetchScope() {
+    try {
+      const r = await fetch("/api/v1/scope");
+      if (r.ok) {
+        const d = await r.json();
+        scopeRules = Array.isArray(d) ? d : (d.rules || []);
+      }
+    } catch {}
+  }
+
+  async function saveScope() {
+    scopeSaving = true; scopeError = "";
+    try {
+      const r = await fetch("/api/v1/scope", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(scopeRules),
+      });
+      if (!r.ok) scopeError = "Save failed: " + (await r.text());
+    } catch (e) {
+      scopeError = "Save failed: " + e.message;
+    }
+    scopeSaving = false;
+  }
+
+  function addScopeRule() {
+    if (!newRule.host) { scopeError = "Host is required"; return; }
+    const rule = {
+      kind: newRule.kind,
+      protocol: newRule.protocol || null,
+      host: newRule.host,
+      port: newRule.port ? parseInt(newRule.port, 10) : null,
+      path: newRule.path || null,
+      enabled: newRule.enabled,
+      regex: newRule.regex,
+    };
+    scopeRules = [...scopeRules, rule];
+    newRule = { kind: "Include", protocol: "", host: "", port: "", path: "", enabled: true, regex: false };
+    saveScope();
+  }
+
+  function removeScopeRule(idx) {
+    scopeRules = scopeRules.filter((_, i) => i !== idx);
+    saveScope();
+  }
+
+  function toggleScopeRule(idx) {
+    scopeRules[idx].enabled = !scopeRules[idx].enabled;
+    scopeRules = scopeRules;
+    saveScope();
+  }
+
+  function moveScopeRule(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= scopeRules.length) return;
+    const tmp = scopeRules[idx];
+    scopeRules[idx] = scopeRules[j];
+    scopeRules[j] = tmp;
+    scopeRules = scopeRules;
+    saveScope();
+  }
+
   onMount(() => {
     fetchHistory();
     fetchIssues();
+    fetchScope();
     pollTimer = setInterval(fetchHistory, 4000);
     window.addEventListener("click", closeCtx);
   });
@@ -254,13 +404,85 @@
   <!-- ── SCOPE ── -->
   {#if subtab === "scope"}
     <div class="panel">
-      <div class="scope-notice">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;margin-top:1px">
-          <circle cx="8" cy="8" r="7" stroke="#767676" stroke-width="1.2"/>
-          <path d="M8 5v4" stroke="#767676" stroke-width="1.4" stroke-linecap="round"/>
-          <circle cx="8" cy="11.5" r="0.7" fill="#767676"/>
-        </svg>
-        <p>Scope is empty. Add items by right-clicking in Proxy history or Target site map.</p>
+      <div class="scope-wrap">
+        <div class="scope-section">
+          <div class="scope-title">Scope rules</div>
+          {#if scopeError}<div class="scope-err">{scopeError}</div>{/if}
+          {#if scopeRules.length === 0}
+            <div class="scope-empty dim">No scope rules. Add one below to limit which hosts Lancer treats as in-scope.</div>
+          {:else}
+            <table class="scope-table">
+              <thead>
+                <tr>
+                  <th>On</th>
+                  <th>Kind</th>
+                  <th>Protocol</th>
+                  <th>Host</th>
+                  <th>Port</th>
+                  <th>Path</th>
+                  <th>Regex</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each scopeRules as r, i}
+                  <tr class:rule-disabled={!r.enabled}>
+                    <td><input type="checkbox" checked={r.enabled} on:change={() => toggleScopeRule(i)} /></td>
+                    <td class={r.kind === "Include" ? "kind-include" : "kind-exclude"}>{r.kind}</td>
+                    <td>{r.protocol || "*"}</td>
+                    <td><code>{r.host}</code></td>
+                    <td>{r.port ?? "*"}</td>
+                    <td><code>{r.path || "*"}</code></td>
+                    <td>{r.regex ? "yes" : ""}</td>
+                    <td class="rule-actions">
+                      <button class="sm-btn" on:click={() => moveScopeRule(i, -1)} disabled={i === 0} title="Move up">▲</button>
+                      <button class="sm-btn" on:click={() => moveScopeRule(i, 1)} disabled={i === scopeRules.length - 1} title="Move down">▼</button>
+                      <button class="sm-btn danger" on:click={() => removeScopeRule(i)} title="Delete">×</button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+          <div class="scope-status dim">
+            {scopeRules.length} rule{scopeRules.length === 1 ? "" : "s"} · {scopeSaving ? "saving..." : "synced"}
+          </div>
+        </div>
+
+        <div class="scope-section">
+          <div class="scope-title">Add rule</div>
+          <div class="scope-form">
+            <label>Kind
+              <select bind:value={newRule.kind}>
+                <option value="Include">Include</option>
+                <option value="Exclude">Exclude</option>
+              </select>
+            </label>
+            <label>Protocol
+              <select bind:value={newRule.protocol}>
+                <option value="">any</option>
+                <option value="http">http</option>
+                <option value="https">https</option>
+                <option value="ws">ws</option>
+                <option value="wss">wss</option>
+              </select>
+            </label>
+            <label class="grow">Host (literal or pattern)
+              <input bind:value={newRule.host} placeholder="example.com or *.example.com" />
+            </label>
+            <label>Port
+              <input bind:value={newRule.port} placeholder="any" style="width:80px" />
+            </label>
+            <label class="grow">Path
+              <input bind:value={newRule.path} placeholder="/ or /api/*" />
+            </label>
+            <label class="check-inline">
+              <input type="checkbox" bind:checked={newRule.regex} />
+              Regex
+            </label>
+            <button class="btn-primary" on:click={addScopeRule}>Add rule</button>
+          </div>
+        </div>
       </div>
     </div>
   {/if}
@@ -304,12 +526,15 @@
   <div class="ctx-menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation>
     <div class="ctx-item" on:click={ctxAddScope}>Add to scope</div>
     <div class="ctx-sep"></div>
-    <div class="ctx-item" on:click={ctxSendToRepeater}>Send to Repeater</div>
-    <div class="ctx-item ctx-disabled">Send to Intruder</div>
-    <div class="ctx-item ctx-disabled">Send to Sequencer</div>
-    <div class="ctx-item ctx-disabled">Send to Comparer</div>
+    <div class="ctx-item" on:click={ctxSendToRepeater}>Send to Repeater <span class="ctx-shortcut">Ctrl+R</span></div>
+    <div class="ctx-item" on:click={ctxSendToIntruder}>Send to Intruder <span class="ctx-shortcut">Ctrl+I</span></div>
+    <div class="ctx-item" on:click={() => ctxSendToComparer("request")}>Send request to Comparer</div>
+    <div class="ctx-item" on:click={() => ctxSendToComparer("response")}>Send response to Comparer</div>
+    <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
+    <div class="ctx-item" on:click={ctxSendToScanner}>Send to Scanner</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
+    <div class="ctx-item" on:click={ctxCopyAsCurl}>Copy as curl</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item ctx-danger" on:click={ctxDelete}>Delete item</div>
   </div>
@@ -424,6 +649,35 @@
   }
   .scope-notice p { margin: 0; }
 
+  .scope-wrap { display: flex; flex-direction: column; gap: 18px; max-width: 1100px; }
+  .scope-section { border: 1px solid #dedede; border-radius: 4px; background: #ffffff; padding: 12px 14px; }
+  .scope-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #767676; margin-bottom: 10px; }
+  .scope-empty { font-size: 13px; padding: 10px 4px; }
+  .scope-err { background: #fde8e8; color: #d42c2c; border: 1px solid #f5b8b8; padding: 6px 10px; border-radius: 3px; font-size: 12px; margin-bottom: 8px; }
+  .scope-status { margin-top: 8px; font-size: 11px; }
+  .scope-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .scope-table th, .scope-table td { padding: 5px 9px; border-bottom: 1px solid #e8e8e8; text-align: left; }
+  .scope-table thead th { background: #f5f5f5; color: #767676; font-size: 11px; font-weight: 600; }
+  .scope-table .rule-disabled td { opacity: 0.45; }
+  .scope-table .kind-include { color: #1b8c1b; font-weight: 600; }
+  .scope-table .kind-exclude { color: #d42c2c; font-weight: 600; }
+  .scope-table .rule-actions { display: flex; gap: 4px; }
+  .scope-table code { font-family: ui-monospace, Consolas, monospace; }
+  .sm-btn { font-size: 11px; padding: 2px 8px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; }
+  .sm-btn:hover:not(:disabled) { background: #e4e4e4; }
+  .sm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sm-btn.danger { color: #d42c2c; border-color: #f5b8b8; }
+  .sm-btn.danger:hover:not(:disabled) { background: #fde8e8; }
+
+  .scope-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+  .scope-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; font-weight: 500; }
+  .scope-form label.grow { flex: 1; min-width: 200px; }
+  .scope-form input, .scope-form select { font-size: 13px; padding: 4px 8px; }
+  .scope-form .check-inline { flex-direction: row; align-items: center; }
+  .scope-form .check-inline input { margin-right: 4px; }
+  .btn-primary { background: #e03a00; color: #ffffff; border: none; border-radius: 3px; padding: 5px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-primary:hover { background: #c73400; }
+
   /* Issues table */
   .table-scroll { flex: 1; overflow-y: auto; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -455,5 +709,6 @@
   .ctx-item.ctx-disabled:hover { background: none; }
   .ctx-item.ctx-danger { color: #d42c2c; }
   .ctx-item.ctx-danger:hover { background: #fde8e8; }
+  .ctx-shortcut { float: right; color: #888; font-size: 11px; padding-left: 14px; }
   .ctx-sep { height: 1px; background: #e8e8e8; margin: 3px 0; }
 </style>

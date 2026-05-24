@@ -69,6 +69,114 @@
     return `${ver} ${r.status} ${reason}\n${hdrs}\n\n${body}`;
   }
 
+  // ── WebSockets history ──────────────────────────────
+  let wsRows = [];
+  let wsFilter = "";
+  let selectedWs = null;
+  $: filteredWs = wsRows.filter(m =>
+    !wsFilter ||
+    (m.host || "").includes(wsFilter) ||
+    (m.direction || "").includes(wsFilter) ||
+    (m.frame_type || "").includes(wsFilter)
+  );
+  async function loadWsHistory() {
+    try {
+      const r = await fetch("/api/v1/ws-history");
+      if (r.ok) wsRows = await r.json();
+    } catch {}
+  }
+
+  // ── Right-click context menu state ──────────────────
+  let ctxMenu = null;
+  function onRowContextMenu(event, row) {
+    event.preventDefault();
+    selected = row;
+    ctxMenu = { x: event.clientX, y: event.clientY, row };
+  }
+  function closeCtxMenu() { ctxMenu = null; }
+
+  function payloadFromRow(row) {
+    return {
+      method: row.method || "GET",
+      scheme: row.scheme || "http",
+      host: row.host || "",
+      port: row.port || (row.scheme === "https" ? 443 : 80),
+      path: row.path || "/",
+      raw: formatRequest(row),
+    };
+  }
+
+  function ctxSendToRepeater() {
+    if (!ctxMenu) return;
+    const payload = payloadFromRow(ctxMenu.row);
+    localStorage.setItem("repeater_prefill", JSON.stringify(payload));
+    localStorage.setItem("lancer.send.repeater", JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "repeater" }));
+    closeCtxMenu();
+  }
+  function ctxSendToIntruder() {
+    if (!ctxMenu) return;
+    localStorage.setItem("lancer.send.intruder", JSON.stringify(payloadFromRow(ctxMenu.row)));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "intruder" }));
+    closeCtxMenu();
+  }
+  function ctxSendToComparer(role) {
+    if (!ctxMenu) return;
+    const item = role === "response" ? formatResponse(ctxMenu.row) : formatRequest(ctxMenu.row);
+    const existing = JSON.parse(localStorage.getItem("lancer.send.comparer") || "{}");
+    if (!existing.item1) existing.item1 = item;
+    else existing.item2 = item;
+    localStorage.setItem("lancer.send.comparer", JSON.stringify(existing));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "comparer" }));
+    closeCtxMenu();
+  }
+  function ctxSendToDecoder() {
+    if (!ctxMenu) return;
+    const text = bytesToText(ctxMenu.row.response?.body) || formatResponse(ctxMenu.row);
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: text }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
+    closeCtxMenu();
+  }
+  async function ctxSendToScanner() {
+    if (!ctxMenu) return;
+    const row = ctxMenu.row;
+    const url = `${row.scheme || "http"}://${row.host}${row.path || "/"}`;
+    try {
+      await fetch("/api/v1/scan/full", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
+    } catch {}
+    closeCtxMenu();
+  }
+  async function ctxAddToScope() {
+    if (!ctxMenu) return;
+    const row = ctxMenu.row;
+    try {
+      const r = await fetch("/api/v1/scope");
+      let rules = r.ok ? await r.json() : [];
+      if (!Array.isArray(rules)) rules = [];
+      rules.push({ kind: "Include", protocol: row.scheme || null, host: row.host, port: row.port || null, path: null, enabled: true, regex: false });
+      await fetch("/api/v1/scope", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(rules) });
+    } catch {}
+    closeCtxMenu();
+  }
+  function ctxCopyUrl() {
+    if (!ctxMenu) return;
+    const r = ctxMenu.row;
+    navigator.clipboard.writeText(`${r.scheme || "http"}://${r.host}${r.path || "/"}`).catch(() => {});
+    closeCtxMenu();
+  }
+  function ctxCopyAsCurl() {
+    if (!ctxMenu) return;
+    const r = ctxMenu.row;
+    const url = `${r.scheme || "http"}://${r.host}${r.path || "/"}`;
+    let curl = `curl -X ${r.method || "GET"} '${url}'`;
+    for (const h of (r.request?.headers || [])) {
+      if (["host","content-length","accept-encoding","proxy-connection"].includes(h.name.toLowerCase())) continue;
+      curl += ` \\\n  -H '${h.name}: ${h.value.replace(/'/g,"'\\''")}'`;
+    }
+    navigator.clipboard.writeText(curl).catch(() => {});
+    closeCtxMenu();
+  }
+
   async function loadProxyStatus() {
     try {
       const r = await fetch("/api/v1/proxy/status");
@@ -216,14 +324,23 @@
     await loadProxyStatus();
     if (subtab === "history") await refreshHistory();
     if (subtab === "matchreplace") await loadRules();
+    if (subtab === "ws") await loadWsHistory();
 
-    // Poll intercept queue every 500ms when intercept is on
+    // Poll intercept queue every 500ms when intercept is on, ws every 5s when on ws tab
     pollTimer = setInterval(async () => {
       if (subtab === "intercept" && interceptOn) await pollIntercept();
+      if (subtab === "ws") await loadWsHistory();
     }, 500);
+
+    window.addEventListener("click", closeCtxMenu);
   });
 
-  onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
+  $: if (subtab === "ws") loadWsHistory();
+
+  onDestroy(() => {
+    if (pollTimer) clearInterval(pollTimer);
+    window.removeEventListener("click", closeCtxMenu);
+  });
 
   $: filteredRows = rows.filter(r =>
     !filter ||
@@ -373,6 +490,7 @@
                 class:row-selected={selected === row}
                 class:row-even={i % 2 === 0}
                 on:click={() => selected = selected === row ? null : row}
+                on:contextmenu={(e) => onRowContextMenu(e, row)}
               >
                 <td class="dim">{i + 1}</td>
                 <td>{row.host || "-"}</td>
@@ -425,13 +543,53 @@
 
   <!-- ─── WEBSOCKETS ─── -->
   {#if subtab === "ws"}
-    <div class="empty-state">
-      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-        <path d="M8 24 Q16 12 24 24 Q32 36 40 24" stroke="#c8c8c8" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <circle cx="8"  cy="24" r="3" fill="#c8c8c8"/>
-        <circle cx="40" cy="24" r="3" fill="#c8c8c8"/>
-      </svg>
-      <span class="dim" style="font-size:13px">No WebSocket messages captured yet.</span>
+    <div class="toolbar">
+      <input style="flex:1;max-width:380px" placeholder="Filter host / direction / type..." bind:value={wsFilter} />
+      <button class="toolbar-btn" on:click={loadWsHistory}>Reload</button>
+      <span class="dim" style="font-size:12px;margin-left:auto">{filteredWs.length} / {wsRows.length} messages</span>
+    </div>
+    <div class="ws-body">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Time</th>
+              <th>Host</th>
+              <th>Dir</th>
+              <th>Type</th>
+              <th>Length</th>
+              <th>Payload (preview)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each filteredWs as m, i}
+              <tr
+                class:row-selected={selectedWs === m}
+                class:row-even={i % 2 === 0}
+                on:click={() => selectedWs = selectedWs === m ? null : m}
+              >
+                <td class="dim mono">{i + 1}</td>
+                <td class="dim small">{(m.captured_at || "").slice(11, 19)}</td>
+                <td>{m.host}</td>
+                <td class={m.direction === "c2s" ? "dir-c2s" : "dir-s2c"}>{m.direction === "c2s" ? "→ server" : "← client"}</td>
+                <td>{m.frame_type}</td>
+                <td class="dim">{m.length}</td>
+                <td class="ws-preview mono small">{(m.payload_text || "").slice(0, 80)}</td>
+              </tr>
+            {/each}
+            {#if filteredWs.length === 0}
+              <tr><td colspan="7" class="empty-cell">No WebSocket messages captured yet. Browse a WebSocket-using site through <code>{listenAddr}</code>.</td></tr>
+            {/if}
+          </tbody>
+        </table>
+      </div>
+      {#if selectedWs}
+        <div class="ws-detail">
+          <div class="pane-header">Payload ({selectedWs.length} bytes, {selectedWs.frame_type})</div>
+          <textarea class="raw-area" readonly value={selectedWs.payload_text || ""}></textarea>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -510,7 +668,51 @@
   {/if}
 </div>
 
+{#if ctxMenu}
+  <div class="ctx-menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation>
+    <div class="ctx-item" on:click={ctxSendToRepeater}>Send to Repeater <span class="ctx-shortcut">Ctrl+R</span></div>
+    <div class="ctx-item" on:click={ctxSendToIntruder}>Send to Intruder <span class="ctx-shortcut">Ctrl+I</span></div>
+    <div class="ctx-item" on:click={() => ctxSendToComparer("request")}>Send request to Comparer</div>
+    <div class="ctx-item" on:click={() => ctxSendToComparer("response")}>Send response to Comparer</div>
+    <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
+    <div class="ctx-item" on:click={ctxSendToScanner}>Send to Scanner</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" on:click={ctxAddToScope}>Add host to scope</div>
+    <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
+    <div class="ctx-item" on:click={ctxCopyAsCurl}>Copy as curl</div>
+  </div>
+{/if}
+
 <style>
+  .ws-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .ws-body .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
+  .ws-detail { height: 220px; flex-shrink: 0; border-top: 2px solid #dedede; display: flex; flex-direction: column; }
+  .ws-detail .raw-area { flex: 1; resize: none; border: none; padding: 8px 10px; font-size: 11px; font-family: ui-monospace, Consolas, monospace; outline: none; background: #ffffff; }
+  .ws-preview { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir-c2s { color: #1a75c4; font-weight: 600; }
+  .dir-s2c { color: #1b8c1b; font-weight: 600; }
+  .small { font-size: 11px; }
+
+  .ctx-menu {
+    position: fixed; z-index: 9999;
+    background: #ffffff;
+    border: 1px solid #c8c8c8;
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    padding: 4px 0;
+    min-width: 220px;
+    font-size: 12px;
+  }
+  .ctx-item {
+    padding: 6px 14px;
+    cursor: pointer;
+    color: #212121;
+    user-select: none;
+  }
+  .ctx-item:hover { background: #f0f7ff; }
+  .ctx-sep { height: 1px; background: #e8e8e8; margin: 4px 0; }
+  .ctx-shortcut { float: right; color: #888; font-size: 11px; padding-left: 14px; }
+
   .intercept-toolbar {
     display: flex; align-items: center; gap: 4px;
     padding: 6px 10px;

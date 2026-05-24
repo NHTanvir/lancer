@@ -276,6 +276,13 @@
     return raw;
   }
 
+  function extractResponseBody(raw) {
+    if (!raw) return "";
+    const idx = raw.indexOf("\r\n\r\n");
+    const nlIdx = idx >= 0 ? idx + 4 : raw.indexOf("\n\n") >= 0 ? raw.indexOf("\n\n") + 2 : -1;
+    return nlIdx >= 0 ? raw.slice(nlIdx) : "";
+  }
+
   onMount(() => {
     // Read "Send to Repeater" prefill from localStorage (set by Target tab)
     const prefill = localStorage.getItem("repeater_prefill");
@@ -400,16 +407,32 @@
             <button class="itab" class:itab-active={tabStates[activeTab].respSubtab==="pretty"} on:click={() => { tabStates[activeTab].respSubtab="pretty"; tabStates=tabStates; }}>Pretty</button>
             <button class="itab" class:itab-active={tabStates[activeTab].respSubtab==="raw"}    on:click={() => { tabStates[activeTab].respSubtab="raw";    tabStates=tabStates; }}>Raw</button>
             <button class="itab" class:itab-active={tabStates[activeTab].respSubtab==="hex"}    on:click={() => { tabStates[activeTab].respSubtab="hex";    tabStates=tabStates; }}>Hex</button>
+            <button class="itab" class:itab-active={tabStates[activeTab].respSubtab==="render"} on:click={() => { tabStates[activeTab].respSubtab="render"; tabStates=tabStates; }} title="Render response as HTML">Render</button>
           </div>
         </div>
-        <textarea
-          class="resp-area"
-          readonly
-          value={tabStates[activeTab].respSubtab === "pretty"
-            ? prettyResponse(tabStates[activeTab].response)
-            : (tabStates[activeTab].response || "(send a request to see the response)")}
-          spellcheck="false"
-        ></textarea>
+        {#if tabStates[activeTab].respSubtab === "render"}
+          {@const html = extractResponseBody(tabStates[activeTab].response)}
+          {#if html}
+            <iframe
+              class="resp-area"
+              title="Rendered response"
+              sandbox=""
+              srcdoc={html}
+              style="border:none;background:#fff"
+            ></iframe>
+          {:else}
+            <div class="resp-area" style="padding:14px;color:#767676;font-size:13px">No response body to render.</div>
+          {/if}
+        {:else}
+          <textarea
+            class="resp-area"
+            readonly
+            value={tabStates[activeTab].respSubtab === "pretty"
+              ? prettyResponse(tabStates[activeTab].response)
+              : (tabStates[activeTab].response || "(send a request to see the response)")}
+            spellcheck="false"
+          ></textarea>
+        {/if}
       </div>
 
       <!-- Inspector pane (toggleable) -->

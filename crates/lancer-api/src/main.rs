@@ -45,6 +45,9 @@ use lancer_proxy::{
 use lancer_scanner::config::ScanConfig;
 use lancer_scanner::ScanEngine;
 use lancer_storage::Storage;
+use lancer_storage::organizer::OrganizerEntry;
+use lancer_session::{Cookie, CookieJar};
+use lancer_plugin::registry::PluginRegistry;
 use lancer_tools::{
     intruder::{AttackKind, IntruderConfig, PayloadSet},
     positions::ParsedTemplate,
@@ -80,6 +83,8 @@ struct AppState {
     scope: Arc<RwLock<Scope>>,
     ca: Arc<CertificateAuthority>,
     proxy_addr: SocketAddr,
+    cookie_jar: CookieJar,
+    plugins: PluginRegistry,
 }
 
 #[tokio::main]
@@ -157,6 +162,16 @@ async fn main() -> Result<()> {
         info!("Lancer proxy started on {}", proxy_addr);
     }
 
+    // Plugin registry + cookie jar
+    let plugins = PluginRegistry::new();
+    if let Some(dir) = std::env::var_os("LANCER_PLUGINS_DIR") {
+        let _ = plugins.load_directory(std::path::Path::new(&dir));
+    } else if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        let p = std::path::PathBuf::from(local).join("Lancer").join("plugins");
+        let _ = plugins.load_directory(&p);
+    }
+    let cookie_jar = CookieJar::new();
+
     let state = Arc::new(AppState {
         token: args.token,
         project: RwLock::new(storage),
@@ -168,6 +183,8 @@ async fn main() -> Result<()> {
         scope,
         ca,
         proxy_addr,
+        cookie_jar,
+        plugins,
     });
 
     let listener = TcpListener::bind(args.listen).await?;
@@ -385,6 +402,146 @@ async fn dispatch(
             let mut scope = state.scope.write();
             scope.rules = rules;
             json(&serde_json::json!({ "ok": true }))
+        }
+
+        // ── Cookie jar ───────────────────────────────────────────────────
+        (Method::GET, "/v1/cookies") => json(&state.cookie_jar.all()),
+        (Method::POST, "/v1/cookies") => {
+            let Ok(c) = serde_json::from_slice::<Cookie>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            state.cookie_jar.add(c);
+            json(&serde_json::json!({ "ok": true }))
+        }
+        (Method::DELETE, "/v1/cookies") => {
+            state.cookie_jar.clear();
+            json(&serde_json::json!({ "ok": true, "cleared": true }))
+        }
+
+        // ── Organizer ────────────────────────────────────────────────────
+        (Method::GET, "/v1/organizer") => {
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return json(&serde_json::json!([])) };
+            match s.organizer().list().await {
+                Ok(rows) => json(&rows),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+        (Method::POST, "/v1/organizer") => {
+            let Ok(entry) = serde_json::from_slice::<OrganizerEntry>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+            match s.organizer().insert(&entry).await {
+                Ok(_) => json(&serde_json::json!({ "ok": true, "id": entry.id })),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+
+        // ── WebSocket history ─────────────────────────────────────────────
+        (Method::GET, "/v1/ws-history") => {
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return json(&serde_json::json!([])) };
+            match s.websockets().list(None).await {
+                Ok(rows) => {
+                    // Render payload as base64 string to keep JSON compact
+                    use base64::Engine as _;
+                    let b64 = base64::engine::general_purpose::STANDARD;
+                    let v: Vec<serde_json::Value> = rows.into_iter().map(|m| {
+                        let text_preview = String::from_utf8_lossy(&m.payload).to_string();
+                        serde_json::json!({
+                            "id": m.id,
+                            "captured_at": m.captured_at,
+                            "host": m.host,
+                            "url": m.url,
+                            "direction": match m.direction { lancer_storage::websocket::WsDirection::ClientToServer => "c2s", _ => "s2c" },
+                            "frame_type": match m.frame_type {
+                                lancer_storage::websocket::WsFrameType::Text => "text",
+                                lancer_storage::websocket::WsFrameType::Binary => "binary",
+                                lancer_storage::websocket::WsFrameType::Ping => "ping",
+                                lancer_storage::websocket::WsFrameType::Pong => "pong",
+                                lancer_storage::websocket::WsFrameType::Close => "close",
+                            },
+                            "length": m.payload.len(),
+                            "payload_b64": b64.encode(&m.payload),
+                            "payload_text": text_preview,
+                            "comment": m.comment,
+                        })
+                    }).collect();
+                    json(&v)
+                }
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+
+        // ── Plugins ───────────────────────────────────────────────────────
+        (Method::GET, "/v1/plugins") => json(&state.plugins.list()),
+
+        // ── Settings ──────────────────────────────────────────────────────
+        (Method::GET, "/v1/settings") => json(&serde_json::json!({
+            "proxy_addr": state.proxy_addr.to_string(),
+            "intercept_requests": state.intercept_engine.snapshot().intercept_requests,
+            "intercept_responses": state.intercept_engine.snapshot().intercept_responses,
+            "project_open": state.project.read().is_some(),
+        })),
+        (Method::PUT, "/v1/settings") => {
+            #[derive(serde::Deserialize)]
+            struct S {
+                intercept_requests: Option<bool>,
+                intercept_responses: Option<bool>,
+            }
+            let Ok(s) = serde_json::from_slice::<S>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            if let Some(v) = s.intercept_requests {
+                state.intercept_engine.toggle_request_interception(v);
+            }
+            if let Some(v) = s.intercept_responses {
+                state.intercept_engine.toggle_response_interception(v);
+            }
+            json(&serde_json::json!({ "ok": true }))
+        }
+
+        // ── Sequencer (real backend instead of client-side mock) ─────────
+        (Method::POST, "/v1/sequencer/analyse") => {
+            #[derive(serde::Deserialize)]
+            struct Req { tokens: Vec<String> }
+            let Ok(r) = serde_json::from_slice::<Req>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            let n = r.tokens.len();
+            if n == 0 { return json(&serde_json::json!({"tokens":0,"bit_entropy":0.0,"rating":"Need more"})); }
+            // Per-token shannon entropy (bits/char), averaged * mean length
+            let total_chars: f64 = r.tokens.iter().map(|t| t.chars().count() as f64).sum();
+            let mean_len = total_chars / n as f64;
+            let mut counts = std::collections::HashMap::new();
+            let mut total_n = 0u64;
+            for t in &r.tokens {
+                for ch in t.chars() {
+                    *counts.entry(ch).or_insert(0u64) += 1;
+                    total_n += 1;
+                }
+            }
+            let total = total_n as f64;
+            let mut h_char = 0.0f64;
+            for &c in counts.values() {
+                let p = c as f64 / total;
+                if p > 0.0 { h_char -= p * p.log2(); }
+            }
+            let bit_entropy = (h_char * mean_len).max(0.0);
+            let rating = if n < 16 { "Need more" }
+                else if bit_entropy >= 96.0 { "Strong" }
+                else if bit_entropy >= 64.0 { "Excellent" }
+                else if bit_entropy >= 32.0 { "Moderate" }
+                else { "Weak" };
+            json(&serde_json::json!({
+                "tokens": n,
+                "bit_entropy": (bit_entropy * 10.0).round() / 10.0,
+                "char_entropy_per_char": (h_char * 100.0).round() / 100.0,
+                "mean_length": (mean_len * 10.0).round() / 10.0,
+                "rating": rating,
+            }))
         }
 
         _ => dynamic_route(state, method, path, query, body).await,

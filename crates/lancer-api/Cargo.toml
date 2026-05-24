@@ -16,6 +16,8 @@ lancer-proxy.workspace = true
 lancer-tools.workspace = true
 lancer-scanner.workspace = true
 lancer-report = { path = "../lancer-report" }
+lancer-session = { path = "../lancer-session" }
+lancer-plugin = { path = "../lancer-plugin" }
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
@@ -31,3 +33,4 @@ uuid.workspace = true
 chrono.workspace = true
 parking_lot.workspace = true
 clap.workspace = true
+base64.workspace = true

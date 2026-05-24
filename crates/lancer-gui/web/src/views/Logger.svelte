@@ -53,6 +53,62 @@
     return `${ver} ${r.status} ${reason}\n${hdrs}\n\n${body}`;
   }
 
+  // Right-click context menu
+  let ctxMenu = null;
+  function onRowContextMenu(event, row) {
+    event.preventDefault();
+    selected = row;
+    ctxMenu = { x: event.clientX, y: event.clientY, row };
+  }
+  function closeCtxMenu() { ctxMenu = null; }
+  function payloadFromRow(row) {
+    return {
+      method: row.method || "GET",
+      scheme: row.scheme || "http",
+      host: row.host || "",
+      port: row.port || (row.scheme === "https" ? 443 : 80),
+      path: row.path || "/",
+      raw: formatRequest(row),
+    };
+  }
+  function ctxSendToRepeater() {
+    if (!ctxMenu) return;
+    const payload = payloadFromRow(ctxMenu.row);
+    localStorage.setItem("repeater_prefill", JSON.stringify(payload));
+    localStorage.setItem("lancer.send.repeater", JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "repeater" }));
+    closeCtxMenu();
+  }
+  function ctxSendToIntruder() {
+    if (!ctxMenu) return;
+    localStorage.setItem("lancer.send.intruder", JSON.stringify(payloadFromRow(ctxMenu.row)));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "intruder" }));
+    closeCtxMenu();
+  }
+  function ctxSendToComparer(role) {
+    if (!ctxMenu) return;
+    const item = role === "response" ? formatResponse(ctxMenu.row) : formatRequest(ctxMenu.row);
+    const existing = JSON.parse(localStorage.getItem("lancer.send.comparer") || "{}");
+    if (!existing.item1) existing.item1 = item;
+    else existing.item2 = item;
+    localStorage.setItem("lancer.send.comparer", JSON.stringify(existing));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "comparer" }));
+    closeCtxMenu();
+  }
+  function ctxSendToDecoder() {
+    if (!ctxMenu) return;
+    const text = bytesToText(ctxMenu.row.response?.body) || formatResponse(ctxMenu.row);
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: text }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
+    closeCtxMenu();
+  }
+  function ctxCopyUrl() {
+    if (!ctxMenu) return;
+    const r = ctxMenu.row;
+    navigator.clipboard.writeText(`${r.scheme || "http"}://${r.host}${r.path || "/"}`).catch(() => {});
+    closeCtxMenu();
+  }
+
   function statusClass(s) {
     if (!s) return "dim";
     if (s >= 500) return "status-5";
@@ -80,10 +136,12 @@
   onMount(() => {
     load();
     pollInterval = setInterval(load, 5000);
+    window.addEventListener("click", closeCtxMenu);
   });
 
   onDestroy(() => {
     if (pollInterval) clearInterval(pollInterval);
+    window.removeEventListener("click", closeCtxMenu);
   });
 </script>
 
@@ -124,6 +182,7 @@
               class:row-selected={selected === row}
               class:row-even={i % 2 === 0}
               on:click={() => selected = selected === row ? null : row}
+              on:contextmenu={(e) => onRowContextMenu(e, row)}
             >
               <td class="dim mono">{i + 1}</td>
               <td class="dim">{protocolLabel(row)}</td>
@@ -174,7 +233,39 @@
   </div>
 </div>
 
+{#if ctxMenu}
+  <div class="ctx-menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation>
+    <div class="ctx-item" on:click={ctxSendToRepeater}>Send to Repeater <span class="ctx-shortcut">Ctrl+R</span></div>
+    <div class="ctx-item" on:click={ctxSendToIntruder}>Send to Intruder <span class="ctx-shortcut">Ctrl+I</span></div>
+    <div class="ctx-item" on:click={() => ctxSendToComparer("request")}>Send request to Comparer</div>
+    <div class="ctx-item" on:click={() => ctxSendToComparer("response")}>Send response to Comparer</div>
+    <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
+  </div>
+{/if}
+
 <style>
+  .ctx-menu {
+    position: fixed; z-index: 9999;
+    background: #ffffff;
+    border: 1px solid #c8c8c8;
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    padding: 4px 0;
+    min-width: 220px;
+    font-size: 12px;
+  }
+  .ctx-item {
+    padding: 6px 14px;
+    cursor: pointer;
+    color: #212121;
+    user-select: none;
+  }
+  .ctx-item:hover { background: #f0f7ff; }
+  .ctx-sep { height: 1px; background: #e8e8e8; margin: 4px 0; }
+  .ctx-shortcut { float: right; color: #888; font-size: 11px; padding-left: 14px; }
+
   .toolbar {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 12px;

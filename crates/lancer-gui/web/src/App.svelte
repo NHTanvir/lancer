@@ -12,11 +12,27 @@
   import Scanner from "./views/Scanner.svelte";
   import Reports from "./views/Reports.svelte";
   import Settings from "./views/Settings.svelte";
+  import Cookies from "./views/Cookies.svelte";
+  import Organizer from "./views/Organizer.svelte";
+  import Plugins from "./views/Plugins.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
   let status = "connecting...";
   let paletteOpen = false;
+  let theme = "light";
+  let proxyAddr = "";
+  let pluginCount = 0;
+  let projectName = "memory-only";
+
+  function applyTheme(t) {
+    theme = t;
+    document.body.setAttribute("data-theme", t);
+    try { localStorage.setItem("lancer.theme", t); } catch {}
+  }
+  function toggleTheme() {
+    applyTheme(theme === "dark" ? "light" : "dark");
+  }
 
   async function openBrowser() {
     try {
@@ -38,18 +54,41 @@
     { id: "decoder",   label: "Decoder" },
     { id: "comparer",  label: "Comparer" },
     { id: "logger",    label: "Logger" },
+    { id: "organizer", label: "Organizer" },
+    { id: "cookies",   label: "Cookies" },
+    { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
     { id: "settings",  label: "Settings" },
   ];
 
-  onMount(async () => {
+  async function refreshStatus() {
     try {
-      const r = await fetch("/api/status");
+      const r = await fetch("/api/v1/status");
       const data = await r.json();
       status = `Lancer ${data.version} · ${data.project_open ? "project open" : "memory-only"}`;
+      projectName = data.project_open ? "project open" : "memory-only";
+      proxyAddr = data.proxy_addr || "";
     } catch {
       status = "offline — start lancer-api";
     }
+    try {
+      const r = await fetch("/api/v1/plugins");
+      if (r.ok) {
+        const d = await r.json();
+        pluginCount = Array.isArray(d) ? d.length : (d.plugins || []).length;
+      }
+    } catch {}
+  }
+
+  onMount(async () => {
+    try {
+      const saved = localStorage.getItem("lancer.theme");
+      if (saved === "dark" || saved === "light") applyTheme(saved);
+      else applyTheme("light");
+    } catch {}
+
+    await refreshStatus();
+    const statusTimer = setInterval(refreshStatus, 10000);
 
     function onKey(e) {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -70,6 +109,7 @@
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("lancer:navigate", onLancerNavigate);
+      clearInterval(statusTimer);
     };
   });
 
@@ -111,6 +151,23 @@
         </svg>
         Open Browser
       </button>
+      <button class="palette-btn" on:click={toggleTheme} title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+        {#if theme === "dark"}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="3" fill="currentColor"/>
+            <g stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+              <path d="M7 1 V2.5"/><path d="M7 11.5 V13"/>
+              <path d="M1 7 H2.5"/><path d="M11.5 7 H13"/>
+              <path d="M2.6 2.6 L3.7 3.7"/><path d="M10.3 10.3 L11.4 11.4"/>
+              <path d="M11.4 2.6 L10.3 3.7"/><path d="M3.7 10.3 L2.6 11.4"/>
+            </g>
+          </svg>
+        {:else}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M11 8.5 A4.5 4.5 0 1 1 5.5 3 A3.5 3.5 0 0 0 11 8.5 Z" fill="currentColor"/>
+          </svg>
+        {/if}
+      </button>
       <button class="palette-btn" on:click={() => paletteOpen = true} title="Command Palette (Ctrl+K)">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
           <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
@@ -132,9 +189,25 @@
     {#if active === "comparer"}<Comparer />{/if}
     {#if active === "logger"}<Logger />{/if}
     {#if active === "scanner"}<Scanner />{/if}
+    {#if active === "organizer"}<Organizer />{/if}
+    {#if active === "cookies"}<Cookies />{/if}
+    {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}
     {#if active === "settings"}<Settings />{/if}
   </main>
+
+  <!-- Status bar -->
+  <footer class="statusbar">
+    <span class="sb-cell">Project: <strong>{projectName}</strong></span>
+    <span class="sb-sep">·</span>
+    <span class="sb-cell">Proxy: <code>{proxyAddr || "—"}</code></span>
+    <span class="sb-sep">·</span>
+    <span class="sb-cell">Plugins: <strong>{pluginCount}</strong></span>
+    <span class="sb-sep">·</span>
+    <span class="sb-cell">Theme: <strong>{theme}</strong></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-cell dim">Ctrl+K — command palette</span>
+  </footer>
 </div>
 
 {#if paletteOpen}
@@ -416,4 +489,58 @@
     flex: 1; overflow: hidden;
     display: flex; flex-direction: column;
   }
+
+  /* ── Status bar (footer) ── */
+  .statusbar {
+    display: flex; align-items: center; gap: 6px;
+    height: 22px;
+    padding: 0 12px;
+    background: #f5f5f5;
+    border-top: 1px solid #dedede;
+    font-size: 11px;
+    color: #444;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .sb-cell { display: inline-flex; align-items: center; gap: 4px; }
+  .sb-cell code { font-family: ui-monospace, Consolas, monospace; background: #ffffff; padding: 0 5px; border: 1px solid #dedede; border-radius: 2px; }
+  .sb-cell strong { color: #212121; }
+  .sb-sep { color: #c8c8c8; }
+  .sb-spacer { flex: 1; }
+
+  /* ── Dark theme ── */
+  :global([data-theme="dark"]) {
+    background: #1e1f22 !important;
+    color: #d6d6d6 !important;
+  }
+  :global([data-theme="dark"] body) { background: #1e1f22; color: #d6d6d6; }
+  :global([data-theme="dark"] .app) { background: #1e1f22; }
+  :global([data-theme="dark"] .topbar) { background: #25262a; border-bottom-color: #3a3b3f; }
+  :global([data-theme="dark"] .brand) { border-right-color: #3a3b3f; }
+  :global([data-theme="dark"] .brand-name) { color: #f0f0f0; }
+  :global([data-theme="dark"] .tab) { color: #b8b8b8; }
+  :global([data-theme="dark"] .tab:hover) { color: #f0f0f0; background: rgba(255,255,255,0.04); }
+  :global([data-theme="dark"] .tab.active) { color: #ff5722; border-bottom-color: #ff5722; }
+  :global([data-theme="dark"] .topbar-right) { border-left-color: #3a3b3f; }
+  :global([data-theme="dark"] .status-text) { color: #999; }
+  :global([data-theme="dark"] .palette-btn) { background: #2d2e32; border-color: #4a4b50; color: #b8b8b8; }
+  :global([data-theme="dark"] .palette-btn:hover) { background: #38393d; color: #f0f0f0; }
+  :global([data-theme="dark"] button) { background: #2d2e32; color: #d6d6d6; border-color: #4a4b50; }
+  :global([data-theme="dark"] button:hover) { background: #38393d; }
+  :global([data-theme="dark"] input, [data-theme="dark"] select) { background: #1e1f22; color: #d6d6d6; border-color: #4a4b50; }
+  :global([data-theme="dark"] textarea) { background: #1e1f22; color: #d6d6d6; border-color: #4a4b50; }
+  :global([data-theme="dark"] .view) { background: #1e1f22; }
+  :global([data-theme="dark"] .panel) { background: #1e1f22; }
+  :global([data-theme="dark"] .toolbar) { background: #25262a; border-bottom-color: #3a3b3f; }
+  :global([data-theme="dark"] .pane) { border-right-color: #3a3b3f; }
+  :global([data-theme="dark"] .pane-header) { background: #25262a; color: #d6d6d6; border-bottom-color: #3a3b3f; }
+  :global([data-theme="dark"] .subtabs) { background: #25262a; border-bottom-color: #3a3b3f; }
+  :global([data-theme="dark"] .subtab) { color: #b8b8b8; }
+  :global([data-theme="dark"] .subtab:hover) { color: #f0f0f0; }
+  :global([data-theme="dark"] .subtab.active) { color: #ff5722; border-bottom-color: #ff5722; }
+  :global([data-theme="dark"] .dim) { color: #888; }
+  :global([data-theme="dark"] .statusbar) { background: #25262a; color: #b8b8b8; border-top-color: #3a3b3f; }
+  :global([data-theme="dark"] .sb-cell strong) { color: #f0f0f0; }
+  :global([data-theme="dark"] .sb-cell code) { background: #1e1f22; border-color: #4a4b50; color: #d6d6d6; }
 </style>
