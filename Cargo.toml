@@ -21,6 +21,7 @@ members = [
     "crates/lancer-iac",
     "crates/lancer-gui",
     "crates/lancer-cli",
+    "crates/lancer-setup",
 ]
 exclude = [
     # Built separately for the bpfel-unknown-none target.

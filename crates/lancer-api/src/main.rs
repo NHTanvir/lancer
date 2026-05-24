@@ -1,18 +1,29 @@
 //! Headless REST API for Lancer.
 //!
-//! Endpoints (token-authenticated via `Authorization: Bearer <token>`):
-//!
-//!   GET  /v1/status                         — readiness
-//!   GET  /v1/history?limit=N                — list captured requests
-//!   GET  /v1/history/{id}                   — get one
-//!   POST /v1/scan/passive {url}             — run passive checks on URL
-//!   POST /v1/scan/active  {request, scheme} — run active checks on a raw request
-//!   POST /v1/scan/full    {url}             — passive + active in one call
-//!   GET  /v1/issues                         — list stored issues
-//!   GET  /v1/report?format=html|json|...    — render report
-//!   POST /v1/repeater     {request, scheme} — send + return response
-//!   POST /v1/intruder     {…}               — run an intruder attack
-//!   GET  /v1/openapi.json                   — machine-readable description
+//! Endpoints:
+//!   GET  /v1/status
+//!   GET  /v1/history?limit=N
+//!   GET  /v1/history/{id}
+//!   DELETE /v1/history/{id}
+//!   GET  /v1/issues
+//!   GET  /v1/report?format=html|json|markdown|sarif|xml
+//!   POST /v1/repeater
+//!   POST /v1/intruder
+//!   POST /v1/scan/passive
+//!   POST /v1/scan/active
+//!   POST /v1/scan/full
+//!   GET  /v1/proxy/status
+//!   POST /v1/proxy/intercept/toggle   {"requests":bool,"responses":bool}
+//!   GET  /v1/proxy/intercept/queue
+//!   POST /v1/proxy/intercept/forward  {"id":"uuid","wire":"optional edited request"}
+//!   POST /v1/proxy/intercept/drop     {"id":"uuid"}
+//!   GET  /v1/proxy/ca-cert.pem
+//!   GET  /v1/proxy/ca-cert.der
+//!   GET  /v1/proxy/rules
+//!   PUT  /v1/proxy/rules              [MatchReplaceRule, ...]
+//!   GET  /v1/scope
+//!   PUT  /v1/scope                    [ScopeRule, ...]
+//!   GET  /v1/openapi.json
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -25,11 +36,20 @@ use hyper::body::Bytes;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use lancer_core::scope::{Scope, ScopeRule};
 use lancer_core::HttpRequest;
+use lancer_proxy::{
+    CaConfig, CertificateAuthority, InterceptEngine, InterceptPauseQueue, InterceptResolution,
+    MatchReplaceConfig, MatchReplaceEngine, MatchReplaceRule, ProxyListener, ProxySettings,
+};
 use lancer_scanner::config::ScanConfig;
 use lancer_scanner::ScanEngine;
 use lancer_storage::Storage;
-use lancer_tools::HttpClient;
+use lancer_tools::{
+    intruder::{AttackKind, IntruderConfig, PayloadSet},
+    positions::ParsedTemplate,
+    HttpClient, Intruder,
+};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -44,12 +64,22 @@ struct Args {
     token: Option<String>,
     #[arg(long)]
     project: Option<std::path::PathBuf>,
+    #[arg(long, default_value = "127.0.0.1:8080")]
+    proxy: SocketAddr,
 }
 
 struct AppState {
     token: Option<String>,
     project: RwLock<Option<Storage>>,
     client: HttpClient,
+    // Proxy
+    intercept_engine: InterceptEngine,
+    match_replace: Arc<RwLock<MatchReplaceConfig>>,
+    match_replace_engine: MatchReplaceEngine,
+    intercept_queue: Arc<InterceptPauseQueue>,
+    scope: Arc<RwLock<Scope>>,
+    ca: Arc<CertificateAuthority>,
+    proxy_addr: SocketAddr,
 }
 
 #[tokio::main]
@@ -64,10 +94,80 @@ async fn main() -> Result<()> {
         Some(p) => Some(Storage::open(p).await?),
         None => None,
     };
+
+    // CA dir next to the project file, or in LOCALAPPDATA/Lancer/ca
+    let ca_dir = args.project.as_ref()
+        .and_then(|p| p.parent().map(|d| d.join("ca")))
+        .or_else(|| {
+            std::env::var_os("LOCALAPPDATA")
+                .map(|d| std::path::PathBuf::from(d).join("Lancer").join("ca"))
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|d| std::path::PathBuf::from(d).join(".local").join("share").join("Lancer").join("ca"))
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("./ca"));
+
+    let ca = Arc::new(CertificateAuthority::load_or_create(CaConfig {
+        dir: ca_dir,
+        ..Default::default()
+    })?);
+
+    let intercept_engine = InterceptEngine::default();
+    let match_replace_cfg = Arc::new(RwLock::new(MatchReplaceConfig::default()));
+    let match_replace_engine = MatchReplaceEngine::new(MatchReplaceConfig::default());
+    let intercept_queue = InterceptPauseQueue::new();
+    let scope = Arc::new(RwLock::new(Scope::new()));
+
+    // Find a free proxy port — fall back automatically if the preferred port is taken.
+    let proxy_addr = find_free_proxy_addr(args.proxy).await;
+    if proxy_addr != args.proxy {
+        warn!(
+            "Proxy port {} is already in use; binding proxy on {} instead",
+            args.proxy, proxy_addr
+        );
+    }
+
+    // Start proxy in background
+    {
+        let proxy_settings = Arc::new(ProxySettings {
+            listeners: vec![lancer_proxy::settings::ListenerBind {
+                addr: proxy_addr,
+                transparent: false,
+            }],
+            ..Default::default()
+        });
+        let history_store = storage.as_ref().map(|s| s.history());
+        let (events_sink, _events_rx) = lancer_proxy::ProxyEventSink::new(128);
+        let proxy = Arc::new(ProxyListener::new(
+            proxy_settings,
+            ca.clone(),
+            intercept_engine.clone(),
+            match_replace_engine.clone(),
+            scope.clone(),
+            history_store,
+            events_sink,
+            Some(intercept_queue.clone()),
+        ));
+        tokio::spawn(async move {
+            if let Err(e) = proxy.run().await {
+                warn!("proxy exited: {e:#}");
+            }
+        });
+        info!("Lancer proxy started on {}", proxy_addr);
+    }
+
     let state = Arc::new(AppState {
         token: args.token,
         project: RwLock::new(storage),
         client: HttpClient::new(),
+        intercept_engine,
+        match_replace: match_replace_cfg,
+        match_replace_engine,
+        intercept_queue,
+        scope,
+        ca,
+        proxy_addr,
     });
 
     let listener = TcpListener::bind(args.listen).await?;
@@ -97,38 +197,254 @@ async fn handle(state: Arc<AppState>, req: Request<hyper::body::Incoming>) -> Re
             return text(StatusCode::UNAUTHORIZED, "unauthorized");
         }
     }
+
     let path = req.uri().path().to_string();
+    let query = req.uri().query().unwrap_or("").to_string();
     let method = req.method().clone();
     let (parts, body) = req.into_parts();
     let body_bytes = match body.collect().await {
         Ok(c) => c.to_bytes().to_vec(),
         Err(_) => return text(StatusCode::BAD_REQUEST, "bad body"),
     };
+    let _ = parts;
 
-    match (method, path.as_str()) {
+    // Add CORS headers helper — we wrap at the end
+    let resp = dispatch(&state, method, &path, &query, &body_bytes).await;
+    // Add CORS for the embedded webview
+    let (mut rparts, rbody) = resp.into_parts();
+    rparts.headers.insert("access-control-allow-origin", "*".parse().unwrap());
+    Response::from_parts(rparts, rbody)
+}
+
+async fn dispatch(
+    state: &AppState,
+    method: Method,
+    path: &str,
+    query: &str,
+    body: &[u8],
+) -> Response<Full<Bytes>> {
+    match (method.clone(), path) {
+        // ── Core ──────────────────────────────────────────────────────────
         (Method::GET, "/v1/status") => json(&serde_json::json!({
             "ok": true,
             "version": env!("CARGO_PKG_VERSION"),
             "project_open": state.project.read().is_some(),
+            "proxy_addr": state.proxy_addr.to_string(),
         })),
         (Method::GET, "/v1/openapi.json") => json(&openapi_doc()),
-        (Method::GET, "/v1/history") => history_list(&state, parts.uri.query().unwrap_or("")).await,
-        (Method::POST, "/v1/scan/passive") => scan_passive(&state, &body_bytes).await,
-        (Method::POST, "/v1/scan/active") => scan_active(&state, &body_bytes).await,
-        (Method::POST, "/v1/scan/full") => scan_full(&state, &body_bytes).await,
-        (Method::GET, "/v1/issues") => issues_list(&state).await,
-        (Method::GET, "/v1/report") => report(&state, parts.uri.query().unwrap_or("")).await,
-        (Method::POST, "/v1/repeater") => repeater(&state, &body_bytes).await,
-        _ => text(StatusCode::NOT_FOUND, "not found"),
+
+        // ── History ───────────────────────────────────────────────────────
+        (Method::GET, "/v1/history") => history_list(state, query).await,
+
+        // ── Scan ──────────────────────────────────────────────────────────
+        (Method::POST, "/v1/scan/passive") => scan_passive(state, body).await,
+        (Method::POST, "/v1/scan/active")  => scan_active(state, body).await,
+        (Method::POST, "/v1/scan/full")    => scan_full(state, body).await,
+        (Method::GET,  "/v1/scan/queue")   => json(&serde_json::json!({"queue":[]})),
+
+        // ── Issues ────────────────────────────────────────────────────────
+        (Method::GET, "/v1/issues") => issues_list(state).await,
+
+        // ── Report ────────────────────────────────────────────────────────
+        (Method::GET, "/v1/report") => report(state, query).await,
+
+        // ── Repeater ──────────────────────────────────────────────────────
+        (Method::POST, "/v1/repeater") => repeater(state, body).await,
+
+        // ── Intruder ──────────────────────────────────────────────────────
+        (Method::POST, "/v1/intruder") => intruder(state, body).await,
+
+        // ── Proxy status ──────────────────────────────────────────────────
+        (Method::GET, "/v1/proxy/status") => {
+            let cfg = state.intercept_engine.snapshot();
+            json(&serde_json::json!({
+                "running": true,
+                "addr": state.proxy_addr.to_string(),
+                "intercept_requests": cfg.intercept_requests,
+                "intercept_responses": cfg.intercept_responses,
+                "queued": state.intercept_queue.len(),
+            }))
+        }
+
+        // ── Intercept toggle ──────────────────────────────────────────────
+        (Method::POST, "/v1/proxy/intercept/toggle") => {
+            #[derive(serde::Deserialize)]
+            struct T { requests: Option<bool>, responses: Option<bool> }
+            let Ok(t) = serde_json::from_slice::<T>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            if let Some(v) = t.requests  { state.intercept_engine.toggle_request_interception(v); }
+            if let Some(v) = t.responses { state.intercept_engine.toggle_response_interception(v); }
+            let cfg = state.intercept_engine.snapshot();
+            json(&serde_json::json!({
+                "ok": true,
+                "intercept_requests": cfg.intercept_requests,
+                "intercept_responses": cfg.intercept_responses,
+            }))
+        }
+
+        // ── Intercept queue ───────────────────────────────────────────────
+        (Method::GET, "/v1/proxy/intercept/queue") => {
+            json(&state.intercept_queue.list())
+        }
+
+        // ── Intercept forward ─────────────────────────────────────────────
+        (Method::POST, "/v1/proxy/intercept/forward") => {
+            #[derive(serde::Deserialize)]
+            struct F { id: uuid::Uuid, wire: Option<String> }
+            let Ok(f) = serde_json::from_slice::<F>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            // Find the original request to preserve meta
+            let original = state.intercept_queue.list().into_iter().find(|p| p.id == f.id);
+            let req = if let Some(wire) = f.wire {
+                // Parse edited wire, but preserve original meta (scheme/host/port/id)
+                match HttpRequest::parse_wire(wire.as_bytes()) {
+                    Ok(mut parsed) => {
+                        if let Some(orig) = &original {
+                            parsed.meta.id = orig.request.meta.id;
+                            parsed.meta.scheme = orig.request.meta.scheme.clone();
+                            if parsed.meta.host.is_empty() {
+                                parsed.meta.host = orig.request.meta.host.clone();
+                            }
+                            if parsed.meta.port == 80 {
+                                parsed.meta.port = orig.request.meta.port;
+                            }
+                        }
+                        parsed
+                    }
+                    Err(_) => {
+                        return text(StatusCode::BAD_REQUEST, "could not parse edited request");
+                    }
+                }
+            } else if let Some(orig) = original {
+                orig.request
+            } else {
+                return text(StatusCode::NOT_FOUND, "no such queued request");
+            };
+            let found = state.intercept_queue.resolve(f.id, InterceptResolution::Forward(req));
+            json(&serde_json::json!({ "ok": found }))
+        }
+
+        // ── Intercept drop ────────────────────────────────────────────────
+        (Method::POST, "/v1/proxy/intercept/drop") => {
+            #[derive(serde::Deserialize)]
+            struct D { id: uuid::Uuid }
+            let Ok(d) = serde_json::from_slice::<D>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            let found = state.intercept_queue.resolve(d.id, InterceptResolution::Drop);
+            json(&serde_json::json!({ "ok": found }))
+        }
+
+        // ── CA certificates ───────────────────────────────────────────────
+        (Method::GET, "/v1/proxy/ca-cert.pem") => {
+            Response::builder()
+                .status(200)
+                .header("content-type", "application/x-pem-file")
+                .header("content-disposition", "attachment; filename=\"lancer-ca.pem\"")
+                .body(Full::new(Bytes::from(state.ca.cert_pem().as_bytes().to_vec())))
+                .unwrap()
+        }
+        (Method::GET, "/v1/proxy/ca-cert.der") => {
+            match state.ca.der() {
+                Ok(der) => Response::builder()
+                    .status(200)
+                    .header("content-type", "application/x-x509-ca-cert")
+                    .header("content-disposition", "attachment; filename=\"lancer-ca.der\"")
+                    .body(Full::new(Bytes::from(der)))
+                    .unwrap(),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+
+        // ── Match & Replace rules ─────────────────────────────────────────
+        (Method::GET, "/v1/proxy/rules") => {
+            json(&state.match_replace.read().rules)
+        }
+        (Method::PUT, "/v1/proxy/rules") => {
+            let Ok(rules) = serde_json::from_slice::<Vec<MatchReplaceRule>>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            {
+                let mut cfg = state.match_replace.write();
+                cfg.rules = rules.clone();
+            }
+            state.match_replace_engine.replace(MatchReplaceConfig { rules });
+            json(&serde_json::json!({ "ok": true }))
+        }
+
+        // ── Scope ─────────────────────────────────────────────────────────
+        (Method::GET, "/v1/scope") => {
+            json(&state.scope.read().rules)
+        }
+        (Method::PUT, "/v1/scope") => {
+            let Ok(rules) = serde_json::from_slice::<Vec<ScopeRule>>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            let mut scope = state.scope.write();
+            scope.rules = rules;
+            json(&serde_json::json!({ "ok": true }))
+        }
+
+        _ => dynamic_route(state, method, path, query, body).await,
     }
 }
 
+/// Handle routes with dynamic path segments.
+async fn dynamic_route(
+    state: &AppState,
+    method: Method,
+    path: &str,
+    _query: &str,
+    _body: &[u8],
+) -> Response<Full<Bytes>> {
+    // GET /v1/history/{id}
+    if method == Method::GET {
+        if let Some(id_str) = path.strip_prefix("/v1/history/") {
+            if let Ok(id) = id_str.parse::<uuid::Uuid>() {
+                return history_get(state, id).await;
+            }
+        }
+    }
+    // DELETE /v1/history/{id}
+    if method == Method::DELETE {
+        if let Some(id_str) = path.strip_prefix("/v1/history/") {
+            if let Ok(id) = id_str.parse::<uuid::Uuid>() {
+                return history_delete(state, id).await;
+            }
+        }
+    }
+    text(StatusCode::NOT_FOUND, "not found")
+}
+
+// ── Handlers ─────────────────────────────────────────────────────────────────
+
 async fn history_list(state: &AppState, query: &str) -> Response<Full<Bytes>> {
     let storage = state.project.read().clone();
-    let Some(storage) = storage else { return text(StatusCode::CONFLICT, "no project open") };
-    let limit = parse_query(query, "limit").and_then(|v| v.parse().ok()).unwrap_or(50);
+    let Some(storage) = storage else { return json(&serde_json::json!([])) };
+    let limit = parse_query(query, "limit").and_then(|v| v.parse().ok()).unwrap_or(200i64);
     match storage.history().list(&lancer_storage::HistoryFilter { limit: Some(limit), ..Default::default() }).await {
         Ok(rows) => json(&rows),
+        Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+async fn history_get(state: &AppState, id: uuid::Uuid) -> Response<Full<Bytes>> {
+    let storage = state.project.read().clone();
+    let Some(storage) = storage else { return text(StatusCode::NOT_FOUND, "no project") };
+    match storage.history().get(id).await {
+        Ok(Some(row)) => json(&row),
+        Ok(None) => text(StatusCode::NOT_FOUND, "not found"),
+        Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+async fn history_delete(state: &AppState, id: uuid::Uuid) -> Response<Full<Bytes>> {
+    let storage = state.project.read().clone();
+    let Some(storage) = storage else { return text(StatusCode::NOT_FOUND, "no project") };
+    match storage.history().delete(id).await {
+        Ok(_) => json(&serde_json::json!({ "ok": true })),
         Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
 }
@@ -169,15 +485,13 @@ async fn scan_full(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
         Err(e) => return text(StatusCode::BAD_GATEWAY, &e.to_string()),
     };
     let mut all = engine.run_passive(&req, &resp).await;
-    if let Ok(active) = engine.run_active(&req).await {
-        all.extend(active);
-    }
+    if let Ok(active) = engine.run_active(&req).await { all.extend(active); }
     json(&all)
 }
 
 async fn issues_list(state: &AppState) -> Response<Full<Bytes>> {
     let storage = state.project.read().clone();
-    let Some(storage) = storage else { return text(StatusCode::CONFLICT, "no project open") };
+    let Some(storage) = storage else { return json(&serde_json::json!([])) };
     match storage.issues().list().await {
         Ok(rows) => json(&rows),
         Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
@@ -193,12 +507,11 @@ async fn report(state: &AppState, query: &str) -> Response<Full<Bytes>> {
     let meta = ReportMeta::new("Lancer project");
     let f = ReportFilter::default();
     let (ct, body) = match fmt.as_str() {
-        "html" => ("text/html; charset=utf-8", render_html(&meta, &issues, &f)),
-        "json" => ("application/json", render_json(&meta, &issues, &f)),
+        "html"     => ("text/html; charset=utf-8", render_html(&meta, &issues, &f)),
         "markdown" => ("text/markdown", render_markdown(&meta, &issues, &f)),
-        "sarif" => ("application/sarif+json", render_sarif(&meta, &issues, &f)),
-        "xml" => ("application/xml", render_xml(&meta, &issues, &f)),
-        _ => return text(StatusCode::BAD_REQUEST, "unknown format"),
+        "sarif"    => ("application/sarif+json", render_sarif(&meta, &issues, &f)),
+        "xml"      => ("application/xml", render_xml(&meta, &issues, &f)),
+        _          => ("application/json", render_json(&meta, &issues, &f)),
     };
     Response::builder()
         .status(200)
@@ -209,27 +522,82 @@ async fn report(state: &AppState, query: &str) -> Response<Full<Bytes>> {
 
 async fn repeater(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
     #[derive(serde::Deserialize)]
-    struct R { request: String, scheme: Option<String> }
+    struct R { request: String, scheme: Option<String>, host: Option<String>, port: Option<u16> }
     let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
     let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
     req.meta.scheme = r.scheme.unwrap_or_else(|| "https".into());
+    if let Some(h) = r.host { if !h.is_empty() { req.meta.host = h; } }
+    if let Some(p) = r.port { if p > 0 { req.meta.port = p; } }
     match state.client.send(&req).await {
         Ok(resp) => json(&serde_json::json!({
             "status": resp.status,
             "headers": resp.headers,
             "body": resp.body_text().unwrap_or(""),
+            "elapsed_ms": resp.elapsed_ms,
+            "raw": String::from_utf8_lossy(&resp.to_wire()),
         })),
         Err(e) => text(StatusCode::BAD_GATEWAY, &e.to_string()),
     }
 }
 
-fn parse_query(query: &str, key: &str) -> Option<String> {
-    for pair in query.split('&') {
-        if let Some(rest) = pair.strip_prefix(&format!("{key}=")) {
-            return Some(rest.to_string());
+async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
+    #[derive(serde::Deserialize)]
+    struct R {
+        request: String,
+        scheme: Option<String>,
+        host: Option<String>,
+        port: Option<u16>,
+        kind: Option<String>,
+        payloads: Option<Vec<Vec<String>>>,
+    }
+    let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+    let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
+    req.meta.scheme = r.scheme.unwrap_or_else(|| "https".into());
+    if let Some(h) = r.host { if !h.is_empty() { req.meta.host = h; } }
+    if let Some(p) = r.port { if p > 0 { req.meta.port = p; } }
+
+    let kind = match r.kind.as_deref() {
+        Some("BatteringRam") => AttackKind::BatteringRam,
+        Some("Pitchfork")    => AttackKind::Pitchfork,
+        Some("ClusterBomb")  => AttackKind::ClusterBomb,
+        _                    => AttackKind::Sniper,
+    };
+    let sets: Vec<PayloadSet> = r.payloads.unwrap_or_default().into_iter()
+        .map(|items| PayloadSet::Simple(items))
+        .collect();
+
+    let template = ParsedTemplate::parse(req, lancer_tools::DEFAULT_MARKER);
+    if template.positions.is_empty() {
+        return text(StatusCode::BAD_REQUEST, "no payload markers (§…§) in request");
+    };
+
+    let cfg = IntruderConfig { kind, ..Default::default() };
+    let intruder = Intruder::new(state.client.clone(), cfg);
+    match intruder.run(template, sets).await {
+        Ok(results) => json(&results),
+        Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Probe up to 10 ports starting at `preferred`; return the first free one.
+async fn find_free_proxy_addr(preferred: SocketAddr) -> SocketAddr {
+    let ip = preferred.ip();
+    let base = preferred.port();
+    for offset in 0u16..=10 {
+        if let Some(port) = base.checked_add(offset) {
+            let candidate = SocketAddr::new(ip, port);
+            if TcpListener::bind(candidate).await.is_ok() {
+                return candidate;
+            }
         }
     }
-    None
+    preferred
+}
+
+fn parse_query(query: &str, key: &str) -> Option<String> {
+    query.split('&').find_map(|pair| pair.strip_prefix(&format!("{key}=")).map(|v| v.to_string()))
 }
 
 fn text(status: StatusCode, body: &str) -> Response<Full<Bytes>> {
@@ -256,12 +624,23 @@ fn openapi_doc() -> serde_json::Value {
         "paths": {
             "/v1/status": { "get": { "summary": "Readiness check" } },
             "/v1/history": { "get": { "summary": "List captured requests" } },
+            "/v1/history/{id}": { "get": { "summary": "Get one request by ID" }, "delete": { "summary": "Delete one entry" } },
             "/v1/issues": { "get": { "summary": "List stored issues" } },
             "/v1/scan/passive": { "post": { "summary": "Run passive checks on a URL" } },
             "/v1/scan/active": { "post": { "summary": "Run active checks on a raw request" } },
             "/v1/scan/full": { "post": { "summary": "Passive + active on a URL" } },
             "/v1/report": { "get": { "summary": "Render report" } },
             "/v1/repeater": { "post": { "summary": "Send a single request" } },
+            "/v1/intruder": { "post": { "summary": "Run an intruder attack" } },
+            "/v1/proxy/status": { "get": { "summary": "Proxy running state" } },
+            "/v1/proxy/intercept/toggle": { "post": { "summary": "Toggle request/response interception" } },
+            "/v1/proxy/intercept/queue": { "get": { "summary": "List paused requests" } },
+            "/v1/proxy/intercept/forward": { "post": { "summary": "Forward a paused request" } },
+            "/v1/proxy/intercept/drop": { "post": { "summary": "Drop a paused request" } },
+            "/v1/proxy/ca-cert.pem": { "get": { "summary": "Download CA certificate (PEM)" } },
+            "/v1/proxy/ca-cert.der": { "get": { "summary": "Download CA certificate (DER)" } },
+            "/v1/proxy/rules": { "get": { "summary": "Get match/replace rules" }, "put": { "summary": "Replace all rules" } },
+            "/v1/scope": { "get": { "summary": "Get scope rules" }, "put": { "summary": "Replace scope rules" } },
         }
     })
 }

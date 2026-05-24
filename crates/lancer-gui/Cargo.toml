@@ -39,5 +39,8 @@ include_dir.workspace = true
 wry.workspace = true
 tao.workspace = true
 
+[build-dependencies]
+winres = "0.1"
+
 [features]
 default = []

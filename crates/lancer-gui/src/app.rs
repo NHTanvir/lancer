@@ -75,6 +75,31 @@ async fn route(
     let query = req.uri().query().map(|s| s.to_string());
 
     // --- GUI-local endpoints ---
+
+    // Open system browser pre-configured to use Lancer as proxy
+    if method == Method::POST && path == "/api/browser/open" {
+        let proxy_arg = format!("--proxy-server=127.0.0.1:8080");
+        let launched = if cfg!(windows) {
+            // Try Chrome, then Edge, then default browser
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "chrome", &proxy_arg, "--ignore-certificate-errors", "--user-data-dir=%TEMP%\\lancer-browser"])
+                .spawn()
+                .or_else(|_| std::process::Command::new("cmd")
+                    .args(["/C", "start", "msedge", &proxy_arg, "--ignore-certificate-errors", "--user-data-dir=%TEMP%\\lancer-browser"])
+                    .spawn())
+                .is_ok()
+        } else {
+            std::process::Command::new("google-chrome")
+                .args([&proxy_arg, "--ignore-certificate-errors"])
+                .spawn()
+                .or_else(|_| std::process::Command::new("chromium-browser")
+                    .args([&proxy_arg, "--ignore-certificate-errors"])
+                    .spawn())
+                .is_ok()
+        };
+        return json(&serde_json::json!({ "ok": launched }));
+    }
+
     if method == Method::GET && path == "/api/palette" {
         let q = query
             .as_deref()

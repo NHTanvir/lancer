@@ -38,6 +38,7 @@ use crate::ca::CertificateAuthority;
 use crate::cert_cache::CertCache;
 use crate::events::{ProxyEvent, ProxyEventSink};
 use crate::intercept::InterceptEngine;
+use crate::intercept_queue::InterceptPauseQueue;
 use crate::match_replace::MatchReplaceEngine;
 use crate::mitm::{
     hyper_request_to_owned, hyper_response_to_owned, owned_request_to_hyper, PipelineContext,
@@ -57,6 +58,7 @@ pub struct ProxyListener {
     pub events: ProxyEventSink,
     pub tls_client_config: Arc<ClientConfig>,
     pub dns: Arc<crate::dns::DnsTable>,
+    pub intercept_pause: Option<Arc<InterceptPauseQueue>>,
 }
 
 impl ProxyListener {
@@ -68,6 +70,7 @@ impl ProxyListener {
         scope: Arc<parking_lot::RwLock<Scope>>,
         history: Option<lancer_storage::HistoryStore>,
         events: ProxyEventSink,
+        intercept_pause: Option<Arc<InterceptPauseQueue>>,
     ) -> Self {
         let cert_cache = Arc::new(CertCache::new(ca.clone()));
         let tls_client_config = build_default_client_config();
@@ -84,6 +87,7 @@ impl ProxyListener {
             events,
             tls_client_config,
             dns,
+            intercept_pause,
         }
     }
 
@@ -217,6 +221,7 @@ impl ProxyListener {
             match_replace: self.match_replace.clone(),
             history: self.history.clone(),
             events: self.events.clone(),
+            intercept_pause: self.intercept_pause.clone(),
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();
@@ -263,6 +268,7 @@ impl ProxyListener {
             match_replace: self.match_replace.clone(),
             history: self.history.clone(),
             events: self.events.clone(),
+            intercept_pause: self.intercept_pause.clone(),
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();

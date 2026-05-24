@@ -1,0 +1,16 @@
+[package]
+name = "lancer-setup"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Self-extracting installer for Lancer."
+
+[[bin]]
+name = "lancer-setup"
+path = "src/main.rs"
+
+[dependencies]
+zip = "2"
+
+[build-dependencies]
+# none — build.rs copies the payload zip manually

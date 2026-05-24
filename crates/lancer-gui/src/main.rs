@@ -19,7 +19,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tao::window::WindowBuilder;
+use tao::window::{Icon, WindowBuilder};
 use tracing_subscriber::EnvFilter;
 use wry::WebViewBuilder;
 
@@ -55,10 +55,18 @@ fn main() -> Result<()> {
 
     // Open a native window with a webview pointing at the GUI server.
     let event_loop = EventLoopBuilder::new().build();
-    let window = WindowBuilder::new()
+    let mut wb = WindowBuilder::new()
         .with_title("Lancer")
         .with_inner_size(tao::dpi::LogicalSize::new(1400.0, 900.0))
-        .build(&event_loop)?;
+        .with_visible(true);
+    if let Some(icon) = load_window_icon() {
+        wb = wb.with_window_icon(Some(icon));
+    }
+    let window = wb.build(&event_loop)?;
+    // Force the window to the foreground (bash launches it minimized/background).
+    window.set_minimized(false);
+    window.set_visible(true);
+    window.set_focus();
     let _webview = WebViewBuilder::new()
         .with_url(&format!("http://127.0.0.1:{gui_port}/"))
         .build(&window)?;
@@ -151,6 +159,11 @@ fn pick_free_port() -> Result<u16> {
     let port = l.local_addr()?.port();
     drop(l);
     Ok(port)
+}
+
+fn load_window_icon() -> Option<Icon> {
+    const RGBA: &[u8] = include_bytes!("../assets/lancer-32.rgba");
+    Icon::from_rgba(RGBA.to_vec(), 32, 32).ok()
 }
 
 fn wait_for_listen(addr: &str, timeout: Duration) -> Result<()> {

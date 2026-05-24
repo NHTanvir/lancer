@@ -30,6 +30,7 @@ certs/cache/
 # Build artifacts
 dist/
 node_modules/
+/build/
 
 # Local-only notes
 plan.md

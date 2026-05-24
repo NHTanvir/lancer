@@ -24,6 +24,7 @@ use tracing::warn;
 
 use crate::events::{ProxyEvent, ProxyEventSink};
 use crate::intercept::{InterceptDecision, InterceptEngine};
+use crate::intercept_queue::{InterceptPauseQueue, InterceptResolution};
 use crate::match_replace::MatchReplaceEngine;
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,7 @@ pub struct PipelineHandles {
     pub match_replace: MatchReplaceEngine,
     pub history: Option<HistoryStore>,
     pub events: ProxyEventSink,
+    pub intercept_pause: Option<std::sync::Arc<InterceptPauseQueue>>,
 }
 
 impl PipelineHandles {
@@ -70,9 +72,15 @@ impl PipelineHandles {
             InterceptDecision::Forward => {}
             InterceptDecision::Drop => return Ok(None),
             InterceptDecision::Pause => {
-                self.events
-                    .emit(ProxyEvent::InterceptionPaused { id: req.meta.id })
-                    .await;
+                if let Some(queue) = &self.intercept_pause {
+                    self.events
+                        .emit(ProxyEvent::InterceptionPaused { id: req.meta.id })
+                        .await;
+                    match queue.pause(req.clone()).await {
+                        InterceptResolution::Forward(modified) => { req = modified; }
+                        InterceptResolution::Drop => return Ok(None),
+                    }
+                }
             }
         }
 

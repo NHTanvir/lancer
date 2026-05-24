@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 lancer-core.workspace = true
 lancer-storage.workspace = true
+lancer-proxy.workspace = true
 lancer-tools.workspace = true
 lancer-scanner.workspace = true
 lancer-report = { path = "../lancer-report" }
