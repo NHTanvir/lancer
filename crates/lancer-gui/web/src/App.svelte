@@ -226,9 +226,17 @@
     background: #ffffff;
     color: #212121;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: 12px;
+    line-height: 1.45;
   }
+  /* Slim, unobtrusive scrollbars (or hidden entirely when not needed) */
+  :global(::-webkit-scrollbar) { width: 8px; height: 8px; }
+  :global(::-webkit-scrollbar-thumb) { background: #c8c8c8; border-radius: 4px; }
+  :global(::-webkit-scrollbar-thumb:hover) { background: #a8a8a8; }
+  :global(::-webkit-scrollbar-track) { background: transparent; }
+  :global([data-theme="dark"] ::-webkit-scrollbar-thumb) { background: #555; }
+  :global([data-theme="dark"] ::-webkit-scrollbar-thumb:hover) { background: #777; }
+  :global(.tabs::-webkit-scrollbar) { display: none; }
   :global(button) {
     background: #f0f0f0;
     color: #333333;
@@ -421,21 +429,22 @@
   .tabs {
     display: flex; align-items: stretch;
     flex: 1;
-    overflow-x: auto;
+    overflow-x: hidden;
+    min-width: 0;
   }
   .tab {
-    padding: 0 16px;
+    padding: 0 10px;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
     border-radius: 0;
     color: #444444;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
     transition: color 0.1s, border-color 0.1s;
     white-space: nowrap;
     height: 100%;
-    flex-shrink: 0;
+    flex-shrink: 1;
     font-family: inherit;
   }
   .tab:hover { color: #212121; background: rgba(0,0,0,0.03); }
