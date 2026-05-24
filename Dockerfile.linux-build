@@ -1,0 +1,20 @@
+# Cross-build Lancer Linux binaries + .deb from any host that has Docker.
+# Usage:
+#   docker build -f Dockerfile.linux-build -t lancer-linux-build .
+#   docker run --rm -v "$PWD/dist:/out" lancer-linux-build
+FROM rust:1.83-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libssl-dev cmake ca-certificates dpkg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+# Build release binaries
+RUN cargo build --release --workspace --no-default-features --bins
+
+# Package portable + .deb
+RUN bash build-linux.sh
+
+CMD ["bash", "-c", "cp -r dist/* /out/ && ls -la /out/"]
