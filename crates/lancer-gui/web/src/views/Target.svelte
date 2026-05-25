@@ -295,10 +295,66 @@
     }).join("");
   }
 
+  // Issues detail state
+  let selectedIssue = null;
+  let issueDetailTab = "advisory";
+
   function severityClass(s) {
-    const m = { Critical: "badge-Critical", High: "badge-High", Medium: "badge-Medium", Low: "badge-Low", Info: "badge-Info" };
+    const m = { Critical: "badge-Critical", High: "badge-High", Medium: "badge-Medium", Low: "badge-Low", Info: "badge-Info", INFO: "badge-Info", LOW: "badge-Low", MEDIUM: "badge-Medium", HIGH: "badge-High" };
     return m[s] || "badge-Info";
   }
+
+  function selectIssue(iss) {
+    selectedIssue = iss;
+    issueDetailTab = "advisory";
+  }
+
+  function issueRequest(iss) {
+    if (iss.raw_request) return iss.raw_request;
+    if (iss.request) return typeof iss.request === "string" ? iss.request : JSON.stringify(iss.request, null, 2);
+    return "No request captured.";
+  }
+
+  function issueResponse(iss) {
+    if (iss.raw_response) return iss.raw_response;
+    if (iss.response) return typeof iss.response === "string" ? iss.response : JSON.stringify(iss.response, null, 2);
+    return "No response captured.";
+  }
+
+  const ISSUE_DESCRIPTIONS = {
+    "Missing or weak security headers": {
+      desc: "The application is missing one or more security-related HTTP response headers. These headers help defend against common web attacks such as clickjacking, MIME sniffing, and cross-site scripting.",
+      fix: "Configure the web server or application framework to include headers such as Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Strict-Transport-Security.",
+    },
+    "Server-side template injection": {
+      desc: "User-supplied input is embedded within a server-side template and evaluated as template code. This can allow an attacker to execute arbitrary code on the server.",
+      fix: "Never concatenate user input directly into template strings. Use safe template rendering APIs that treat user data as plain data, not code.",
+    },
+    "Clickjacking — framing not denied": {
+      desc: "The application does not set an X-Frame-Options or Content-Security-Policy frame-ancestors directive to prevent it from being embedded in an iframe on an attacker-controlled site.",
+      fix: "Set X-Frame-Options: DENY or Content-Security-Policy: frame-ancestors 'none' on all responses.",
+    },
+    "Cache poisoning via X-Forwarded-Host": {
+      desc: "The X-Forwarded-Host header value is reflected in the response or used in cache keys, allowing an attacker to poison the cache with a malicious host value.",
+      fix: "Validate and whitelist the X-Forwarded-Host header. Do not use its value to construct URLs or cache keys without sanitisation.",
+    },
+    "CORS misconfiguration": {
+      desc: "The application reflects the Origin header back in Access-Control-Allow-Origin, or allows credentials from arbitrary origins. This can permit cross-origin requests from attacker-controlled sites.",
+      fix: "Explicitly whitelist trusted origins. Never set Access-Control-Allow-Origin: * together with Access-Control-Allow-Credentials: true.",
+    },
+    "Host-header injection": {
+      desc: "The HTTP Host header is reflected in the application response without validation, enabling phishing links, cache poisoning, or password-reset poisoning attacks.",
+      fix: "Whitelist acceptable Host header values in the application or web server configuration. Do not trust the Host header for constructing absolute URLs.",
+    },
+    "Reflected XSS (likely)": {
+      desc: "User-supplied input appears to be reflected in the HTTP response in a context where it may be interpreted as executable script by the browser.",
+      fix: "HTML-encode all user-supplied output. Implement a Content-Security-Policy header to restrict script execution.",
+    },
+    "Server-side request forgery": {
+      desc: "The application makes outbound requests to a URL derived from user-supplied input, potentially allowing an attacker to probe internal services or read sensitive data from the server.",
+      fix: "Validate and whitelist all URLs that the application fetches on behalf of users. Block requests to private IP ranges and the metadata service.",
+    },
+  };
 
   async function fetchHistory() {
     try {
@@ -713,22 +769,80 @@
         <span class="dim" style="font-size:12px">Run a scan to discover vulnerabilities</span>
       </div>
     {:else}
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr><th>Severity</th><th>Issue type</th><th>Host</th><th>Path</th></tr>
-          </thead>
-          <tbody>
-            {#each issues as iss, i}
-              <tr class:row-even={i % 2 === 0}>
-                <td><span class="badge {severityClass(iss.severity)}">{iss.severity}</span></td>
-                <td>{iss.name || iss.type || "-"}</td>
-                <td class="dim">{iss.host || "-"}</td>
-                <td class="dim url-cell">{iss.path || "-"}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+      <div class="issues-layout">
+        <!-- Left: issues list -->
+        <div class="issues-list-pane">
+          <table class="issues-table">
+            <thead>
+              <tr><th>Severity</th><th>Issue type</th><th>Host</th><th>Path</th></tr>
+            </thead>
+            <tbody>
+              {#each issues as iss, i}
+                <tr
+                  class:row-sel={selectedIssue === iss}
+                  on:click={() => selectIssue(iss)}
+                >
+                  <td><span class="badge {severityClass(iss.severity)}">{(iss.severity||"INFO").charAt(0).toUpperCase()+(iss.severity||"INFO").slice(1).toLowerCase()}</span></td>
+                  <td class="iss-name">{iss.name || iss.type || "-"}</td>
+                  <td class="dim iss-host">{iss.host || "-"}</td>
+                  <td class="dim url-cell">{iss.path || "-"}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Right: detail panel -->
+        <div class="issues-detail-pane">
+          {#if !selectedIssue}
+            <div class="issue-no-sel dim">Select an issue to see details</div>
+          {:else}
+            <div class="issue-detail-header">
+              <span class="badge {severityClass(selectedIssue.severity)}" style="font-size:11px">
+                {(selectedIssue.severity||"INFO").charAt(0).toUpperCase()+(selectedIssue.severity||"INFO").slice(1).toLowerCase()}
+              </span>
+              <span class="issue-detail-title">{selectedIssue.name || selectedIssue.type || "Issue"}</span>
+            </div>
+            <div class="issue-detail-meta dim">
+              {#if selectedIssue.host}<span>Host: {selectedIssue.host}</span>{/if}
+              {#if selectedIssue.path}<span style="margin-left:12px">Path: {selectedIssue.path}</span>{/if}
+            </div>
+            <div class="subtabs" style="padding: 0 0 0 12px; border-bottom: 1px solid #dedede; flex-shrink:0">
+              {#each ["advisory","request","response"] as t}
+                <button class="subtab" class:active={issueDetailTab===t} on:click={() => issueDetailTab=t}>
+                  {t.charAt(0).toUpperCase()+t.slice(1)}
+                </button>
+              {/each}
+            </div>
+            <div class="issue-detail-body">
+              {#if issueDetailTab === "advisory"}
+                {@const info = ISSUE_DESCRIPTIONS[selectedIssue.name || selectedIssue.type] || {}}
+                <div class="advisory-section">
+                  <div class="advisory-label">Description</div>
+                  <p class="advisory-text">
+                    {selectedIssue.description || info.desc || "No description available."}
+                  </p>
+                </div>
+                <div class="advisory-section">
+                  <div class="advisory-label">Remediation</div>
+                  <p class="advisory-text">
+                    {selectedIssue.remediation || info.fix || "Refer to OWASP guidelines for remediation advice."}
+                  </p>
+                </div>
+                {#if selectedIssue.confidence}
+                  <div class="advisory-section">
+                    <div class="advisory-label">Confidence</div>
+                    <p class="advisory-text">{selectedIssue.confidence}</p>
+                  </div>
+                {/if}
+              {:else if issueDetailTab === "request"}
+                <pre class="issue-raw">{issueRequest(selectedIssue)}</pre>
+              {:else}
+                <pre class="issue-raw">{issueResponse(selectedIssue)}</pre>
+              {/if}
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
   {/if}
@@ -955,7 +1069,79 @@
   .btn-primary { background: #e03a00; color: #ffffff; border: none; border-radius: 3px; padding: 5px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
   .btn-primary:hover { background: #c73400; }
 
-  /* Issues table */
+  /* Issues two-panel layout */
+  .issues-layout {
+    flex: 1; display: grid;
+    grid-template-columns: minmax(300px, 45%) 1fr;
+    overflow: hidden;
+    border-top: 1px solid #dedede;
+  }
+  .issues-list-pane {
+    overflow-y: auto;
+    border-right: 1px solid #dedede;
+  }
+  .issues-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  .issues-table th {
+    text-align: left; padding: 5px 10px;
+    background: #f5f5f5; color: #767676;
+    font-size: 11px; font-weight: 600;
+    border-bottom: 1px solid #dedede;
+    position: sticky; top: 0; z-index: 1;
+    white-space: nowrap;
+  }
+  .issues-table td { padding: 5px 10px; border-bottom: 1px solid #f0f0f0; }
+  .issues-table tbody tr { cursor: pointer; }
+  .issues-table tbody tr:hover { background: #f0f7ff; }
+  .issues-table tbody tr.row-sel { background: #daeeff; }
+  .iss-name { font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .iss-host { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+
+  .issues-detail-pane {
+    display: flex; flex-direction: column;
+    overflow: hidden; background: #ffffff;
+  }
+  .issue-no-sel {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .issue-detail-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px 4px;
+    flex-shrink: 0;
+  }
+  .issue-detail-title {
+    font-size: 14px; font-weight: 600; color: #212121;
+  }
+  .issue-detail-meta {
+    padding: 0 14px 8px;
+    font-size: 11px; flex-shrink: 0;
+  }
+  .issue-detail-body {
+    flex: 1; overflow-y: auto;
+    padding: 14px;
+  }
+  .advisory-section { margin-bottom: 16px; }
+  .advisory-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #767676;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e8e8e8;
+  }
+  .advisory-text {
+    margin: 0; font-size: 13px; color: #212121; line-height: 1.6;
+  }
+  .issue-raw {
+    margin: 0; padding: 0;
+    font-size: 11.5px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all;
+    color: #212121; line-height: 1.6;
+  }
+
+  /* Legacy table (kept for compatibility) */
   .table-scroll { flex: 1; overflow-y: auto; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .data-table th, .data-table td { text-align: left; padding: 6px 12px; border-bottom: 1px solid #e8e8e8; white-space: nowrap; }
