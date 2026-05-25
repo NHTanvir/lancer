@@ -17,6 +17,24 @@
 
   $: positionCount = (requestTemplate.match(/§/g) || []).length / 2 | 0;
 
+  // ── § marker highlighting ─────────────────────────────────────────────────
+  function buildHighlightHtml(text) {
+    let s = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    let open = false;
+    s = s.replace(/§/g, () => {
+      open = !open;
+      return open ? '<span class="pos-hl">§' : '§</span>';
+    });
+    if (open) s += "</span>";
+    return s;
+  }
+  $: highlightedTemplate = buildHighlightHtml(requestTemplate);
+
+  let overlayEl = null;
+  function syncOverlay(e) {
+    if (overlayEl) { overlayEl.scrollTop = e.target.scrollTop; overlayEl.scrollLeft = e.target.scrollLeft; }
+  }
+
   function addMarker() {
     // wrap selection or insert §§ at cursor — best effort in plain textarea
     const ta = document.getElementById("req-editor");
@@ -202,15 +220,21 @@
             <button class="editor-btn" on:click={autoMarkers}>Auto §</button>
           </div>
         </div>
-        <div class="editor-body">
+        <div class="editor-body editor-body-rel">
+          <!-- § highlight overlay (behind textarea) -->
+          <pre
+            class="req-hl-overlay"
+            bind:this={overlayEl}
+            aria-hidden="true"
+          >{@html highlightedTemplate}</pre>
           <textarea
             id="req-editor"
-            class="req-textarea"
+            class="req-textarea req-textarea-overlay"
+            style="background:transparent;caret-color:#212121"
             bind:value={requestTemplate}
             spellcheck="false"
+            on:scroll={syncOverlay}
           ></textarea>
-          <!-- § highlights overlay is simulated via the textarea; a real
-               implementation would use a CodeMirror/Monaco overlay -->
         </div>
       </div>
 
@@ -752,6 +776,44 @@
     overflow: hidden;
     min-height: 0;
   }
+  /* Overlay-enabled editor body */
+  .editor-body-rel {
+    position: relative;
+    background: #ffffff;
+  }
+  /* Pre overlay for § highlighting */
+  .req-hl-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    margin: 0;
+    padding: 10px 12px;
+    font-family: ui-monospace, Consolas, "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow: hidden;
+    pointer-events: none;
+    color: transparent;
+    background: transparent;
+    border: none;
+    z-index: 0;
+  }
+  :global(.pos-hl) {
+    background: rgba(224, 58, 0, 0.18);
+    border-radius: 2px;
+    color: transparent;
+    outline: 1px solid rgba(224, 58, 0, 0.45);
+  }
+  /* Textarea sitting on top of the overlay */
+  .req-textarea-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: transparent;
+    caret-color: #212121;
+    z-index: 1;
+  }
+
   .req-textarea {
     flex: 1;
     resize: none;
