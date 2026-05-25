@@ -66,6 +66,18 @@
   // ── Attack / Results ──────────────────────────────────────────────────────
   let results = [];
   let running = false;
+  let showResults = false;
+  let attackNum = 0;
+  let selectedResult = null;
+  let resultReqTab = "request";
+  let filterStatus = "";
+  let filterPayload = "";
+
+  $: filteredResults = results.filter(r => {
+    if (filterStatus  && !String(r.status||"").includes(filterStatus)) return false;
+    if (filterPayload && !(r.payload||"").toLowerCase().includes(filterPayload.toLowerCase())) return false;
+    return true;
+  });
 
   onMount(() => {
     try {
@@ -87,7 +99,11 @@
     requestLoaded = true;
     running = true;
     results = [];
-    subtab = "positions";
+    selectedResult = null;
+    attackNum += 1;
+    showResults = true;
+    filterStatus = "";
+    filterPayload = "";
     try {
       const r = await fetch("/api/v1/intruder", {
         method: "POST",
@@ -107,11 +123,13 @@
           status: [200, 200, 302, 404, 200, 500][i % 6],
           length: Math.floor(Math.random() * 4000) + 200,
           time_ms: Math.floor(Math.random() * 800) + 40,
+          error: false, timeout: false, comment: "",
         }));
       }
     } catch {
       results = payloadList.map((p, i) => ({
         index: i + 1, payload: p, status: 0, length: 0, time_ms: 0,
+        error: true, timeout: false, comment: "",
       }));
     } finally {
       running = false;
@@ -124,6 +142,16 @@
     if (s >= 400) return "status-4";
     if (s >= 300) return "status-3";
     return "status-2";
+  }
+
+  function resultRequest(r) {
+    if (r.raw_request) return r.raw_request;
+    return `${r.method || "GET"} ${r.path || "/"} HTTP/1.1\r\nHost: ${host}\r\n\r\n`;
+  }
+  function resultResponse(r) {
+    if (r.raw_response) return r.raw_response;
+    if (!r.status) return "(no response)";
+    return `HTTP/1.1 ${r.status}\r\nContent-Length: ${r.length || 0}\r\n\r\n`;
   }
 
   // ── Payload processing rules ──────────────────────────────────────────────
@@ -261,29 +289,11 @@
           <p style="margin-top:8px">Positions are shown highlighted in the request editor on the left.</p>
         </div>
 
-        {#if results.length > 0}
-          <div class="results-inline">
-            <div class="panel-section-title" style="margin-top:16px">Last attack results</div>
-            <div class="table-scroll">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th><th>Payload</th><th>Status</th><th>Length</th><th>ms</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each results as r, i}
-                    <tr class:row-even={i%2===0}>
-                      <td class="dim">{r.index}</td>
-                      <td class="payload-cell">{r.payload || (r.payloads||[]).join(", ")}</td>
-                      <td class={statusClass(r.status)}>{r.status||"-"}</td>
-                      <td class="dim">{r.length??"-"}</td>
-                      <td class="dim">{r.time_ms??"-"}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+        {#if results.length > 0 || running}
+          <div style="margin-top:14px">
+            <button class="view-results-btn" on:click={() => showResults = true}>
+              {running ? "⏳ Attack running — view results" : `▶ View attack results (${results.length})`}
+            </button>
           </div>
         {/if}
       </div>
@@ -564,6 +574,87 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ATTACK RESULTS OVERLAY                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+{#if showResults}
+<div class="attack-overlay">
+  <!-- Header bar -->
+  <div class="attack-header">
+    <span class="attack-title">Intruder attack {attackNum}</span>
+    <div class="attack-header-right">
+      {#if running}
+        <span class="attack-running">⏳ Running…</span>
+      {:else}
+        <span class="attack-done">{results.length} requests completed</span>
+      {/if}
+      <button class="attack-close" on:click={() => showResults = false}>✕ Close</button>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="attack-filter-bar">
+    <input class="attack-filter-input" bind:value={filterPayload} placeholder="Filter payload…" />
+    <input class="attack-filter-input" bind:value={filterStatus} placeholder="Filter status…" style="width:100px" />
+    <span class="dim" style="font-size:11px;margin-left:auto">{filteredResults.length} / {results.length} rows</span>
+  </div>
+
+  <!-- Results table + detail split -->
+  <div class="attack-body">
+    <!-- Top: results table -->
+    <div class="attack-table-wrap">
+      <table class="attack-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Payload</th>
+            <th>Status</th>
+            <th>Error</th>
+            <th>Timeout</th>
+            <th>Length</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#if running && results.length === 0}
+            <tr><td colspan="7" class="dim" style="text-align:center;padding:20px">Sending requests…</td></tr>
+          {/if}
+          {#each filteredResults as r}
+            <tr
+              class:atk-sel={selectedResult === r}
+              on:click={() => { selectedResult = r; resultReqTab = "request"; }}
+            >
+              <td class="dim atk-num">{r.index}</td>
+              <td class="atk-payload">{r.payload || (r.payloads||[]).join(", ") || "—"}</td>
+              <td class={statusClass(r.status)}>{r.status || "—"}</td>
+              <td class={r.error ? "atk-err" : "dim"}>{r.error ? "✓" : ""}</td>
+              <td class={r.timeout ? "atk-warn" : "dim"}>{r.timeout ? "✓" : ""}</td>
+              <td class="dim atk-num">{r.length ?? "—"}</td>
+              <td class="dim">{r.comment || ""}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Bottom: request/response detail -->
+    {#if selectedResult}
+      <div class="attack-detail">
+        <div class="attack-detail-tabs">
+          <button class="atk-tab" class:active={resultReqTab==="request"}  on:click={() => resultReqTab="request"}>Request</button>
+          <button class="atk-tab" class:active={resultReqTab==="response"} on:click={() => resultReqTab="response"}>Response</button>
+        </div>
+        <div class="attack-detail-body">
+          <pre class="atk-editor">{resultReqTab === "request" ? resultRequest(selectedResult) : resultResponse(selectedResult)}</pre>
+        </div>
+      </div>
+    {:else}
+      <div class="attack-detail attack-detail-empty dim">Select a request to view details</div>
+    {/if}
+  </div>
+</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
 <style>
   /* ── Root ─────────────────────────────────────────────────────────────── */
   .intruder-root {
@@ -575,6 +666,7 @@
     font-size: 13px;
     color: #212121;
     overflow: hidden;
+    position: relative;
   }
 
   /* ── Top toolbar ──────────────────────────────────────────────────────── */
@@ -1112,4 +1204,109 @@
     text-decoration: underline;
   }
   .link-btn:hover { color: #0055a5; }
+
+  /* ── View-results button ──────────────────────────────────────────────── */
+  .view-results-btn {
+    background: #f0f0f0; color: #333;
+    border: 1px solid #c8c8c8; border-radius: 3px;
+    padding: 5px 14px; font-size: 12px; cursor: pointer;
+    width: 100%;
+  }
+  .view-results-btn:hover { background: #e4e4e4; }
+
+  /* ── Attack results overlay ───────────────────────────────────────────── */
+  .attack-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #ffffff;
+    z-index: 200;
+    display: flex; flex-direction: column;
+    border: 1px solid #dedede;
+  }
+  .attack-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #dedede;
+    flex-shrink: 0;
+  }
+  .attack-title { font-size: 13px; font-weight: 600; color: #212121; }
+  .attack-header-right { display: flex; align-items: center; gap: 14px; }
+  .attack-running { font-size: 12px; color: #e86c00; }
+  .attack-done    { font-size: 12px; color: #1b8c1b; }
+  .attack-close {
+    background: #e03a00; color: #fff;
+    border: none; border-radius: 3px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer;
+  }
+  .attack-close:hover { background: #c73400; }
+
+  .attack-filter-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px;
+    background: #fafafa;
+    border-bottom: 1px solid #e8e8e8;
+    flex-shrink: 0;
+  }
+  .attack-filter-input {
+    font-size: 12px; padding: 3px 8px;
+    border: 1px solid #c8c8c8; border-radius: 3px;
+    width: 180px;
+  }
+
+  .attack-body {
+    flex: 1; display: grid;
+    grid-template-rows: minmax(120px, 55%) 1fr;
+    overflow: hidden;
+  }
+  .attack-table-wrap { overflow: auto; border-bottom: 1px solid #dedede; }
+  .attack-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  .attack-table th {
+    text-align: left; padding: 4px 10px;
+    background: #f5f5f5; color: #767676;
+    font-size: 11px; font-weight: 600;
+    border-bottom: 1px solid #dedede;
+    position: sticky; top: 0; z-index: 1;
+    white-space: nowrap; cursor: pointer; user-select: none;
+  }
+  .attack-table td { padding: 3px 10px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+  .attack-table tbody tr { cursor: pointer; }
+  .attack-table tbody tr:hover { background: #f0f7ff; }
+  .attack-table tbody tr.atk-sel { background: #daeeff; }
+  .atk-num { text-align: right; font-variant-numeric: tabular-nums; color: #767676; }
+  .atk-payload { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .atk-err  { color: #d42c2c; font-weight: 600; }
+  .atk-warn { color: #c98a00; font-weight: 600; }
+
+  .attack-detail {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .attack-detail-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .attack-detail-tabs {
+    display: flex; gap: 0;
+    padding: 0 0 0 10px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #dedede;
+    flex-shrink: 0;
+  }
+  .atk-tab {
+    background: transparent; border: none;
+    padding: 6px 14px; font-size: 12px; color: #555; cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .atk-tab:hover { color: #212121; }
+  .atk-tab.active { color: #e03a00; border-bottom-color: #e03a00; font-weight: 600; }
+  .attack-detail-body { flex: 1; overflow: auto; padding: 10px 12px; }
+  .atk-editor {
+    margin: 0; padding: 0;
+    font-size: 11.5px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all;
+    color: #212121; line-height: 1.6;
+  }
 </style>
