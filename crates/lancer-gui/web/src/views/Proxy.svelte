@@ -383,7 +383,7 @@
         Forward <span class="dd-arrow">▼</span>
       </button>
       <button class="toolbar-btn" disabled={!selectedPaused} on:click={dropRequest}>
-        Drop
+        Drop <span class="dd-arrow">▼</span>
       </button>
       <button class="toolbar-btn" disabled={interceptQueue.length === 0} on:click={forwardAll}>
         Forward all
