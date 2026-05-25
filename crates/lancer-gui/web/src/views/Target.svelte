@@ -7,14 +7,128 @@
   // Site map state
   let history = [];
   let selectedEntry = null;
+  let selectedHost = null;      // when a host node is selected, table shows that host's entries
   let expandedHosts = {};
   let reqTab = "pretty";
   let respTab = "pretty";
   let ctxMenu = null; // { x, y, entry }
   let pollTimer;
+  let tableFilter = "";
+  let hideOutOfScope = false;
+  let inScopeSet = new Set();   // hosts considered in scope (populated from /v1/scope)
+
+  // Sort state
+  let sortKey = "time";
+  let sortDir = "desc"; // "asc" | "desc"
 
   // Group history by host
   $: siteTree = buildTree(history);
+
+  // Filtered entries shown in the request table (right-top)
+  $: tableEntries = filterAndSort(history, selectedHost, tableFilter, hideOutOfScope, inScopeSet, sortKey, sortDir);
+
+  function filterAndSort(rows, host, filterText, hideOOS, scopeSet, key, dir) {
+    let out = rows;
+    if (host) out = out.filter(r => (r.host || hostFromUrl(r.url)) === host);
+    if (filterText) {
+      const f = filterText.toLowerCase();
+      out = out.filter(r =>
+        (r.url || "").toLowerCase().includes(f) ||
+        (r.host || "").toLowerCase().includes(f) ||
+        (r.path || "").toLowerCase().includes(f) ||
+        String(r.status || "").includes(f)
+      );
+    }
+    if (hideOOS && scopeSet.size > 0) {
+      out = out.filter(r => scopeSet.has(r.host || hostFromUrl(r.url)));
+    }
+    out = [...out].sort((a, b) => {
+      const va = sortValue(a, key);
+      const vb = sortValue(b, key);
+      if (va === vb) return 0;
+      const cmp = va < vb ? -1 : 1;
+      return dir === "asc" ? cmp : -cmp;
+    });
+    return out;
+  }
+
+  function sortValue(e, k) {
+    switch (k) {
+      case "host":   return e.host || "";
+      case "method": return e.method || "";
+      case "url":    return e.url || e.path || "";
+      case "params": return paramsCount(e);
+      case "status": return parseInt(e.status, 10) || 0;
+      case "length": return responseLength(e);
+      case "mime":   return mimeOf(e) || "";
+      case "title":  return titleOf(e) || "";
+      case "time":   return e.ts || e.timestamp || 0;
+      case "notes":  return e.notes || "";
+      default:       return "";
+    }
+  }
+
+  function setSort(k) {
+    if (sortKey === k) sortDir = sortDir === "asc" ? "desc" : "asc";
+    else { sortKey = k; sortDir = "asc"; }
+  }
+
+  function hostFromUrl(u) {
+    if (!u) return "";
+    return u.replace(/https?:\/\//, "").split("/")[0];
+  }
+
+  function paramsCount(e) {
+    const url = e.url || e.path || "";
+    const q = url.split("?")[1];
+    if (!q) return 0;
+    return q.split("&").filter(Boolean).length;
+  }
+
+  function findHeader(headers, name) {
+    if (!Array.isArray(headers)) return "";
+    const n = name.toLowerCase();
+    const h = headers.find(h => (h.name || "").toLowerCase() === n);
+    return h ? (h.value || "") : "";
+  }
+
+  function mimeOf(e) {
+    const ct = e.mime || findHeader(e.response?.headers, "content-type") || "";
+    return ct.split(";")[0].trim();
+  }
+
+  function responseLength(e) {
+    if (typeof e.response_length === "number") return e.response_length;
+    if (typeof e.length === "number") return e.length;
+    const cl = findHeader(e.response?.headers, "content-length");
+    if (cl) return parseInt(cl, 10) || 0;
+    const body = bytesToText(e.body || e.response_body);
+    return body ? body.length : 0;
+  }
+
+  function titleOf(e) {
+    if (e.title) return e.title;
+    const body = bytesToText(e.body || e.response_body);
+    if (!body) return "";
+    const m = body.match(/<title[^>]*>([^<]*)<\/title>/i);
+    return m ? m[1].trim() : "";
+  }
+
+  function bytesToText(b) {
+    if (b == null) return "";
+    if (typeof b === "string") return b;
+    if (Array.isArray(b)) {
+      try { return new TextDecoder("utf-8").decode(new Uint8Array(b)); } catch { return ""; }
+    }
+    return String(b);
+  }
+
+  function fmtTime(t) {
+    if (!t) return "";
+    const d = typeof t === "number" ? new Date(t) : new Date(t);
+    if (isNaN(d.getTime())) return String(t);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
 
   function buildTree(entries) {
     const hosts = {};
@@ -30,8 +144,15 @@
     expandedHosts = { ...expandedHosts, [host]: !expandedHosts[host] };
   }
 
+  function selectHostNode(host) {
+    selectedHost = selectedHost === host ? null : host;
+    expandedHosts = { ...expandedHosts, [host]: true };
+    ctxMenu = null;
+  }
+
   function selectEntry(e) {
     selectedEntry = e;
+    selectedHost = e.host || hostFromUrl(e.url);
     ctxMenu = null;
   }
 
@@ -211,6 +332,12 @@
       if (r.ok) {
         const d = await r.json();
         scopeRules = Array.isArray(d) ? d : (d.rules || []);
+        // Build quick in-scope host set for the "Hide out of scope" toggle
+        const s = new Set();
+        for (const r of scopeRules) {
+          if (r.enabled !== false && r.kind === "Include" && r.host) s.add(r.host);
+        }
+        inScopeSet = s;
       }
     } catch {}
   }
@@ -308,7 +435,7 @@
         </div>
       </div>
     {:else}
-      <!-- 3-column layout matching Burp Site map -->
+      <!-- Burp-style site map: left tree + right vertical split (table on top, req|resp on bottom) -->
       <div class="sitemap-layout">
 
         <!-- LEFT: site tree -->
@@ -318,14 +445,27 @@
             <span class="tree-count dim">{history.length} items</span>
           </div>
           <div class="tree-scroll">
+            <!-- root "Hosts" pseudo node -->
+            <div
+              class="tree-host root-node"
+              class:selected={selectedHost === null}
+              on:click={() => { selectedHost = null; ctxMenu = null; }}
+            >
+              <span class="tree-arrow">▾</span>
+              <span class="tree-host-name">Site map</span>
+              <span class="tree-badge dim">{history.length}</span>
+            </div>
             {#each siteTree as node}
               <!-- Host row -->
               <div
                 class="tree-host"
-                on:click={() => toggleHost(node.host)}
+                class:selected={selectedHost === node.host}
+                on:click={() => selectHostNode(node.host)}
                 on:contextmenu={(e) => onRightClick(e, node.items[0])}
               >
-                <span class="tree-arrow">{expandedHosts[node.host] !== false ? '▾' : '▸'}</span>
+                <span class="tree-arrow" on:click|stopPropagation={() => toggleHost(node.host)}>
+                  {expandedHosts[node.host] !== false ? '▾' : '▸'}
+                </span>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0">
                   <circle cx="7" cy="7" r="6" stroke="#767676" stroke-width="1.2"/>
                   <ellipse cx="7" cy="7" rx="2.5" ry="6" stroke="#767676" stroke-width="1"/>
@@ -355,46 +495,119 @@
           </div>
         </div>
 
-        <!-- CENTER: Request pane -->
-        <div class="req-pane">
-          <div class="pane-title">Request</div>
-          <div class="subtabs inner-tabs">
-            {#each ["pretty","raw","hex"] as t}
-              <button class="subtab" class:active={reqTab===t} on:click={() => reqTab=t}>
-                {t.charAt(0).toUpperCase()+t.slice(1)}
-              </button>
-            {/each}
-          </div>
-          <div class="editor-scroll">
-            {#if !selectedEntry}
-              <p class="dim" style="padding:14px;font-size:12px">Select a request from the site map.</p>
-            {:else if reqTab === "hex"}
-              <pre class="editor hex">{hexDump(formatRequest(selectedEntry))}</pre>
-            {:else}
-              <pre class="editor">{formatRequest(selectedEntry)}</pre>
-            {/if}
-          </div>
-        </div>
+        <!-- RIGHT: vertical split — table on top, req+resp on bottom -->
+        <div class="right-split">
 
-        <!-- RIGHT: Response pane -->
-        <div class="resp-pane">
-          <div class="pane-title">Response</div>
-          <div class="subtabs inner-tabs">
-            {#each ["pretty","raw","hex"] as t}
-              <button class="subtab" class:active={respTab===t} on:click={() => respTab=t}>
-                {t.charAt(0).toUpperCase()+t.slice(1)}
-              </button>
-            {/each}
+          <!-- TOP: requests table -->
+          <div class="req-table-wrap">
+            <div class="req-table-toolbar">
+              <input
+                class="table-filter"
+                bind:value={tableFilter}
+                placeholder="Filter (host, URL, status…)"
+              />
+              <label class="check-inline">
+                <input type="checkbox" bind:checked={hideOutOfScope} />
+                Hide out-of-scope
+              </label>
+              <span class="dim" style="margin-left:auto;font-size:11px">{tableEntries.length} of {history.length}</span>
+            </div>
+            <div class="req-table-scroll">
+              <table class="req-table">
+                <thead>
+                  <tr>
+                    {#each [
+                      {k:"host",label:"Host"},
+                      {k:"method",label:"Method"},
+                      {k:"url",label:"URL"},
+                      {k:"params",label:"Params"},
+                      {k:"status",label:"Status code"},
+                      {k:"length",label:"Length"},
+                      {k:"mime",label:"MIME type"},
+                      {k:"title",label:"Title"},
+                      {k:"time",label:"Time"},
+                      {k:"notes",label:"Notes"},
+                    ] as col}
+                      <th on:click={() => setSort(col.k)} class:sorted={sortKey===col.k}>
+                        {col.label}{#if sortKey===col.k}<span class="sort-arrow">{sortDir==="asc"?"▲":"▼"}</span>{/if}
+                      </th>
+                    {/each}
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each tableEntries as e}
+                    <tr
+                      class:selected={selectedEntry === e}
+                      on:click={() => selectEntry(e)}
+                      on:contextmenu={(ev) => onRightClick(ev, e)}
+                    >
+                      <td class="cell-host">{e.host || hostFromUrl(e.url)}</td>
+                      <td class="cell-method method-{e.method || 'GET'}">{e.method || "GET"}</td>
+                      <td class="cell-url" title={e.url || e.path}>{e.path || e.url || "/"}</td>
+                      <td class="cell-params">{paramsCount(e) || ""}</td>
+                      <td class="cell-status"><span class="status-chip status-{String(e.status||"")[0]}">{e.status || ""}</span></td>
+                      <td class="cell-num">{responseLength(e) || ""}</td>
+                      <td class="cell-mime dim">{mimeOf(e)}</td>
+                      <td class="cell-title dim" title={titleOf(e)}>{titleOf(e)}</td>
+                      <td class="cell-time dim">{fmtTime(e.ts || e.timestamp)}</td>
+                      <td class="cell-notes dim">{e.notes || ""}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="editor-scroll">
-            {#if !selectedEntry}
-              <p class="dim" style="padding:14px;font-size:12px">Select a request to see the response.</p>
-            {:else if respTab === "hex"}
-              <pre class="editor hex">{hexDump(formatResponse(selectedEntry))}</pre>
-            {:else}
-              <pre class="editor">{formatResponse(selectedEntry)}</pre>
-            {/if}
+
+          <!-- BOTTOM: request | response side-by-side -->
+          <div class="req-resp-split">
+            <div class="req-pane">
+              <div class="pane-title">Request</div>
+              <div class="subtabs inner-tabs">
+                {#each ["pretty","raw","hex"] as t}
+                  <button class="subtab" class:active={reqTab===t} on:click={() => reqTab=t}>
+                    {t.charAt(0).toUpperCase()+t.slice(1)}
+                  </button>
+                {/each}
+              </div>
+              <div class="editor-scroll">
+                {#if !selectedEntry}
+                  <p class="dim" style="padding:14px;font-size:12px">Select a request from the table or site map.</p>
+                {:else if reqTab === "hex"}
+                  <pre class="editor hex">{hexDump(formatRequest(selectedEntry))}</pre>
+                {:else}
+                  <pre class="editor">{formatRequest(selectedEntry)}</pre>
+                {/if}
+              </div>
+            </div>
+
+            <div class="resp-pane">
+              <div class="pane-title">Response</div>
+              <div class="subtabs inner-tabs">
+                {#each ["pretty","raw","hex","render"] as t}
+                  <button class="subtab" class:active={respTab===t} on:click={() => respTab=t}>
+                    {t.charAt(0).toUpperCase()+t.slice(1)}
+                  </button>
+                {/each}
+              </div>
+              <div class="editor-scroll">
+                {#if !selectedEntry}
+                  <p class="dim" style="padding:14px;font-size:12px">Select a request to see the response.</p>
+                {:else if respTab === "hex"}
+                  <pre class="editor hex">{hexDump(formatResponse(selectedEntry))}</pre>
+                {:else if respTab === "render"}
+                  <iframe
+                    title="Rendered response"
+                    sandbox=""
+                    class="render-frame"
+                    srcdoc={bytesToText(selectedEntry.body || selectedEntry.response_body) || ""}
+                  ></iframe>
+                {:else}
+                  <pre class="editor">{formatResponse(selectedEntry)}</pre>
+                {/if}
+              </div>
+            </div>
           </div>
+
         </div>
 
       </div>
@@ -555,13 +768,71 @@
   .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; padding: 5px 14px; font-size: 13px; cursor: pointer; }
   .btn-secondary:hover { background: #e4e4e4; }
 
-  /* 3-column site map layout */
+  /* Burp-style site map: tree | (table over req+resp) */
   .sitemap-layout {
     display: grid;
-    grid-template-columns: 230px 1fr 1fr;
+    grid-template-columns: 240px 1fr;
     flex: 1; overflow: hidden;
     border-top: 1px solid #dedede;
   }
+  .right-split {
+    display: grid;
+    grid-template-rows: minmax(140px, 38%) 1fr;
+    overflow: hidden;
+  }
+  .req-resp-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+    border-top: 1px solid #dedede;
+  }
+
+  /* Request table */
+  .req-table-wrap { display: flex; flex-direction: column; overflow: hidden; }
+  .req-table-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 10px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #dedede;
+    flex-shrink: 0;
+  }
+  .table-filter {
+    font-size: 12px; padding: 3px 8px;
+    border: 1px solid #c8c8c8; border-radius: 3px;
+    width: 260px;
+  }
+  .check-inline { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #444; cursor: pointer; }
+  .check-inline input { accent-color: #e03a00; }
+  .req-table-scroll { flex: 1; overflow: auto; }
+  .req-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    table-layout: auto;
+  }
+  .req-table th {
+    text-align: left; padding: 4px 8px;
+    background: #f5f5f5; color: #444;
+    font-size: 11px; font-weight: 600;
+    border-bottom: 1px solid #dedede;
+    position: sticky; top: 0; z-index: 2;
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .req-table th:hover { background: #ebebeb; }
+  .req-table th.sorted { color: #e03a00; }
+  .sort-arrow { font-size: 9px; margin-left: 4px; }
+  .req-table td {
+    padding: 3px 8px; border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 280px;
+  }
+  .req-table tbody tr { cursor: pointer; }
+  .req-table tbody tr:hover { background: #f0f7ff; }
+  .req-table tbody tr.selected { background: #daeeff; }
+  .req-table .cell-host { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; max-width: 200px; }
+  .req-table .cell-method { font-weight: 700; font-size: 11px; }
+  .req-table .cell-url { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; max-width: 360px; }
+  .req-table .cell-num,
+  .req-table .cell-params { text-align: right; font-variant-numeric: tabular-nums; }
+  .req-table .cell-time { font-variant-numeric: tabular-nums; }
 
   /* Tree panel */
   .tree-panel {
@@ -589,7 +860,9 @@
     user-select: none;
   }
   .tree-host:hover { background: #f0f7ff; }
-  .tree-arrow { font-size: 10px; color: #767676; width: 10px; }
+  .tree-host.selected { background: #daeeff; }
+  .tree-host.root-node { font-weight: 700; color: #212121; background: #fafafa; }
+  .tree-arrow { font-size: 10px; color: #767676; width: 10px; cursor: pointer; }
   .tree-host-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tree-badge { font-size: 10px; background: #e8e8e8; padding: 1px 5px; border-radius: 8px; }
 
@@ -640,6 +913,10 @@
     color: #212121; line-height: 1.6;
   }
   .editor.hex { color: #555; }
+  .render-frame {
+    flex: 1; width: 100%; height: 100%;
+    border: none; background: #ffffff;
+  }
 
   /* Scope notice */
   .scope-notice {
