@@ -1,7 +1,7 @@
 <script>
   import { onMount } from "svelte";
 
-  let subtab = "positions";
+  let subtab = "payloads";
   let requestLoaded = false;
 
   // Target
@@ -178,13 +178,11 @@
           <button class="mode-tab mode-tab-nl" title="Non-printing chars">&#x23ce;</button>
         </div>
         <input type="text" class="editor-search" placeholder="Search…" bind:value={editorSearch} />
-        {#if subtab === "positions"}
-          <div class="pos-btns">
-            <button class="pos-btn" on:click={addMarker}>Add §</button>
-            <button class="pos-btn" on:click={clearMarkers}>Clear §</button>
-            <button class="pos-btn" on:click={autoMarkers}>Auto §</button>
-          </div>
-        {/if}
+        <div class="pos-btns">
+          <button class="pos-btn" on:click={addMarker}>Add §</button>
+          <button class="pos-btn" on:click={clearMarkers}>Clear §</button>
+          <button class="pos-btn" on:click={autoMarkers}>Auto §</button>
+        </div>
       </div>
       <div class="editor-body">
         <pre class="req-hl-overlay" bind:this={overlayEl} aria-hidden="true">{@html highlightedTemplate}</pre>
@@ -195,7 +193,6 @@
           bind:value={requestTemplate}
           spellcheck="false"
           on:scroll={syncOverlay}
-          readonly={subtab !== "positions"}
         ></textarea>
       </div>
     </div>
@@ -203,13 +200,15 @@
     <!-- ── MIDDLE: content panel (changes per subtab) ────────────────── -->
     <div class="content-pane">
 
-      <!-- POSITIONS content -->
-      {#if subtab === "positions"}
+      <!-- PAYLOADS content (includes payload positions at top, like Burp) -->
+      {#if subtab === "payloads"}
         <div class="cp-scroll">
-          <div class="cp-section">
-            <div class="cp-section-title">Payload positions</div>
-            <div class="cp-row">
-              <label class="cp-label">Attack type:</label>
+
+          <!-- Payload positions section (top of Payloads panel) -->
+          <div class="ps-section">
+            <div class="ps-header">Payload positions</div>
+            <div class="ps-row" style="margin-bottom:8px">
+              <label class="ps-label">Attack type:</label>
               <select class="cp-select" bind:value={attackType}>
                 <option>Sniper</option>
                 <option>Battering ram</option>
@@ -217,30 +216,20 @@
                 <option>Cluster bomb</option>
               </select>
             </div>
-            <div class="pos-count-badge">
-              {positionCount} payload position{positionCount===1?"":"s"} configured
-            </div>
-            <p class="cp-hint">Use the <strong>Add §</strong> button or type § markers manually around values you want to fuzz. Positions are highlighted in the editor.</p>
-          </div>
-          {#if results.length > 0 || running}
-            <div class="cp-section">
-              <button class="view-results-btn" on:click={()=>showResults=true}>
+            {#if positionCount === 0}
+              <div class="no-pos-banner">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#856404" stroke-width="2" fill="#fff3cd"/><line x1="12" y1="9" x2="12" y2="13" stroke="#856404" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="#856404"/></svg>
+                <span>No payload positions configured. Use <strong>Add §</strong> in the editor above to mark positions.</span>
+              </div>
+            {:else}
+              <div class="pos-count-badge">{positionCount} payload position{positionCount===1?"":"s"} configured</div>
+            {/if}
+            {#if results.length > 0 || running}
+              <button class="view-results-btn" style="margin-top:8px" on:click={()=>showResults=true}>
                 {running ? "⏳ Running — view results" : `▶ View attack results (${results.length})`}
               </button>
-            </div>
-          {/if}
-        </div>
-
-      <!-- PAYLOADS content -->
-      {:else if subtab === "payloads"}
-        <div class="cp-scroll">
-
-          {#if positionCount === 0}
-            <div class="no-pos-banner">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#856404" stroke-width="2" fill="#fff3cd"/><line x1="12" y1="9" x2="12" y2="13" stroke="#856404" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="#856404"/></svg>
-              <span>No payload positions configured. Switch to the <button class="link-btn" on:click={()=>subtab="positions"}>Positions</button> tab.</span>
-            </div>
-          {/if}
+            {/if}
+          </div>
 
           <div class="ps-section">
             <div class="ps-header">Payload sets</div>
@@ -518,9 +507,9 @@
       {/if}
     </div>
 
-    <!-- ── RIGHT: vertical tab strip ─────────────────────────────────── -->
+    <!-- ── RIGHT: vertical tab strip (3 tabs, like Burp) ────────────── -->
     <div class="vtab-strip">
-      {#each [["positions","Positions"],["payloads","Payloads"],["resource-pool","Resource pool"],["settings","Settings"]] as [id,label]}
+      {#each [["payloads","Payloads"],["resource-pool","Resource pool"],["settings","Settings"]] as [id,label]}
         <button class="vtab" class:active={subtab===id} on:click={()=>subtab=id}>
           <span class="vtab-label">{label}</span>
         </button>
@@ -697,7 +686,6 @@
     font-family: ui-monospace,Consolas,"Courier New",monospace;
     font-size: 12px; line-height: 1.5; padding: 10px 12px; color: #212121;
   }
-  .req-textarea[readonly] { color: #555; background: #fafafa; cursor: default; }
 
   /* ── Middle: content pane ────────────────────────────────────────────── */
   .content-pane {
