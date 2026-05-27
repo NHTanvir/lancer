@@ -15,6 +15,8 @@
   import Cookies from "./views/Cookies.svelte";
   import Organizer from "./views/Organizer.svelte";
   import Plugins from "./views/Plugins.svelte";
+  import Findings from "./views/Findings.svelte";
+  import JsMining from "./views/JsMining.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -55,6 +57,8 @@
     { id: "comparer",  label: "Comparer" },
     { id: "logger",    label: "Logger" },
     { id: "organizer", label: "Organizer" },
+    { id: "findings",  label: "Findings" },
+    { id: "jsmining",  label: "JS Miner" },
     { id: "cookies",   label: "Cookies" },
     { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
@@ -190,6 +194,8 @@
     {#if active === "logger"}<Logger />{/if}
     {#if active === "scanner"}<Scanner />{/if}
     {#if active === "organizer"}<Organizer />{/if}
+    {#if active === "findings"}<Findings />{/if}
+    {#if active === "jsmining"}<JsMining />{/if}
     {#if active === "cookies"}<Cookies />{/if}
     {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}

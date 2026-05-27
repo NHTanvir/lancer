@@ -1,0 +1,20 @@
+[package]
+name = "lancer-jsmining"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Passive JS secret & endpoint extractor: 200+ secret patterns, entropy detection, AST endpoint extraction, DOM sink detection, source map recovery."
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+base64.workspace = true

@@ -75,6 +75,7 @@ pub async fn run(args: ProxyArgs) -> Result<()> {
         scope,
         history,
         event_sink,
+        None,
     ));
     info!("starting Lancer proxy");
     listener.run().await

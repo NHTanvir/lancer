@@ -22,6 +22,9 @@ members = [
     "crates/lancer-gui",
     "crates/lancer-cli",
     "crates/lancer-setup",
+    "crates/lancer-templates",
+    "crates/lancer-jsmining",
+    "crates/lancer-triage",
 ]
 exclude = [
     # Built separately for the bpfel-unknown-none target.
@@ -136,6 +139,9 @@ lancer-report = { path = "crates/lancer-report" }
 lancer-ai = { path = "crates/lancer-ai" }
 lancer-session = { path = "crates/lancer-session" }
 lancer-plugin = { path = "crates/lancer-plugin" }
+lancer-templates = { path = "crates/lancer-templates" }
+lancer-jsmining = { path = "crates/lancer-jsmining" }
+lancer-triage = { path = "crates/lancer-triage" }
 
 [profile.release]
 opt-level = 3

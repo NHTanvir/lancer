@@ -1,0 +1,24 @@
+[package]
+name = "lancer-templates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Nuclei v3-compatible YAML template engine. Drop-in support for 9000+ community nuclei-templates. DSL matchers, workflow chaining, OAST support."
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+lancer-tools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tokio = { workspace = true }
+walkdir.workspace = true
+bytes.workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "lancer-triage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "AI-powered findings triage: CVSS scoring, duplicate detection, report drafting. Uses lancer-ai for LLM-backed analysis."
+
+[dependencies]
+lancer-core.workspace = true
+lancer-storage.workspace = true
+lancer-ai.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tokio = { workspace = true }
