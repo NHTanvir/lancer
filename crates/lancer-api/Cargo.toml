@@ -20,7 +20,10 @@ lancer-session = { path = "../lancer-session" }
 lancer-plugin = { path = "../lancer-plugin" }
 lancer-templates = { path = "../lancer-templates" }
 lancer-jsmining = { path = "../lancer-jsmining" }
-lancer-triage = { path = "../lancer-triage" }
+lancer-triage    = { path = "../lancer-triage" }
+lancer-secrets   = { path = "../lancer-secrets" }
+lancer-authbypass = { path = "../lancer-authbypass" }
+lancer-bulkprobe  = { path = "../lancer-bulkprobe" }
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true

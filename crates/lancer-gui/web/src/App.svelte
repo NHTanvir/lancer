@@ -17,6 +17,9 @@
   import Plugins from "./views/Plugins.svelte";
   import Findings from "./views/Findings.svelte";
   import JsMining from "./views/JsMining.svelte";
+  import SecretScanner from "./views/SecretScanner.svelte";
+  import AuthBypass from "./views/AuthBypass.svelte";
+  import BulkProbe from "./views/BulkProbe.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -58,7 +61,10 @@
     { id: "logger",    label: "Logger" },
     { id: "organizer", label: "Organizer" },
     { id: "findings",  label: "Findings" },
-    { id: "jsmining",  label: "JS Miner" },
+    { id: "jsmining",   label: "JS Miner" },
+    { id: "secrets",    label: "Secrets" },
+    { id: "authbypass", label: "Auth Bypass" },
+    { id: "bulkprobe",  label: "Bulk Probe" },
     { id: "cookies",   label: "Cookies" },
     { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
@@ -196,6 +202,9 @@
     {#if active === "organizer"}<Organizer />{/if}
     {#if active === "findings"}<Findings />{/if}
     {#if active === "jsmining"}<JsMining />{/if}
+    {#if active === "secrets"}<SecretScanner />{/if}
+    {#if active === "authbypass"}<AuthBypass />{/if}
+    {#if active === "bulkprobe"}<BulkProbe />{/if}
     {#if active === "cookies"}<Cookies />{/if}
     {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}

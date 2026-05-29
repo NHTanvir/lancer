@@ -56,6 +56,9 @@ use lancer_tools::{
 use lancer_templates::TemplateLibrary;
 use lancer_jsmining::{JsFile, JsFinding};
 use lancer_triage::{Finding as TriageFinding, FindingStatus, draft_report as triage_draft_report, find_duplicates, heuristic_cvss};
+use lancer_secrets::SecretFinding;
+use lancer_authbypass::{BypassRequest, BypassProbe};
+use lancer_bulkprobe::{ProbeRequest, ProbeResult};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -93,6 +96,10 @@ struct AppState {
     js_findings: Arc<RwLock<Vec<JsFinding>>>,
     js_files: Arc<RwLock<Vec<JsFile>>>,
     findings: Arc<RwLock<Vec<TriageFinding>>>,
+    // Batch 10: §35/§36/§37
+    secrets:       Arc<RwLock<Vec<SecretFinding>>>,
+    bypass_jobs:   Arc<RwLock<Vec<BypassProbe>>>,
+    probe_results: Arc<RwLock<Vec<ProbeResult>>>,
 }
 
 #[tokio::main]
@@ -188,6 +195,9 @@ async fn main() -> Result<()> {
     let js_findings: Arc<RwLock<Vec<JsFinding>>> = Arc::new(RwLock::new(Vec::new()));
     let js_files: Arc<RwLock<Vec<JsFile>>> = Arc::new(RwLock::new(Vec::new()));
     let findings: Arc<RwLock<Vec<TriageFinding>>> = Arc::new(RwLock::new(Vec::new()));
+    let secrets:       Arc<RwLock<Vec<SecretFinding>>> = Arc::new(RwLock::new(Vec::new()));
+    let bypass_jobs:   Arc<RwLock<Vec<BypassProbe>>>   = Arc::new(RwLock::new(Vec::new()));
+    let probe_results: Arc<RwLock<Vec<ProbeResult>>>   = Arc::new(RwLock::new(Vec::new()));
 
     let state = Arc::new(AppState {
         token: args.token,
@@ -206,6 +216,9 @@ async fn main() -> Result<()> {
         js_findings,
         js_files,
         findings,
+        secrets,
+        bypass_jobs,
+        probe_results,
     });
 
     let listener = TcpListener::bind(args.listen).await?;
@@ -709,7 +722,7 @@ async fn dynamic_route(
     method: Method,
     path: &str,
     _query: &str,
-    _body: &[u8],
+    body: &[u8],
 ) -> Response<Full<Bytes>> {
     // GET /v1/history/{id}
     if method == Method::GET {
@@ -769,7 +782,7 @@ async fn dynamic_route(
                     impact: Option<String>,
                     repro: Option<String>,
                 }
-                let Ok(p) = serde_json::from_slice::<Patch>(_body) else {
+                let Ok(p) = serde_json::from_slice::<Patch>(body) else {
                     return text(StatusCode::BAD_REQUEST, "bad json");
                 };
                 let mut list = state.findings.write();
@@ -820,6 +833,59 @@ async fn dynamic_route(
             let _ = kept; // placeholder: full delete needs library API change
             return json(&serde_json::json!({ "ok": true }));
         }
+    }
+
+    // ── §35 Passive Secret Scanner ────────────────────────────────────────────
+    if method == Method::GET && path == "/v1/secrets" {
+        return json(&*state.secrets.read());
+    }
+    if method == Method::DELETE && path == "/v1/secrets" {
+        state.secrets.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §36 Auth Bypass Module ────────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/authbypass" {
+        let req: BypassRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r,
+            Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let mut probes = lancer_authbypass::generate_probes(&req);
+        let base = req.base_headers.clone();
+        let store = state.bypass_jobs.clone();
+        tokio::spawn(async move {
+            let _ = lancer_authbypass::run_probes(&mut probes, &base, 0).await;
+            store.write().extend(probes);
+        });
+        return json(&serde_json::json!({"ok": true, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/authbypass" {
+        return json(&*state.bypass_jobs.read());
+    }
+    if method == Method::DELETE && path == "/v1/authbypass" {
+        state.bypass_jobs.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §37 Bulk Probe & Site Mapper ──────────────────────────────────────────
+    if method == Method::POST && path == "/v1/bulkprobe" {
+        let req: ProbeRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r,
+            Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.probe_results.clone();
+        tokio::spawn(async move {
+            let results = lancer_bulkprobe::run_probes(req).await;
+            store.write().extend(results);
+        });
+        return json(&serde_json::json!({"ok": true, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/bulkprobe" {
+        return json(&*state.probe_results.read());
+    }
+    if method == Method::DELETE && path == "/v1/bulkprobe" {
+        state.probe_results.write().clear();
+        return json(&serde_json::json!({"ok": true}));
     }
 
     text(StatusCode::NOT_FOUND, "not found")

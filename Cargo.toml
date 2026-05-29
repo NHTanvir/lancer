@@ -25,6 +25,9 @@ members = [
     "crates/lancer-templates",
     "crates/lancer-jsmining",
     "crates/lancer-triage",
+    "crates/lancer-secrets",
+    "crates/lancer-authbypass",
+    "crates/lancer-bulkprobe",
 ]
 exclude = [
     # Built separately for the bpfel-unknown-none target.
