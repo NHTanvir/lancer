@@ -79,6 +79,9 @@ enum Cmd {
     Saml(commands::saml::SamlArgs),
     /// JSON ↔ XML body converter.
     Convert(commands::convert::ConvertArgs),
+    /// §49 URL pipeline toolkit — qsreplace / gf / anew / uro / unfurl.
+    #[command(subcommand)]
+    Url(commands::urls::UrlsCmd),
 }
 
 fn main() -> Result<()> {
@@ -121,6 +124,7 @@ fn main() -> Result<()> {
             Cmd::Miner(a) => commands::miner::run(a).await,
             Cmd::Saml(a) => commands::saml::run(a).await,
             Cmd::Convert(a) => commands::convert::run(a).await,
+            Cmd::Url(a) => commands::urls::run(a),
         }
     })
 }

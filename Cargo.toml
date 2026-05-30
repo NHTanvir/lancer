@@ -28,6 +28,17 @@ members = [
     "crates/lancer-secrets",
     "crates/lancer-authbypass",
     "crates/lancer-bulkprobe",
+    "crates/lancer-api-routes",
+    "crates/lancer-deser",
+    "crates/lancer-llm-scan",
+    "crates/lancer-llm-redteam",
+    "crates/lancer-mcp-scan",
+    "crates/lancer-shodan",
+    "crates/lancer-shadow",
+    "crates/lancer-stateful-fuzz",
+    "crates/lancer-cms",
+    "crates/lancer-exploitdb",
+    "crates/lancer-modules",
 ]
 exclude = [
     # Built separately for the bpfel-unknown-none target.
@@ -145,6 +156,17 @@ lancer-plugin = { path = "crates/lancer-plugin" }
 lancer-templates = { path = "crates/lancer-templates" }
 lancer-jsmining = { path = "crates/lancer-jsmining" }
 lancer-triage = { path = "crates/lancer-triage" }
+lancer-api-routes = { path = "crates/lancer-api-routes" }
+lancer-deser = { path = "crates/lancer-deser" }
+lancer-llm-scan = { path = "crates/lancer-llm-scan" }
+lancer-llm-redteam = { path = "crates/lancer-llm-redteam" }
+lancer-mcp-scan = { path = "crates/lancer-mcp-scan" }
+lancer-shodan = { path = "crates/lancer-shodan" }
+lancer-shadow = { path = "crates/lancer-shadow" }
+lancer-stateful-fuzz = { path = "crates/lancer-stateful-fuzz" }
+lancer-cms = { path = "crates/lancer-cms" }
+lancer-exploitdb = { path = "crates/lancer-exploitdb" }
+lancer-modules = { path = "crates/lancer-modules" }
 
 [profile.release]
 opt-level = 3

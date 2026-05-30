@@ -23,10 +23,13 @@ pub mod smuggling;
 pub mod ssti;
 pub mod subdomain_takeover;
 pub mod traversal;
+pub mod upload;
 pub mod web_llm;
 pub mod xpath;
 pub mod xss;
 pub mod xxe;
+pub mod gadget_probe;
+pub mod backslash_powered;
 
 use std::sync::Arc;
 
@@ -61,5 +64,8 @@ pub fn registry() -> Vec<Arc<dyn ActiveCheck>> {
         Arc::new(oauth::OAuthCheck),
         Arc::new(web_llm::WebLlmCheck),
         Arc::new(react2shell::React2ShellCheck),
+        Arc::new(upload::UploadCheck),
+        Arc::new(gadget_probe::GadgetProbeCheck),
+        Arc::new(backslash_powered::BackslashPoweredCheck),
     ]
 }

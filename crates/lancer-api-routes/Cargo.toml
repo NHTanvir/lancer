@@ -1,0 +1,15 @@
+[package]
+name = "lancer-api-routes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "§39 API Route Discovery — kiterunner-equivalent API-aware route enumeration."
+
+[dependencies]
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid       = { version = "1", features = ["v4", "serde"] }
+chrono     = { version = "0.4", features = ["serde"] }
+tokio      = { workspace = true }
+reqwest    = { version = "0.12", features = ["rustls-tls"], default-features = false }
+futures    = { workspace = true }

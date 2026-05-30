@@ -2497,6 +2497,7 @@ name = "lancer-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64 0.22.1",
  "bytes",
  "chrono",
@@ -2504,16 +2505,27 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "lancer-api-routes",
  "lancer-authbypass",
  "lancer-bulkprobe",
+ "lancer-cms",
  "lancer-core",
+ "lancer-deser",
+ "lancer-exploitdb",
  "lancer-jsmining",
+ "lancer-llm-redteam",
+ "lancer-llm-scan",
+ "lancer-mcp-scan",
+ "lancer-modules",
  "lancer-plugin",
  "lancer-proxy",
  "lancer-report",
  "lancer-scanner",
  "lancer-secrets",
  "lancer-session",
+ "lancer-shadow",
+ "lancer-shodan",
+ "lancer-stateful-fuzz",
  "lancer-storage",
  "lancer-templates",
  "lancer-tools",
@@ -2525,6 +2537,19 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "lancer-api-routes"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
  "uuid",
 ]
 
@@ -2580,6 +2605,7 @@ dependencies = [
  "lancer-storage",
  "lancer-tools",
  "parking_lot",
+ "regex",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2587,6 +2613,21 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "lancer-cms"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
  "uuid",
 ]
 
@@ -2638,6 +2679,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lancer-deser"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "hex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lancer-dom"
 version = "0.1.0"
 dependencies = [
@@ -2667,6 +2718,19 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "lancer-exploitdb"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "parking_lot",
+ "regex",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2751,6 +2815,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "lancer-llm-redteam"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "lancer-llm-scan"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "futures",
+ "once_cell",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "lancer-mcp-scan"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "once_cell",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "lancer-mobile"
 version = "0.1.0"
 dependencies = [
@@ -2758,6 +2867,22 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "lancer-modules"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml 0.8.23",
+ "uuid",
 ]
 
 [[package]]
@@ -2945,6 +3070,49 @@ name = "lancer-setup"
 version = "0.1.0"
 dependencies = [
  "zip",
+]
+
+[[package]]
+name = "lancer-shadow"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "lancer-shodan"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "lancer-stateful-fuzz"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "parking_lot",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

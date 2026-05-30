@@ -20,6 +20,16 @@
   import SecretScanner from "./views/SecretScanner.svelte";
   import AuthBypass from "./views/AuthBypass.svelte";
   import BulkProbe from "./views/BulkProbe.svelte";
+  import ApiRoutes from "./views/ApiRoutes.svelte";
+  import DeserPayload from "./views/DeserPayload.svelte";
+  import LlmScan from "./views/LlmScan.svelte";
+  import LlmRedTeam from "./views/LlmRedTeam.svelte";
+  import McpScan from "./views/McpScan.svelte";
+  import Shodan from "./views/Shodan.svelte";
+  import StatefulFuzz from "./views/StatefulFuzz.svelte";
+  import CmsScan from "./views/CmsScan.svelte";
+  import Exploits from "./views/Exploits.svelte";
+  import Modules from "./views/Modules.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -65,6 +75,16 @@
     { id: "secrets",    label: "Secrets" },
     { id: "authbypass", label: "Auth Bypass" },
     { id: "bulkprobe",  label: "Bulk Probe" },
+    { id: "apiroutes",  label: "API Routes" },
+    { id: "deser",      label: "Deser Payloads" },
+    { id: "llmscan",    label: "LLM Scan" },
+    { id: "redteam",    label: "LLM Red-Team" },
+    { id: "mcp",        label: "MCP Scan" },
+    { id: "shodan",     label: "Shodan" },
+    { id: "fuzz",       label: "Stateful Fuzz" },
+    { id: "cms",        label: "CMS Scan" },
+    { id: "exploits",   label: "Exploit DB" },
+    { id: "modules",    label: "Modules" },
     { id: "cookies",   label: "Cookies" },
     { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
@@ -205,6 +225,16 @@
     {#if active === "secrets"}<SecretScanner />{/if}
     {#if active === "authbypass"}<AuthBypass />{/if}
     {#if active === "bulkprobe"}<BulkProbe />{/if}
+    {#if active === "apiroutes"}<ApiRoutes />{/if}
+    {#if active === "deser"}<DeserPayload />{/if}
+    {#if active === "llmscan"}<LlmScan />{/if}
+    {#if active === "redteam"}<LlmRedTeam />{/if}
+    {#if active === "mcp"}<McpScan />{/if}
+    {#if active === "shodan"}<Shodan />{/if}
+    {#if active === "fuzz"}<StatefulFuzz />{/if}
+    {#if active === "cms"}<CmsScan />{/if}
+    {#if active === "exploits"}<Exploits />{/if}
+    {#if active === "modules"}<Modules />{/if}
     {#if active === "cookies"}<Cookies />{/if}
     {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}

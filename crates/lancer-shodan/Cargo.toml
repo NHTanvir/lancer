@@ -1,0 +1,14 @@
+[package]
+name = "lancer-shodan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "§45 Shodan Host Enrichment — REST API client for Site Map host enrichment."
+
+[dependencies]
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono     = { version = "0.4", features = ["serde"] }
+tokio      = { workspace = true }
+reqwest    = { version = "0.12", features = ["rustls-tls", "json"], default-features = false }
+parking_lot = { workspace = true }

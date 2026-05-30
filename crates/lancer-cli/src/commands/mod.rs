@@ -25,4 +25,5 @@ pub mod report;
 pub mod saml;
 pub mod scan;
 pub mod sequencer;
+pub mod urls;
 pub mod waf;

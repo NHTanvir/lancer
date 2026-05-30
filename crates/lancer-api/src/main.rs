@@ -59,6 +59,18 @@ use lancer_triage::{Finding as TriageFinding, FindingStatus, draft_report as tri
 use lancer_secrets::SecretFinding;
 use lancer_authbypass::{BypassRequest, BypassProbe};
 use lancer_bulkprobe::{ProbeRequest, ProbeResult};
+// Batch 11: §38-§52
+use lancer_api_routes::{DiscoveryRequest, RouteResult};
+use lancer_deser::{PayloadRequest as DeserPayloadRequest, GeneratedPayload};
+use lancer_llm_scan::{ScanRequest as LlmScanRequest, ProbeResult as LlmProbeResult};
+use lancer_llm_redteam::{SessionRequest as RedTeamSessionRequest, SessionStore as RedTeamStore};
+use lancer_mcp_scan::{ScanRequest as McpScanRequest, ScanResult as McpScanResult};
+use lancer_shodan::ShodanClient;
+use lancer_shadow::{ShadowRequest, ShadowVariant};
+use lancer_stateful_fuzz::{FuzzRequest, SessionStore as FuzzStore};
+use lancer_cms::{CmsScanRequest, CmsScanResult};
+use lancer_exploitdb::ExploitDb;
+use lancer_modules::{ModuleRegistry, ModuleState, default_modules, Preset, PresetStore};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -100,6 +112,19 @@ struct AppState {
     secrets:       Arc<RwLock<Vec<SecretFinding>>>,
     bypass_jobs:   Arc<RwLock<Vec<BypassProbe>>>,
     probe_results: Arc<RwLock<Vec<ProbeResult>>>,
+    // Batch 11: §38-§52
+    routes:        Arc<RwLock<Vec<RouteResult>>>,
+    deser_payloads: Arc<RwLock<Vec<GeneratedPayload>>>,
+    llm_results:   Arc<RwLock<Vec<LlmProbeResult>>>,
+    redteam_store: RedTeamStore,
+    mcp_results:   Arc<RwLock<Vec<McpScanResult>>>,
+    shodan:        ShodanClient,
+    shadow_variants: Arc<RwLock<Vec<ShadowVariant>>>,
+    fuzz_store:    FuzzStore,
+    cms_results:   Arc<RwLock<Vec<CmsScanResult>>>,
+    exploitdb:     ExploitDb,
+    modules:       Arc<ModuleRegistry>,
+    module_presets: PresetStore,
 }
 
 #[tokio::main]
@@ -199,6 +224,23 @@ async fn main() -> Result<()> {
     let bypass_jobs:   Arc<RwLock<Vec<BypassProbe>>>   = Arc::new(RwLock::new(Vec::new()));
     let probe_results: Arc<RwLock<Vec<ProbeResult>>>   = Arc::new(RwLock::new(Vec::new()));
 
+    // Batch 11
+    let routes:        Arc<RwLock<Vec<RouteResult>>>       = Arc::new(RwLock::new(Vec::new()));
+    let deser_payloads: Arc<RwLock<Vec<GeneratedPayload>>> = Arc::new(RwLock::new(Vec::new()));
+    let llm_results:   Arc<RwLock<Vec<LlmProbeResult>>>    = Arc::new(RwLock::new(Vec::new()));
+    let redteam_store = RedTeamStore::new();
+    let mcp_results:   Arc<RwLock<Vec<McpScanResult>>>     = Arc::new(RwLock::new(Vec::new()));
+    let shodan = ShodanClient::from_env();
+    let shadow_variants: Arc<RwLock<Vec<ShadowVariant>>>   = Arc::new(RwLock::new(Vec::new()));
+    let fuzz_store = FuzzStore::new();
+    let cms_results: Arc<RwLock<Vec<CmsScanResult>>>       = Arc::new(RwLock::new(Vec::new()));
+    let exploitdb = ExploitDb::new();
+    let modules = Arc::new(ModuleRegistry::new());
+    for m in default_modules() {
+        register_module(&modules, m);
+    }
+    let module_presets = PresetStore::new();
+
     let state = Arc::new(AppState {
         token: args.token,
         project: RwLock::new(storage),
@@ -219,6 +261,18 @@ async fn main() -> Result<()> {
         secrets,
         bypass_jobs,
         probe_results,
+        routes,
+        deser_payloads,
+        llm_results,
+        redteam_store,
+        mcp_results,
+        shodan,
+        shadow_variants,
+        fuzz_store,
+        cms_results,
+        exploitdb,
+        modules,
+        module_presets,
     });
 
     let listener = TcpListener::bind(args.listen).await?;
@@ -888,8 +942,286 @@ async fn dynamic_route(
         return json(&serde_json::json!({"ok": true}));
     }
 
+    // ── §39 API Route Discovery ───────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/api-routes" {
+        let req: DiscoveryRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.routes.clone();
+        tokio::spawn(async move {
+            let r = lancer_api_routes::run_discovery(req).await;
+            store.write().extend(r);
+        });
+        return json(&serde_json::json!({"ok": true, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/api-routes" {
+        return json(&*state.routes.read());
+    }
+    if method == Method::DELETE && path == "/v1/api-routes" {
+        state.routes.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §40 Deserialization Payload Generator ─────────────────────────────────
+    if method == Method::GET && path == "/v1/deser/chains" {
+        let chains: Vec<serde_json::Value> = lancer_deser::known_chains().into_iter().map(|c| {
+            serde_json::json!({
+                "name": c.name, "platform": c.platform,
+                "description": c.description, "library": c.library,
+            })
+        }).collect();
+        return json(&chains);
+    }
+    if method == Method::POST && path == "/v1/deser/generate" {
+        let req: DeserPayloadRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        match lancer_deser::generate(&req) {
+            Ok(p) => {
+                state.deser_payloads.write().push(p.clone());
+                return json(&p);
+            }
+            Err(e) => return text(StatusCode::BAD_REQUEST, &e),
+        }
+    }
+    if method == Method::GET && path == "/v1/deser" {
+        return json(&*state.deser_payloads.read());
+    }
+    if method == Method::DELETE && path == "/v1/deser" {
+        state.deser_payloads.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §42 LLM Vulnerability Scanner ─────────────────────────────────────────
+    if method == Method::POST && path == "/v1/llm-scan/run" {
+        let req: LlmScanRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.llm_results.clone();
+        tokio::spawn(async move {
+            let r = lancer_llm_scan::run_scan(req).await;
+            store.write().extend(r);
+        });
+        return json(&serde_json::json!({"ok": true, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/llm-scan/results" {
+        return json(&*state.llm_results.read());
+    }
+    if method == Method::DELETE && path == "/v1/llm-scan/results" {
+        state.llm_results.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+    if method == Method::POST && path == "/v1/llm-scan/estimate" {
+        let req: LlmScanRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let (tokens, cost) = lancer_llm_scan::estimate_cost(&req);
+        return json(&serde_json::json!({"tokens": tokens, "cost_usd": cost}));
+    }
+
+    // ── §43 LLM Red-Team Orchestrator ─────────────────────────────────────────
+    if method == Method::POST && path == "/v1/llm-redteam/start" {
+        let req: RedTeamSessionRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.redteam_store.clone();
+        let id = uuid::Uuid::new_v4();
+        tokio::spawn(async move {
+            let mut s = lancer_llm_redteam::run_session(req).await;
+            s.id = id;
+            store.save(s);
+        });
+        return json(&serde_json::json!({"id": id, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/llm-redteam/sessions" {
+        return json(&state.redteam_store.list());
+    }
+    if let Some(id) = path.strip_prefix("/v1/llm-redteam/sessions/") {
+        if method == Method::GET {
+            let Ok(uid) = uuid::Uuid::parse_str(id) else {
+                return text(StatusCode::BAD_REQUEST, "bad id");
+            };
+            return match state.redteam_store.get(uid) {
+                Some(s) => json(&s),
+                None => text(StatusCode::NOT_FOUND, "no session"),
+            };
+        }
+    }
+    if method == Method::DELETE && path == "/v1/llm-redteam/sessions" {
+        state.redteam_store.clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §44 MCP Server Scanner ────────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/mcp-scan/run" {
+        let req: McpScanRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.mcp_results.clone();
+        tokio::spawn(async move {
+            let r = lancer_mcp_scan::scan(req).await;
+            store.write().push(r);
+        });
+        return json(&serde_json::json!({"ok": true, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/mcp-scan/results" {
+        return json(&*state.mcp_results.read());
+    }
+    if method == Method::DELETE && path == "/v1/mcp-scan/results" {
+        state.mcp_results.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §45 Shodan ────────────────────────────────────────────────────────────
+    if let Some(ip) = path.strip_prefix("/v1/shodan/host/") {
+        if method == Method::GET {
+            return match state.shodan.host(ip).await {
+                Some(h) => json(&h),
+                None => text(StatusCode::NOT_FOUND, "no data"),
+            };
+        }
+    }
+    if let Some(cve) = path.strip_prefix("/v1/shodan/cve/") {
+        if method == Method::GET {
+            return match state.shodan.cve(cve).await {
+                Some(c) => json(&c),
+                None => text(StatusCode::NOT_FOUND, "no data"),
+            };
+        }
+    }
+
+    // ── §47 Shadow Repeater ───────────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/shadow/generate" {
+        let req: ShadowRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let v = lancer_shadow::generate_variants(&req);
+        state.shadow_variants.write().extend(v.clone());
+        return json(&v);
+    }
+    if method == Method::GET && path == "/v1/shadow" {
+        return json(&*state.shadow_variants.read());
+    }
+    if method == Method::DELETE && path == "/v1/shadow" {
+        state.shadow_variants.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §48 Stateful API Fuzzer ───────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/stateful-fuzz/start" {
+        let req: FuzzRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.fuzz_store.clone();
+        let id = uuid::Uuid::new_v4();
+        tokio::spawn(async move {
+            if let Ok(mut s) = lancer_stateful_fuzz::run_fuzz(req).await {
+                s.id = id;
+                store.save(s);
+            }
+        });
+        return json(&serde_json::json!({"id": id, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/stateful-fuzz/sessions" {
+        return json(&state.fuzz_store.list());
+    }
+    if let Some(id) = path.strip_prefix("/v1/stateful-fuzz/sessions/") {
+        if method == Method::GET {
+            let Ok(uid) = uuid::Uuid::parse_str(id) else {
+                return text(StatusCode::BAD_REQUEST, "bad id");
+            };
+            return match state.fuzz_store.get(uid) {
+                Some(s) => json(&s),
+                None => text(StatusCode::NOT_FOUND, "no session"),
+            };
+        }
+    }
+
+    // ── §50 CMS Scanner ───────────────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/cms-scan/run" {
+        let req: CmsScanRequest = match serde_json::from_slice(&body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        let store = state.cms_results.clone();
+        tokio::spawn(async move {
+            if let Ok(r) = lancer_cms::scan(req).await {
+                store.write().push(r);
+            }
+        });
+        return json(&serde_json::json!({"ok": true, "queued": true}));
+    }
+    if method == Method::GET && path == "/v1/cms-scan" {
+        return json(&*state.cms_results.read());
+    }
+    if method == Method::DELETE && path == "/v1/cms-scan" {
+        state.cms_results.write().clear();
+        return json(&serde_json::json!({"ok": true}));
+    }
+
+    // ── §51 Exploit-DB ────────────────────────────────────────────────────────
+    if let Some(cve) = path.strip_prefix("/v1/exploits/by-cve/") {
+        if method == Method::GET {
+            return json(&state.exploitdb.by_cve(cve));
+        }
+    }
+    if let Some(q) = path.strip_prefix("/v1/exploits/by-keyword/") {
+        if method == Method::GET {
+            return json(&state.exploitdb.by_keyword(q));
+        }
+    }
+
+    // ── §52 Modules ──────────────────────────────────────────────────────────
+    if method == Method::GET && path == "/v1/modules" {
+        return json(&state.modules.list());
+    }
+    if let Some(rest) = path.strip_prefix("/v1/modules/") {
+        if let Some(id) = rest.strip_suffix("/start") {
+            if method == Method::POST {
+                return match state.modules.start(id).await {
+                    Ok(_) => json(&serde_json::json!({"ok": true})),
+                    Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+                };
+            }
+        }
+        if let Some(id) = rest.strip_suffix("/stop") {
+            if method == Method::POST {
+                return match state.modules.stop(id).await {
+                    Ok(_) => json(&serde_json::json!({"ok": true})),
+                    Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+                };
+            }
+        }
+        if let Some(id) = rest.strip_suffix("/status") {
+            if method == Method::GET {
+                let list = state.modules.list();
+                return match list.into_iter().find(|m| m.id == id) {
+                    Some(m) => json(&m),
+                    None => text(StatusCode::NOT_FOUND, "no module"),
+                };
+            }
+        }
+    }
+    if method == Method::GET && path == "/v1/modules/presets" {
+        return json(&state.module_presets.list());
+    }
+    if method == Method::POST && path == "/v1/modules/presets" {
+        let p: Preset = match serde_json::from_slice(&body) {
+            Ok(p) => p, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        state.module_presets.save(p.clone());
+        return json(&p);
+    }
+
     text(StatusCode::NOT_FOUND, "not found")
 }
+
+fn register_module(reg: &Arc<ModuleRegistry>, m: Box<dyn lancer_modules::LancerModule>) {
+    reg.register_boxed(m);
+}
+
+// Allow ModuleState to be parsed in URL endpoints (not currently used in routes).
+#[allow(dead_code)]
+fn _module_state_for_serde() -> ModuleState { ModuleState::Off }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
 

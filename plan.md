@@ -54,21 +54,21 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 31 | Plugin system | 🟡 | All hosts exist (see §20). No marketplace, no signed-plugin verification, no install-from-URL |
 | 32 | Better reports | ✅ | 6 formats + 4 issue trackers wired in backend |
 | 33 | Quality of life | ❌ | No vim/emacs keybindings, no per-project hotkey overrides, no workspace presets, no auto-snapshot, no crash recovery, no payload encyclopedia browser |
-| 38 | Upload Scanner | ❌ | NEW 2026-05-30 — file-upload bypass active check; spec at §38 |
-| 39 | API Route Discovery | ❌ | NEW 2026-05-30 — kiterunner-equivalent API-aware route enum; spec at §39 |
-| 40 | Deser. Payload Gen | ❌ | NEW 2026-05-30 — ysoserial-equivalent Java/.NET gadget chains; spec at §40 |
-| 41 | Deser. Gadget Probe | ❌ | NEW 2026-05-30 — GadgetProbe-equivalent classpath fingerprint; spec at §41 |
-| 42 | LLM Vuln Scanner | ❌ | NEW 2026-05-30 — garak-equivalent 120+ LLM probes; spec at §42 |
-| 43 | LLM Red-Team Orch. | ❌ | NEW 2026-05-30 — PyRIT-equivalent multi-turn orchestration; spec at §43 |
-| 44 | MCP Server Scanner | ❌ | NEW 2026-05-30 — MCP-scan-equivalent tool-poisoning/prompt-injection scanner; spec at §44 |
-| 45 | Shodan Enrichment | ❌ | NEW 2026-05-31 — Site Map host enrichment via Shodan; spec at §45 |
-| 46 | Unknown-Injection Scanner | ❌ | NEW 2026-05-31 — backslash-powered-scanner equivalent; spec at §46 |
-| 47 | AI Repeater Variants | ❌ | NEW 2026-05-31 — Shadow Repeater equivalent; spec at §47 |
-| 48 | Stateful API Fuzzer | ❌ | NEW 2026-05-31 — RESTler equivalent state-flaw fuzzer; spec at §48 |
-| 49 | URL Pipeline Toolkit | ❌ | NEW 2026-05-31 — qsreplace/gf/anew/uro/unfurl bundled; spec at §49 |
-| 50 | CMS-Aware Scanner | ❌ | NEW 2026-05-31 — WPScan/JoomScan/Drupal targeted checks; spec at §50 |
-| 51 | Exploit-DB Lookup | ❌ | NEW 2026-05-31 — searchsploit-equivalent local DB; spec at §51 |
-| 52 | Modules System | ❌ | NEW 2026-06-01 — opt-in module page for always-running features (JVM/Python/WASM/collab/OAST/scheduler/eBPF), default-all-off, zero idle cost; spec at §52 |
+| 38 | Upload Scanner | ✅ | batch-11 — `lancer-scanner/src/active/upload.rs` with extension bypass, MIME spoof, magic bytes, SVG XSS, traversal, log4shell-style filenames |
+| 39 | API Route Discovery | ✅ | batch-11 — `lancer-api-routes` crate with 200+ route lib + OpenAPI auto-detect; `/v1/api-routes` |
+| 40 | Deser. Payload Gen | ✅ | batch-11 — `lancer-deser` crate with 35 Java + .NET chains, 5 encodings; `/v1/deser/{chains,generate}` |
+| 41 | Deser. Gadget Probe | ✅ | batch-11 — `lancer-scanner/src/active/gadget_probe.rs` with 15 library classpath fingerprints |
+| 42 | LLM Vuln Scanner | ✅ | batch-11 — `lancer-llm-scan` crate, 30+ probes across 10 categories; `/v1/llm-scan/{run,results,estimate}` |
+| 43 | LLM Red-Team Orch. | ✅ | batch-11 — `lancer-llm-redteam` crate with 7 strategies (single/TAP/crescendo/PAIR/GCG/FLRT/many-shot); `/v1/llm-redteam/{start,sessions}` |
+| 44 | MCP Server Scanner | ✅ | batch-11 — `lancer-mcp-scan` crate with tool poisoning / Unicode tags / homoglyphs / rug-pull diff; `/v1/mcp-scan/{run,results}` |
+| 45 | Shodan Enrichment | ✅ | batch-11 — `lancer-shodan` crate with 24h cache + InternetDB fallback; `/v1/shodan/{host,cve}` |
+| 46 | Unknown-Injection Scanner | ✅ | batch-11 — `lancer-scanner/src/active/backslash_powered.rs` with response-diff anomaly scoring |
+| 47 | AI Repeater Variants | ✅ | batch-11 — `lancer-shadow` crate with 6 mutation families + scoring; `/v1/shadow/generate` |
+| 48 | Stateful API Fuzzer | ✅ | batch-11 — `lancer-stateful-fuzz` crate with OpenAPI sequence inference + use-after-free / access-control detectors; `/v1/stateful-fuzz/{start,sessions}` |
+| 49 | URL Pipeline Toolkit | ✅ | batch-11 — `lancer url {qsreplace,gf,anew,uro,unfurl,gf-list}` subcommands with 20 gf patterns |
+| 50 | CMS-Aware Scanner | ✅ | batch-11 — `lancer-cms` crate covering WordPress/Joomla/Drupal + 7 generic CMSs; `/v1/cms-scan/{run}` |
+| 51 | Exploit-DB Lookup | ✅ | batch-11 — `lancer-exploitdb` crate with by-CVE / by-keyword / by-software queries; `/v1/exploits/by-{cve,keyword}` |
+| 52 | Modules System | ✅ | batch-11 — `lancer-modules` crate with `LancerModule` trait + 7 default modules (jvm/python/wasm/collab/oast/scheduler/ebpf) + presets; `/v1/modules/*` |
 
 # IMPLEMENTATION STATUS — 2026-05-26 UPDATE
 

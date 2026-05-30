@@ -24,6 +24,17 @@ lancer-triage    = { path = "../lancer-triage" }
 lancer-secrets   = { path = "../lancer-secrets" }
 lancer-authbypass = { path = "../lancer-authbypass" }
 lancer-bulkprobe  = { path = "../lancer-bulkprobe" }
+lancer-api-routes = { path = "../lancer-api-routes" }
+lancer-deser      = { path = "../lancer-deser" }
+lancer-llm-scan   = { path = "../lancer-llm-scan" }
+lancer-llm-redteam = { path = "../lancer-llm-redteam" }
+lancer-mcp-scan   = { path = "../lancer-mcp-scan" }
+lancer-shodan     = { path = "../lancer-shodan" }
+lancer-shadow     = { path = "../lancer-shadow" }
+lancer-stateful-fuzz = { path = "../lancer-stateful-fuzz" }
+lancer-cms        = { path = "../lancer-cms" }
+lancer-exploitdb  = { path = "../lancer-exploitdb" }
+lancer-modules    = { path = "../lancer-modules" }
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
@@ -40,3 +51,4 @@ chrono.workspace = true
 parking_lot.workspace = true
 clap.workspace = true
 base64.workspace = true
+async-trait.workspace = true

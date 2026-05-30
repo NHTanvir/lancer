@@ -1,0 +1,18 @@
+[package]
+name = "lancer-modules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "§52 Modules System — opt-in module registry with start/stop, in-process / subprocess / privileged-daemon flavors."
+
+[dependencies]
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml       = { workspace = true }
+chrono     = { version = "0.4", features = ["serde"] }
+uuid       = { version = "1", features = ["v4", "serde"] }
+tokio      = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
