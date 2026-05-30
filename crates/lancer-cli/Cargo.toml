@@ -24,6 +24,16 @@ lancer-dom = { path = "../lancer-dom" }
 lancer-mobile = { path = "../lancer-mobile" }
 lancer-iac = { path = "../lancer-iac" }
 lancer-collab = { path = "../lancer-collab" }
+lancer-deser.workspace = true
+lancer-llm-scan.workspace = true
+lancer-llm-redteam.workspace = true
+lancer-mcp-scan.workspace = true
+lancer-shadow.workspace = true
+lancer-stateful-fuzz.workspace = true
+lancer-cms.workspace = true
+lancer-exploitdb.workspace = true
+lancer-shodan.workspace = true
+lancer-modules.workspace = true
 
 tokio.workspace = true
 clap.workspace = true

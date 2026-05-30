@@ -82,6 +82,31 @@ enum Cmd {
     /// §49 URL pipeline toolkit — qsreplace / gf / anew / uro / unfurl.
     #[command(subcommand)]
     Url(commands::urls::UrlsCmd),
+    /// §40 Deserialization payload generator (ysoserial-equivalent).
+    Ysoserial(commands::ysoserial::YsoserialArgs),
+    /// §42 LLM vulnerability scanner (garak-equivalent).
+    #[command(name = "llm-scan")]
+    LlmScan(commands::llm_scan::LlmScanArgs),
+    /// §43 LLM red-team orchestrator (PyRIT-equivalent).
+    #[command(name = "llm-redteam")]
+    LlmRedteam(commands::llm_redteam::LlmRedteamArgs),
+    /// §44 MCP server scanner (mcp-scan-equivalent).
+    #[command(name = "mcp-scan")]
+    McpScan(commands::mcp_scan::McpScanArgs),
+    /// §47 AI Repeater variant generator (Shadow Repeater).
+    Shadow(commands::shadow::ShadowArgs),
+    /// §48 Stateful API fuzzer (RESTler-equivalent).
+    #[command(name = "stateful-fuzz")]
+    StatefulFuzz(commands::stateful_fuzz::StatefulFuzzArgs),
+    /// §50 CMS-aware scanner (WPScan / JoomScan / Droopescan-equivalent).
+    #[command(name = "cms-scan")]
+    CmsScan(commands::cms_scan::CmsScanArgs),
+    /// §51 Exploit-DB lookup (searchsploit-equivalent).
+    Exploits(commands::exploits::ExploitsArgs),
+    /// §45 Shodan host enrichment.
+    Shodan(commands::shodan::ShodanArgs),
+    /// §52 Modules system (list / enable / disable / status / preset).
+    Modules(commands::modules::ModulesArgs),
 }
 
 fn main() -> Result<()> {
@@ -125,6 +150,16 @@ fn main() -> Result<()> {
             Cmd::Saml(a) => commands::saml::run(a).await,
             Cmd::Convert(a) => commands::convert::run(a).await,
             Cmd::Url(a) => commands::urls::run(a),
+            Cmd::Ysoserial(a) => commands::ysoserial::run(a),
+            Cmd::LlmScan(a) => commands::llm_scan::run(a).await,
+            Cmd::LlmRedteam(a) => commands::llm_redteam::run(a).await,
+            Cmd::McpScan(a) => commands::mcp_scan::run(a).await,
+            Cmd::Shadow(a) => commands::shadow::run(a),
+            Cmd::StatefulFuzz(a) => commands::stateful_fuzz::run(a).await,
+            Cmd::CmsScan(a) => commands::cms_scan::run(a).await,
+            Cmd::Exploits(a) => commands::exploits::run(a),
+            Cmd::Shodan(a) => commands::shodan::run(a).await,
+            Cmd::Modules(a) => commands::modules::run(a).await,
         }
     })
 }

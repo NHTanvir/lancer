@@ -89,17 +89,21 @@
     } catch {}
   });
 
+  let attackError="";
+  // GUI label → API attack-kind token (the API also accepts these case/separator-insensitively).
+  const KIND_MAP={"Sniper":"Sniper","Battering Ram":"BatteringRam","Pitchfork":"Pitchfork","Cluster Bomb":"ClusterBomb"};
   async function startAttack() {
-    requestLoaded=true; running=true; results=[]; selectedResult=null;
+    requestLoaded=true; running=true; results=[]; selectedResult=null; attackError="";
     attackNum+=1; showResults=true; filterStatus=""; filterPayload="";
+    // The request template carries the §…§ markers; payloadList is one payload set.
+    // Cluster Bomb/Pitchfork with multiple positions reuse this set per position.
+    const sets=[payloadList];
     try {
-      const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({host,port:parseInt(port,10),scheme,request:requestTemplate,kind:attackType.toLowerCase().replace(/ /g,"-"),payloads:payloadList})});
+      const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",payloads:sets})});
       if (r.ok) { results=await r.json(); }
-      else {
-        results=payloadList.map((p,i)=>({index:i+1,payload:p,status:[200,200,302,404,200,500][i%6],length:Math.floor(Math.random()*4000)+200,time_ms:Math.floor(Math.random()*800)+40,error:false,timeout:false,comment:""}));
-      }
-    } catch {
-      results=payloadList.map((p,i)=>({index:i+1,payload:p,status:0,length:0,time_ms:0,error:true,timeout:false,comment:""}));
+      else { attackError=`Attack failed (${r.status}): ${(await r.text())||"see server log"}`; results=[]; }
+    } catch (e) {
+      attackError=`Could not reach Lancer API — is it running? (${e})`; results=[];
     } finally { running=false; }
   }
 
@@ -533,12 +537,16 @@
       <input class="atk-filter" bind:value={filterStatus}  placeholder="Filter status…" style="width:100px" />
       <span class="dim" style="font-size:11px;margin-left:auto">{filteredResults.length} / {results.length} rows</span>
     </div>
+    {#if attackError}
+      <div class="atk-error-banner">⚠ {attackError}</div>
+    {/if}
     <div class="attack-body">
       <div class="attack-table-wrap">
         <table class="attack-table">
           <thead><tr><th>#</th><th>Payload</th><th>Status</th><th>Error</th><th>Timeout</th><th>Length</th><th>Comment</th></tr></thead>
           <tbody>
             {#if running && results.length===0}<tr><td colspan="7" class="dim" style="text-align:center;padding:18px">Sending requests…</td></tr>{/if}
+            {#if !running && results.length===0 && !attackError}<tr><td colspan="7" class="dim" style="text-align:center;padding:18px">No results.</td></tr>{/if}
             {#each filteredResults as r}
               <tr class:atk-sel={selectedResult===r} on:click={()=>{selectedResult=r;resultReqTab="request"}}>
                 <td class="dim atk-num">{r.index}</td>
@@ -791,6 +799,7 @@
   .atk-done      { font-size:12px;color:#1b8c1b; }
   .attack-close  { background:#e03a00;color:#fff;border:none;border-radius:3px;padding:4px 12px;font-size:12px;cursor:pointer; }
   .attack-close:hover { background:#c73400; }
+  .atk-error-banner { padding:7px 12px;background:#fde8e8;color:#b3231f;border-bottom:1px solid #f5b8b8;font-size:12px;flex-shrink:0; }
   .attack-filter-bar { display:flex;align-items:center;gap:8px;padding:5px 10px;background:#fafafa;border-bottom:1px solid #e8e8e8;flex-shrink:0; }
   .atk-filter { font-size:12px;padding:3px 8px;border:1px solid #c8c8c8;border-radius:3px;width:180px; }
   .attack-body { flex:1;display:grid;grid-template-rows:minmax(120px,55%) 1fr;overflow:hidden; }

@@ -35,6 +35,9 @@ lancer-stateful-fuzz = { path = "../lancer-stateful-fuzz" }
 lancer-cms        = { path = "../lancer-cms" }
 lancer-exploitdb  = { path = "../lancer-exploitdb" }
 lancer-modules    = { path = "../lancer-modules" }
+lancer-ai         = { path = "../lancer-ai" }
+lancer-mobile     = { path = "../lancer-mobile" }
+lancer-iac        = { path = "../lancer-iac" }
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
@@ -51,4 +54,5 @@ chrono.workspace = true
 parking_lot.workspace = true
 clap.workspace = true
 base64.workspace = true
+hex.workspace = true
 async-trait.workspace = true

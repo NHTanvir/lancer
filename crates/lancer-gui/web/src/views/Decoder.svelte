@@ -174,6 +174,40 @@
     return hex32(a0) + hex32(b0) + hex32(c0) + hex32(d0);
   }
 
+  // ── Backend transform (MD2 / SHA-3 — Web Crypto can't do these) ────────
+  // POST /api/v1/transform {op, input} -> { ok, text, hex, base64 }
+  async function backendTransform(op, s) {
+    try {
+      const r = await fetch("/api/v1/transform", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op, input: s }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !data || data.ok === false) {
+        const msg = (data && data.error) || ("HTTP " + r.status);
+        return "(backend error: " + msg + ")";
+      }
+      return data;
+    } catch (e) {
+      return "(backend unreachable: " + e.message + ")";
+    }
+  }
+  // For hashes, surface the hex digest from the backend response.
+  async function backendHash(op, s) {
+    const data = await backendTransform(op, s);
+    return typeof data === "string" ? data : data.hex;
+  }
+
+  // ── Pretty-print JSON (client-side) ────────────────────────────────────
+  function prettyJson(s) {
+    try {
+      return JSON.stringify(JSON.parse(s), null, 2);
+    } catch (e) {
+      return "(invalid JSON: " + e.message + ")";
+    }
+  }
+
   const encodeOps = [
     { label: "Base64", fn: b64encode },
     { label: "URL",    fn: urlEncode },
@@ -195,11 +229,17 @@
     { label: "GZIP",   fn: gzipDecode, async: true },
   ];
   const hashOps = [
-    { label: "MD5",      fn: (s) => Promise.resolve(md5(s)) },
-    { label: "SHA-1",    fn: (s) => hashHex("SHA-1", s) },
-    { label: "SHA-256",  fn: (s) => hashHex("SHA-256", s) },
-    { label: "SHA-384",  fn: (s) => hashHex("SHA-384", s) },
-    { label: "SHA-512",  fn: (s) => hashHex("SHA-512", s) },
+    { label: "MD2",        fn: (s) => backendHash("md2", s) },
+    { label: "MD5",        fn: (s) => Promise.resolve(md5(s)) },
+    { label: "SHA-1",      fn: (s) => hashHex("SHA-1", s) },
+    { label: "SHA-256",    fn: (s) => hashHex("SHA-256", s) },
+    { label: "SHA-384",    fn: (s) => hashHex("SHA-384", s) },
+    { label: "SHA-512",    fn: (s) => hashHex("SHA-512", s) },
+    { label: "SHA-3-256",  fn: (s) => backendHash("sha3-256", s) },
+    { label: "SHA-3-512",  fn: (s) => backendHash("sha3-512", s) },
+  ];
+  const formatOps = [
+    { label: "Pretty-print JSON", fn: prettyJson },
   ];
 
   async function apply(i, op, mode) {
@@ -219,6 +259,7 @@
 
   function applyEncode(i, op) { return apply(i, op, "encode"); }
   function applyDecode(i, op) { return apply(i, op, "decode"); }
+  function applyFormat(i, op) { return apply(i, op, "format"); }
   function applyHash(i, op)   { return apply(i, op, "hash"); }
 
   function smartDecode(i) {
@@ -315,6 +356,18 @@
             {/each}
           </div>
           <div class="ops-sep"></div>
+          <div class="ops-group">
+            <span class="ops-label">Format</span>
+            {#each formatOps as op}
+              <button
+                class="op-btn"
+                class:op-active={row.mode === "format" && row.opLabel === op.label}
+                on:click={() => applyFormat(i, op)}
+                disabled={!row.input}
+              >{op.label}</button>
+            {/each}
+          </div>
+          <div class="ops-sep"></div>
           <button
             class="op-btn op-smart"
             on:click={() => smartDecode(i)}
@@ -329,7 +382,7 @@
               Output
               {#if row.opLabel}
                 <span class="op-tag">
-                  {row.mode === "encode" ? "Encoded: " + row.opLabel : row.mode === "smart" ? "Smart: " + row.opLabel : row.mode === "hash" ? "Hash: " + row.opLabel : "Decoded: " + row.opLabel}
+                  {row.mode === "encode" ? "Encoded: " + row.opLabel : row.mode === "smart" ? "Smart: " + row.opLabel : row.mode === "hash" ? "Hash: " + row.opLabel : row.mode === "format" ? "Formatted: " + row.opLabel : "Decoded: " + row.opLabel}
                 </span>
               {/if}
             </span>

@@ -23,34 +23,34 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 |---|------|--------|-------|
 | 1 | Proxy | 🟡 | Intercept/HTTP history/Match-replace/CA cert all ✅. WebSockets history tab is a placeholder; HTTP/3 + NTLM/Negotiate auth feature-gated/stubbed; Proxy settings UI shows bind addr only — no upstream proxy / TLS pass-through / DNS override GUI |
 | 2 | Target | 🟡 | Site map ✅. Issues ✅. Scope tab is informational only — no add/edit/delete UI. Engagement tools (CSRF PoC, find scripts, etc) exist in `lancer-tools` but no GUI surface |
-| 3 | Repeater | 🟡 | Send + tabs + raw editor + Inspector ✅. Inspector only has "Attribs" sub-tab. No HTTP/2 frame editor. No "Render response" HTML preview. No Burp-AI button. "Send to Sequencer/Comparer" disabled in context menu |
-| 4 | Intruder | 🟡 | 4 attack kinds + payload sets via `/v1/intruder` ✅. Payload processing rules exist in `lancer-tools/payload_processor` but no UI. No Resource pool / throttle controls. No grep-match / grep-extract column config |
+| 3 | Repeater | 🟡 | Send + tabs + raw editor + Inspector + Render ✅. batch-12: Burp-AI buttons + Send-to-Sequencer/Comparer/Decoder + Copy-as-fetch/PowerShell now work. Still no HTTP/2 frame editor, no WebSocket mode, no tab rename/group, read-only Inspector |
+| 4 | Intruder | 🟡 | 4 attack kinds + payload sets via `/v1/intruder` ✅ — **batch-12 fixed the GUI↔API contract** (was 400ing + fabricating `Math.random()` results). Payload processing rules exist in `lancer-tools/payload_processor` but no UI. No Resource pool / throttle controls. No grep-match / grep-extract column config. §4.6 Mass Fuzz / `lancer-fuzz` still absent |
 | 5 | Scanner | ✅ | 27 active + 7 passive checks implemented in `lancer-scanner`. Crawler, API-spec import, OAuth client all backend-complete. BCheck DSL runner present. GUI exposes Full/Passive/Active. No per-check enable/disable, no preset selector |
 | 6 | Collaborator | ❌ | `lancer-scanner/collaborator.rs` exists but is stub — no public/self-hosted collaborator server, no polling, no payload generation, no GUI tab |
 | 7 | DOM Invader | 🟡 | `lancer-dom` does **static** DOM-sink / postMessage / proto-pollution gadget analysis. No Chromium browser extension, no augmented-DOM live view |
-| 8 | Sequencer | 🟡 | Backend implementation in `lancer-tools/sequencer` exists. **GUI is pure client-side mock** — `Sequencer.svelte` makes no API call, uses `Math.random()` for fake entropy. Manual analyse from this session returned a real 25.6-bit number, so something is wired — verify against `lancer-tools` |
-| 9 | Decoder | 🟡 | GUI has Base64/URL/HTML/Smart decode. **Missing**: hex, ASCII hex, octal, binary, GZIP, MD2/MD5/SHA-1/256/384/512/SHA-3 hash family (all present in `lancer-tools/decoder` backend) |
+| 8 | Sequencer | ✅ | batch-12: `/v1/sequencer/analyse` now uses the real `lancer_tools::sequencer` FIPS battery (monobit/poker/runs/per-position entropy) instead of inline `Math.random()` |
+| 9 | Decoder | ✅ | batch-12: MD2 / SHA-3-256 / SHA-3-512 routed through `POST /v1/transform` (backend `lancer_core::transform`); octal/binary/gzip + pretty-print JSON present. Remaining: SHA-3-224/384 buttons |
 | 10 | Comparer | 🟡 | Word + Byte diff ✅. **Missing**: prev/next navigation between diffs, sync scrolling toggle, soft-wrap toggle, persistent sync-view state |
-| 11 | Organizer | 🟡 | `lancer-storage/organizer` and `lancer-tools/organizer_tools` exist (save/tag/notes/search). **No GUI tab** — features unreachable in UI. Collections (2025.12) not implemented |
+| 11 | Organizer | ✅ | Organizer GUI tab present; batch-12 added tag/notes/title edit (`PUT /v1/organizer/{id}`), delete, and Send-to-Repeater. Collections (2025.12 encrypted share link) not implemented |
 | 12 | Logger | ✅ | Full table + filters + Request/Response detail panes ✅ (fixed this session). Custom Bambda column scripts not exposed |
 | 13 | Built-in browser | 🟡 | "Open Browser" button calls `/api/browser/open` which launches **system** Chrome/Firefox with proxy flags. Not an embedded Chromium with isolated profile. CA cert not auto-installed in the launched browser |
 | 14 | Inspector | 🟡 | Repeater Inspector pane shows attribs + counts of params/cookies/headers. Burp lets you **edit** params/cookies/headers via form fields — Lancer is read-only |
 | 15 | Command palette | ✅ | Ctrl+K, fuzzy search, backend `/api/palette` query, `lancer-plugin/palette.rs`. Plugin commands register-able |
-| 16 | Burp AI | 🟡 | `lancer-ai` has BYO-LLM trait + OpenAI/Claude/Gemini adapters + payload mutation. **No GUI** — no "Explain"/"Investigate"/"Find vulns" buttons in Repeater, no AI-enhanced scanner checks wired |
+| 16 | Burp AI | ✅ | batch-12: Repeater Explain/Investigate/Validate buttons POST to `/v1/ai` (BYO-LLM via `lancer-ai`); AI provider config in Settings → AI. AI-enhanced scanner checks still not wired |
 | 17 | Session handling | 🟡 | `lancer-session` has cookie jar + macros + rules + CSRF token tracking — **complete** in backend. **Zero GUI** — no Cookie Jar viewer, no Macros recorder, no Session Handling Rules editor |
-| 18 | Project management | 🟡 | SQLite project file ✅ (`lancer-storage/project.rs`). Memory-only mode ✅ (default). **Missing GUI**: project open/save/load dialog, recent projects list, project options panel, configuration library, import/export of configs |
+| 18 | Project management | 🟡 | SQLite project file ✅. batch-12: **default is now a temporary in-memory project** (unlocks organizer/report/ws-history without `--project`); disk projects auto-snapshot; `GET /v1/project` + `POST /v1/project/{open,new-temporary}`. Still missing GUI open/save dialog, recent list, config library |
 | 19 | Reporting | ✅ | HTML/JSON/Markdown/SARIF/XML/PDF all rendered via `lancer-report`. Reports tab works ✅. Jira/Linear/GitHub/DefectDojo exporters in `lancer-report/exporters` — no GUI buttons for them yet |
 | 20 | Extensibility | 🟡 | Rhai built-in + WASM (`wasmtime`) + Lua (`mlua`) + Python (`pyo3`) + Native (`cdylib`) + JVM (Montoya, `jni`) all in `lancer-plugin`/`lancer-jvm`. **No plugin manager UI** — can't install/enable/disable plugins from the app. No BApp-store equivalent. No Bambda editor in GUI. No BCheck editor in GUI |
 | 21 | CLI / Headless / REST API | ✅ | `lancer-cli` has 29 subcommands. `lancer-api` exposes proxy + history + scan + intruder + repeater + report. **Missing**: Docker image not verified, no documented CI/CD examples |
-| 22 | Mobile testing | 🟡 | `lancer-mobile` has Android ADB CA-push, iOS profile generator, Frida SSL-pinning bypass templates. **No GUI** — features only accessible via CLI |
-| 23 | Network settings | 🟡 | Upstream HTTP/SOCKS, TLS pass-through, DNS overrides, platform auth (Basic/Digest done; NTLM/Negotiate stub) all in `lancer-proxy/settings.rs`. **No GUI** for any of these |
+| 22 | Mobile testing | ✅ | batch-12: new Mobile GUI tab + `/v1/mobile/*` (iOS install steps, .mobileconfig profile, Frida Android/iOS/Flutter scripts). CLI still available |
+| 23 | Network settings | 🟡 | batch-12: `GET/PUT /v1/proxy/settings` + Settings → Network GUI (upstream HTTP/SOCKS, TLS pass-through, DNS overrides, platform auth rows). NTLM/Negotiate still placeholder handshakes; listener re-bind applies on restart |
 | 24 | UI / UX | 🟡 | Tabbed interface ✅. Command palette ✅. **Missing**: dark/light theme toggle, customizable hotkeys, detachable panels, multi-monitor support, saved workspace layouts, memory footer, status bar quick links |
 | 25 | Performance | 🟡 | tokio + hyper ✅, HTTP/3 quinn ⏳, streaming + zero-GC ✅. No benchmark suite to verify "100k+ req/s" claim |
 | 26 | Live collab | 🟡 | `lancer-collab` has event stream + peer presence + last-writer-wins. **No GUI** — no peer list, no cursor sync visible in views |
 | 27 | AI beyond Burp | 🟡 | BYO-LLM backend ✅. No NL scan config, no AI exploit-chain UI, no AI report writer |
 | 28 | New vulnerability classes | ✅ | Web LLM, cloud metadata, prototype pollution, host-header injection all present in `lancer-scanner/active`. WAF fingerprint in `lancer-scanner/waf`. WebAuthn / HTTP/3 desync not visible |
 | 29 | eBPF capture (Linux) | ⏳ | `lancer-ebpf` + `lancer-ebpf-probe` compile only with the linux feature. No GUI, no orchestration |
-| 30 | Container / Cloud / IaC | 🟡 | `lancer-iac` parses Dockerfile / docker-compose / k8s / Terraform. **No GUI** — output only via CLI/API |
+| 30 | Container / Cloud / IaC | ✅ | batch-12: new IaC GUI tab + `POST /v1/iac/parse` (Dockerfile/compose/k8s/Terraform → attack surface) |
 | 31 | Plugin system | 🟡 | All hosts exist (see §20). No marketplace, no signed-plugin verification, no install-from-URL |
 | 32 | Better reports | ✅ | 6 formats + 4 issue trackers wired in backend |
 | 33 | Quality of life | ❌ | No vim/emacs keybindings, no per-project hotkey overrides, no workspace presets, no auto-snapshot, no crash recovery, no payload encyclopedia browser |
@@ -610,6 +610,45 @@ Each one ships with `state = "off"` by default. The user decides what consumes t
 
 ---
 
+# IMPLEMENTATION STATUS — 2026-05-31 (batch-12) — REACHABILITY PASS
+
+A full audit (plan §1–§52 + granular Burp inventory) against the *actual* `crates/` code found that most backends were already implemented but **unreachable** from API/GUI/CLI. This batch closed the reachability gaps. All Rust changes verified with `cargo check` (workspace clean except the pre-existing `lancer-setup` installer build-script, which intentionally requires `LANCER_INSTALLER_ZIP`).
+
+## Closed this batch
+
+- **§4 Intruder — critical fix.** GUI sent payloads as a flat `string[]` while the API expected `Vec<Vec<String>>`, and sent `kind` as `"battering-ram"` while the API matched `"BatteringRam"` — so **every attack 400'd and the GUI fabricated fake results with `Math.random()`**. Fixed the payload shape, made the API accept both shapes + case/separator-insensitive `kind`, and removed the fabrication (real error banner now). `crates/lancer-api/src/main.rs` `intruder()`, `Intruder.svelte`.
+- **§5 Scanner** now reachable — `Scanner.svelte` was routed but missing from the nav tabs. Added.
+- **§5.2 SSRF** check now iterates the full shared `lancer_tools::cloud_metadata::PROBES` table (AWS IMDSv1/v2, GCP, Azure, DigitalOcean, Oracle, Alibaba) instead of 4 hardcoded probes; added Azure/Alibaba/DO detection regexes.
+- **§3 Repeater** — `Send to Sequencer/Comparer/Decoder` + `Copy as fetch/PowerShell` context items now work (were dead stubs); fixed a broken `Send to Intruder` (wrong localStorage key). **§16 Burp AI** buttons (Explain/Investigate/Validate) now POST to `/v1/ai` (BYO-LLM) instead of "Coming soon".
+- **§8 Sequencer** GUI/API now uses the real FIPS battery (`lancer_tools::sequencer` — monobit/poker/runs/per-position entropy) instead of inline shannon-only/`Math.random()`.
+- **§9 Decoder** — added MD2 / SHA-3-256 / SHA-3-512 (backend-routed via new `POST /v1/transform`, since Web Crypto can't do them) + pretty-print JSON.
+- **§19 Reporting** — API `report()` now supports `format=pdf` and `format=tera`, plus `min_severity`/`min_confidence`/`include_fp`/`host`/`summary` query filters + executive summary.
+- **§20/§31 Plugins** — `POST /v1/plugins/{id}/toggle`, `DELETE /v1/plugins/{id}` (new `PluginRegistry::remove`), `POST /v1/plugins/upload` now exist (GUI calls were 404ing).
+- **§11 Organizer** — `PUT/DELETE /v1/organizer/{id}` (new `OrganizerStore::update`) + GUI tag/notes/title edit, delete, and Send-to-Repeater.
+- **§1.2/§12 History annotations** — `PATCH /v1/history/{id}` sets inline comment / highlight color.
+- **§18 Project / §33 crash-recovery** — default is now a **temporary in-memory project** (organizer/report/ws-history/annotations work without `--project`); disk projects spawn the auto-snapshot loop; `GET /v1/project`, `POST /v1/project/open`, `POST /v1/project/new-temporary`.
+- **§2.4 Engagement tools** — full `/v1/engagement/*` suite (find-comments/scripts/anchors, CSRF PoC, ClickBandit, analyze-target, find-references, search, discover-content) over the existing CLI-only backends.
+- **§23 Network settings** — `GET/PUT /v1/proxy/settings` + a new **Network** category in Settings (upstream HTTP/SOCKS proxy, TLS pass-through list, DNS overrides, platform-auth rows).
+- **§22 Mobile** — `/v1/mobile/*` (iOS install steps, .mobileconfig profile, Frida SSL-pinning scripts for Android/iOS/Flutter) + new **Mobile** GUI tab.
+- **§30 IaC** — `POST /v1/iac/parse` (Dockerfile/compose/k8s/Terraform) + new **IaC** GUI tab.
+- **§27/§16 AI** — `POST /v1/ai` (OpenAI/Anthropic/Ollama via `lancer_ai`) + an **AI** Settings category for BYO-LLM provider config.
+- **§34/§35 Passive analysis** — the secret scanner + JS miner now run automatically on **every proxy response** (consumes the proxy `ResponseCaptured` event stream; correlates URLs via `RequestCaptured`; dedups).
+- **§52 Modules** — per-module state now persists to `~/.lancer/modules.toml` (load on startup, `POST /v1/modules/{id}/set-state`).
+- **CLI parity (§40/§42/§43/§44/§45/§47/§48/§50/§51/§52)** — added 10 subcommands: `ysoserial`, `llm-scan`, `llm-redteam`, `mcp-scan`, `shadow`, `stateful-fuzz`, `cms-scan`, `exploits`, `shodan`, `modules`.
+- **Settings** also gained **Display** (theme/font-size) and **Updates** (version check) pages.
+
+## Knowingly NOT done (genuinely large / net-new infrastructure)
+
+These need substantial new systems, not wiring, and remain open:
+- **§6 Collaborator / OOB server** — needs a real DNS/HTTP/SMTP listener service + correlation engine (new networking crate). Blind/OOB confirmation for SSRF/blind-RCE/deser still unavailable.
+- **§13 Embedded Chromium browser** + **§7 DOM Invader runtime** + **§5.1.1 deep JS-render crawler** — require headless Chromium / a browser extension. "Open Browser" still shells out to system Chrome.
+- **§4.6 Mass Fuzz + `lancer-fuzz` binary** and the remaining Intruder payload-set/processor variants — net-new high-speed engine.
+- **§1.3 WebSocket frame capture** — the listener still tunnels WS without decoding into `WsStore` (table stays empty).
+- **§23 NTLM/Negotiate** platform auth — still placeholder handshakes; **§25** 100k-req/s benchmark suite, **§26** live-collab cursor sync, **§29** eBPF BPF object, and **§17 Session Rules/Macros GUI** are not built.
+- **Data corpora** (200+/800+ secret patterns, 120+ LLM probes, 10k routes, 200+ gadget classes, real ysoserial/exploit-db datasets) remain below the aspirational plan counts.
+
+---
+
 ## The 30-Tool Separate Clone Set
 
 All 30 are at `./19/<toolname>/plan.md` (folder name kept as `19/` for backwards compat). Each is a standalone project — Rust where practical, Go where the original is Go, Python where the domain demands it (symbolic execution, ML).
@@ -834,11 +873,11 @@ Pass made against open Burp Suite Community 2026.4.3 with embedded Chromium open
 - □ Inspector: Body params editable rows
 - □ Inspector: Cookies editable rows
 - □ Inspector: Headers editable rows
-- □ Right-click: Send to Intruder / Sequencer / Comparer / Decoder
-- □ Right-click: Copy as curl / fetch / PowerShell
-- □ Right-click: Convert request method (GET↔POST)
+- ■ Right-click: Send to Intruder / Sequencer / Comparer / Decoder (batch-12)
+- ■ Right-click: Copy as curl / fetch / PowerShell (batch-12)
+- ■ Right-click: Convert request method (GET↔POST)
 - □ Right-click: Change body encoding
-- □ AI button (Pro)
+- ■ AI button — Explain / Investigate / Validate via /v1/ai (batch-12)
 
 ### Sequencer → Live capture
 - □ Select request from history/site map (not pasted)
@@ -849,7 +888,7 @@ Pass made against open Burp Suite Community 2026.4.3 with embedded Chromium open
 - □ Sample count target
 
 ### Sequencer → Analysis
-- ▣ Overall reliability + bit entropy stat (currently from synthetic random; needs to call `lancer-tools/sequencer`)
+- ■ Overall reliability + bit entropy stat — batch-12 wired to real `lancer-tools/sequencer` FIPS battery via `/v1/sequencer/analyse` (monobit/poker/runs/per-position entropy)
 - □ Effective entropy at 95% / 99% confidence
 - □ Char-level analysis table
 - □ Bit-level analysis table
@@ -862,7 +901,7 @@ Pass made against open Burp Suite Community 2026.4.3 with embedded Chromium open
 - ■ Hex / ASCII hex / Octal / Binary encode + decode (added this commit)
 - ■ GZIP encode + decode (added this commit)
 - ■ Hash: MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512 (added this commit)
-- □ Hash: MD2 / SHA-3-224 / SHA-3-256 / SHA-3-384 / SHA-3-512
+- ▣ Hash: MD2 / SHA-3-256 / SHA-3-512 (batch-12 — backend-routed via /v1/transform). SHA-3-224 / SHA-3-384 still missing
 - ■ Smart decode
 - ■ Chain rows
 - □ Text ↔ Hex view toggle per row (Burp lets you switch input mode)

@@ -88,4 +88,27 @@ impl OrganizerStore {
             .await?;
         Ok(())
     }
+
+    /// Update the editable metadata (title / tags / notes) of a saved entry.
+    pub async fn update(
+        &self,
+        id: Uuid,
+        title: Option<String>,
+        tags: Option<Vec<String>>,
+        notes: Option<String>,
+    ) -> anyhow::Result<()> {
+        if let Some(t) = title {
+            sqlx::query("UPDATE organizer SET title = ? WHERE id = ?")
+                .bind(t).bind(id.to_string()).execute(&self.pool).await?;
+        }
+        if let Some(tg) = tags {
+            sqlx::query("UPDATE organizer SET tags = ? WHERE id = ?")
+                .bind(tg.join(",")).bind(id.to_string()).execute(&self.pool).await?;
+        }
+        if let Some(n) = notes {
+            sqlx::query("UPDATE organizer SET notes = ? WHERE id = ?")
+                .bind(n).bind(id.to_string()).execute(&self.pool).await?;
+        }
+        Ok(())
+    }
 }

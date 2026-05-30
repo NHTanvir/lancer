@@ -92,6 +92,8 @@ struct Args {
 struct AppState {
     token: Option<String>,
     project: RwLock<Option<Storage>>,
+    project_path: RwLock<Option<String>>,
+    proxy_settings: RwLock<ProxySettings>,
     client: HttpClient,
     // Proxy
     intercept_engine: InterceptEngine,
@@ -135,10 +137,25 @@ async fn main() -> Result<()> {
         .with_target(false)
         .init();
 
+    // Default to a temporary in-memory project (plan §18) so organizer / findings
+    // report / WebSocket history / annotations work without requiring --project.
     let storage = match &args.project {
         Some(p) => Some(Storage::open(p).await?),
-        None => None,
+        None => Some(Storage::in_memory().await?),
     };
+
+    // Auto-snapshot / crash-recovery for disk-backed projects (plan §33).
+    if let Some(p) = &args.project {
+        if let Some(st) = &storage {
+            let snap_storage = st.clone();
+            let db_path = p.clone();
+            tokio::spawn(async move {
+                if let Err(e) = lancer_storage::snapshot::run_snapshot_loop(snap_storage, db_path, 5, 10).await {
+                    tracing::warn!("snapshot loop ended: {e}");
+                }
+            });
+        }
+    }
 
     // CA dir next to the project file, or in LOCALAPPDATA/Lancer/ca
     let ca_dir = args.project.as_ref()
@@ -173,17 +190,22 @@ async fn main() -> Result<()> {
         );
     }
 
+    // Network/proxy settings (§23) — kept in AppState for GET/PUT exposure.
+    let proxy_settings_value = ProxySettings {
+        listeners: vec![lancer_proxy::settings::ListenerBind {
+            addr: proxy_addr,
+            transparent: false,
+        }],
+        ..Default::default()
+    };
+
     // Start proxy in background
+    let passive_events_rx;
     {
-        let proxy_settings = Arc::new(ProxySettings {
-            listeners: vec![lancer_proxy::settings::ListenerBind {
-                addr: proxy_addr,
-                transparent: false,
-            }],
-            ..Default::default()
-        });
+        let proxy_settings = Arc::new(proxy_settings_value.clone());
         let history_store = storage.as_ref().map(|s| s.history());
-        let (events_sink, _events_rx) = lancer_proxy::ProxyEventSink::new(128);
+        let (events_sink, events_rx) = lancer_proxy::ProxyEventSink::new(256);
+        passive_events_rx = events_rx;
         let proxy = Arc::new(ProxyListener::new(
             proxy_settings,
             ca.clone(),
@@ -239,11 +261,25 @@ async fn main() -> Result<()> {
     for m in default_modules() {
         register_module(&modules, m);
     }
+    // Rehydrate persisted per-module enable/disable state from ~/.lancer/modules.toml (§52).
+    {
+        let toml = lancer_modules::ModulesToml::load(&modules_toml_path());
+        for (id, cfg) in &toml.modules {
+            let st = match cfg.state.as_str() {
+                "on"   => ModuleState::On,
+                "auto" => ModuleState::Auto { idle_timeout_min: cfg.auto_idle_timeout_min.unwrap_or(5) },
+                _      => ModuleState::Off,
+            };
+            modules.set_state(id, st);
+        }
+    }
     let module_presets = PresetStore::new();
 
     let state = Arc::new(AppState {
         token: args.token,
         project: RwLock::new(storage),
+        project_path: RwLock::new(args.project.as_ref().map(|p| p.display().to_string())),
+        proxy_settings: RwLock::new(proxy_settings_value),
         client: HttpClient::new(),
         intercept_engine,
         match_replace: match_replace_cfg,
@@ -274,6 +310,67 @@ async fn main() -> Result<()> {
         modules,
         module_presets,
     });
+
+    // Passive analysis consumer (§34 JS Mining + §35 Secret Scanner): runs the
+    // secret scanner on every response and the JS miner on every JS response that
+    // flows through the proxy. Correlates ids → URLs via RequestCaptured events.
+    {
+        let secrets = state.secrets.clone();
+        let js_findings = state.js_findings.clone();
+        let js_files = state.js_files.clone();
+        let mut rx = passive_events_rx;
+        tokio::spawn(async move {
+            use std::collections::HashMap;
+            let mut url_map: HashMap<lancer_core::MessageId, String> = HashMap::new();
+            while let Some(ev) = rx.recv().await {
+                match ev {
+                    lancer_proxy::ProxyEvent::RequestCaptured { id, request, .. } => {
+                        if url_map.len() > 8192 { url_map.clear(); }
+                        url_map.insert(id, request.url());
+                    }
+                    lancer_proxy::ProxyEvent::ResponseCaptured { id, response } => {
+                        let url = url_map.remove(&id).unwrap_or_default();
+                        let Some(body) = response.body_text() else { continue };
+                        if body.is_empty() { continue; }
+                        // Secret scan on every response (dedup by url+raw_value).
+                        let found = lancer_secrets::scan_response(&url, body);
+                        if !found.is_empty() {
+                            let mut store = secrets.write();
+                            for f in found {
+                                if !store.iter().any(|e| e.url == f.url && e.raw_value == f.raw_value) {
+                                    store.push(f);
+                                }
+                            }
+                        }
+                        // JS miner only on JavaScript responses.
+                        let ct = response.header("content-type").unwrap_or("");
+                        let is_js = url.ends_with(".js") || ct.contains("javascript") || ct.contains("ecmascript");
+                        if is_js {
+                            let mined = lancer_jsmining::analyse(&url, body);
+                            if !mined.is_empty() {
+                                let mut store = js_findings.write();
+                                for f in mined {
+                                    if !store.iter().any(|e| e.file == f.file && e.line == f.line && e.snippet == f.snippet) {
+                                        store.push(f);
+                                    }
+                                }
+                            }
+                            let mut files = js_files.write();
+                            if !files.iter().any(|jf| jf.url == url) {
+                                files.push(lancer_jsmining::JsFile {
+                                    url: url.clone(),
+                                    size_kb: (body.len() / 1024) as u64,
+                                    findings: 0,
+                                    last_seen: chrono::Utc::now(),
+                                });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
 
     let listener = TcpListener::bind(args.listen).await?;
     info!("Lancer API listening on http://{}", args.listen);
@@ -591,6 +688,174 @@ async fn dispatch(
             json(&serde_json::json!({ "ok": true }))
         }
 
+        // ── Project management (§18) ──────────────────────────────────────
+        (Method::GET, "/v1/project") => {
+            let path = state.project_path.read().clone();
+            json(&serde_json::json!({
+                "open": state.project.read().is_some(),
+                "kind": if path.is_some() { "disk" } else { "temporary" },
+                "path": path,
+            }))
+        }
+        (Method::POST, "/v1/project/open") => {
+            #[derive(serde::Deserialize)]
+            struct P { path: String }
+            let Ok(p) = serde_json::from_slice::<P>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            match Storage::open(&p.path).await {
+                Ok(st) => {
+                    *state.project.write() = Some(st);
+                    *state.project_path.write() = Some(p.path.clone());
+                    json(&serde_json::json!({ "ok": true, "path": p.path }))
+                }
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+        (Method::POST, "/v1/project/new-temporary") => {
+            match Storage::in_memory().await {
+                Ok(st) => {
+                    *state.project.write() = Some(st);
+                    *state.project_path.write() = None;
+                    json(&serde_json::json!({ "ok": true, "kind": "temporary" }))
+                }
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+
+        // ── Engagement tools (§2.4) ───────────────────────────────────────
+        (Method::POST, "/v1/engagement/find-comments") => {
+            #[derive(serde::Deserialize)]
+            struct R { url: Option<String>, body: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            json(&lancer_tools::engagement::find_comments(r.url.as_deref().unwrap_or(""), &r.body))
+        }
+        (Method::POST, "/v1/engagement/find-scripts") => {
+            #[derive(serde::Deserialize)]
+            struct R { base_url: Option<String>, body: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            json(&lancer_tools::engagement::find_scripts(&r.body, r.base_url.as_deref().unwrap_or("")))
+        }
+        (Method::POST, "/v1/engagement/find-anchors") => {
+            #[derive(serde::Deserialize)]
+            struct R { base_url: Option<String>, body: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            json(&lancer_tools::engagement::find_anchors(&r.body, r.base_url.as_deref().unwrap_or("")))
+        }
+        (Method::POST, "/v1/engagement/csrf-poc") => {
+            #[derive(serde::Deserialize)]
+            struct R { request: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let Ok(req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
+            json(&lancer_tools::engagement::generate_csrf_poc(&req))
+        }
+        (Method::POST, "/v1/engagement/clickbandit") => {
+            // ClickBandit — clickjacking iframe-wrapper PoC for the target URL.
+            #[derive(serde::Deserialize)]
+            struct R { url: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let html = format!(
+                "<!doctype html><html><head><style>\n\
+                 iframe{{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.5;z-index:2}}\n\
+                 #decoy{{position:absolute;top:300px;left:80px;z-index:1}}</style></head><body>\n\
+                 <div id=\"decoy\"><button>Click here to win!</button></div>\n\
+                 <iframe src=\"{}\"></iframe>\n</body></html>\n",
+                r.url.replace('"', "%22"));
+            json(&serde_json::json!({ "html": html }))
+        }
+        (Method::GET, "/v1/engagement/analyze-target") => {
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+            match lancer_tools::engagement::analyze_target(&s.history()).await {
+                Ok(a) => json(&a),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+        (Method::POST, "/v1/engagement/find-references") => {
+            #[derive(serde::Deserialize)]
+            struct R { url: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+            match lancer_tools::engagement::find_references(&s.history(), &r.url).await {
+                Ok(ids) => json(&ids),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+        (Method::POST, "/v1/engagement/search") => {
+            #[derive(serde::Deserialize)]
+            struct R { needle: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+            match lancer_tools::engagement::search_across(&s.history(), &r.needle).await {
+                Ok(hits) => json(&hits),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+        (Method::POST, "/v1/engagement/discover-content") => {
+            #[derive(serde::Deserialize)]
+            struct R { base: String, words: Vec<String>, concurrency: Option<usize> }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            match lancer_tools::engagement::discover_content(
+                state.client.clone(), &r.base, r.words.into_iter(), r.concurrency.unwrap_or(20)).await {
+                Ok(hits) => json(&hits),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+
+        // ── Network / proxy settings (§23) ────────────────────────────────
+        (Method::GET, "/v1/proxy/settings") => json(&*state.proxy_settings.read()),
+        (Method::PUT, "/v1/proxy/settings") => {
+            let Ok(s) = serde_json::from_slice::<ProxySettings>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            *state.proxy_settings.write() = s;
+            // Upstream proxy / DNS / TLS-passthrough changes apply to new connections;
+            // listener re-bind takes effect on restart.
+            json(&serde_json::json!({ "ok": true, "note": "saved; listener changes apply on restart" }))
+        }
+
+        // ── §16/§27 Burp-AI (BYO-LLM) ─────────────────────────────────────
+        (Method::POST, "/v1/ai") => ai_complete(state, body).await,
+
+        // ── §30 IaC parser ────────────────────────────────────────────────
+        (Method::POST, "/v1/iac/parse") => {
+            #[derive(serde::Deserialize)]
+            struct R { kind: String, body: String }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let surface = match r.kind.as_str() {
+                "dockerfile" => lancer_iac::parse_dockerfile(&r.body),
+                "compose"    => match lancer_iac::parse_compose(&r.body) { Ok(s) => s, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()) },
+                "kubernetes" | "k8s" => match lancer_iac::parse_kubernetes(&r.body) { Ok(s) => s, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()) },
+                "terraform"  => lancer_iac::parse_terraform(&r.body),
+                _ => return text(StatusCode::BAD_REQUEST, "kind must be dockerfile|compose|kubernetes|terraform"),
+            };
+            json(&surface)
+        }
+
+        // ── §22 Mobile assistants ─────────────────────────────────────────
+        (Method::GET, "/v1/mobile/ios-install-steps") => {
+            let ca_url = parse_query(query, "ca_url").unwrap_or_else(|| "http://lancer/ca.pem".into());
+            json(&serde_json::json!({ "steps": lancer_mobile::ios::install_steps(&ca_url) }))
+        }
+        (Method::POST, "/v1/mobile/ios-profile") => {
+            #[derive(serde::Deserialize)]
+            struct R { ca_pem_b64: String, name: Option<String>, identifier: Option<String> }
+            let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let profile = lancer_mobile::ios::make_profile(
+                &r.ca_pem_b64,
+                r.name.as_deref().unwrap_or("Lancer CA"),
+                r.identifier.as_deref().unwrap_or("io.lancer.ca"));
+            Response::builder().status(200)
+                .header("content-type", "application/x-apple-aspen-config")
+                .body(Full::new(Bytes::from(profile))).unwrap()
+        }
+        (Method::GET, "/v1/mobile/frida-script") => {
+            let kind = parse_query(query, "kind").unwrap_or_else(|| "android".into());
+            json(&serde_json::json!({ "script": mobile_frida_script(&kind) }))
+        }
+
         // ── Sequencer (real backend instead of client-side mock) ─────────
         (Method::POST, "/v1/sequencer/analyse") => {
             #[derive(serde::Deserialize)]
@@ -600,24 +865,10 @@ async fn dispatch(
             };
             let n = r.tokens.len();
             if n == 0 { return json(&serde_json::json!({"tokens":0,"bit_entropy":0.0,"rating":"Need more"})); }
-            // Per-token shannon entropy (bits/char), averaged * mean length
-            let total_chars: f64 = r.tokens.iter().map(|t| t.chars().count() as f64).sum();
-            let mean_len = total_chars / n as f64;
-            let mut counts = std::collections::HashMap::new();
-            let mut total_n = 0u64;
-            for t in &r.tokens {
-                for ch in t.chars() {
-                    *counts.entry(ch).or_insert(0u64) += 1;
-                    total_n += 1;
-                }
-            }
-            let total = total_n as f64;
-            let mut h_char = 0.0f64;
-            for &c in counts.values() {
-                let p = c as f64 / total;
-                if p > 0.0 { h_char -= p * p.log2(); }
-            }
-            let bit_entropy = (h_char * mean_len).max(0.0);
+            // Real FIPS-style battery from lancer-tools (monobit / poker / runs / per-position entropy).
+            let token_bytes: Vec<Vec<u8>> = r.tokens.iter().map(|t| t.as_bytes().to_vec()).collect();
+            let report = lancer_tools::sequencer::Sequencer::analyze(&token_bytes);
+            let bit_entropy = report.effective_entropy_bits;
             let rating = if n < 16 { "Need more" }
                 else if bit_entropy >= 96.0 { "Strong" }
                 else if bit_entropy >= 64.0 { "Excellent" }
@@ -626,10 +877,49 @@ async fn dispatch(
             json(&serde_json::json!({
                 "tokens": n,
                 "bit_entropy": (bit_entropy * 10.0).round() / 10.0,
-                "char_entropy_per_char": (h_char * 100.0).round() / 100.0,
-                "mean_length": (mean_len * 10.0).round() / 10.0,
+                "effective_entropy_bits": (bit_entropy * 10.0).round() / 10.0,
+                "total_bits": report.total_bits,
+                "monobit_p_value": report.monobit_p_value,
+                "poker_p_value": report.poker_p_value,
+                "runs_p_value": report.runs_p_value,
+                "char_position_entropy": report.char_position_entropy,
+                "fips_pass": report.pass,
                 "rating": rating,
             }))
+        }
+
+        // ── Decoder / transform (real backend: octal/binary/gzip/MD2/SHA-3, etc.) ──
+        (Method::POST, "/v1/transform") => {
+            #[derive(serde::Deserialize)]
+            struct Req { op: String, input: String }
+            let Ok(r) = serde_json::from_slice::<Req>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            let Some(op) = lancer_core::transform::TransformOp::parse(&r.op) else {
+                return text(StatusCode::BAD_REQUEST, &format!("unknown transform op: {}", r.op));
+            };
+            match op.apply(r.input.as_bytes()) {
+                Ok(out) => {
+                    use base64::Engine as _;
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&out);
+                    json(&serde_json::json!({
+                        "ok": true,
+                        "text": String::from_utf8_lossy(&out),
+                        "hex": hex::encode(&out),
+                        "base64": b64,
+                    }))
+                }
+                Err(e) => json(&serde_json::json!({ "ok": false, "error": e.to_string() })),
+            }
+        }
+        (Method::POST, "/v1/transform/smart-decode") => {
+            #[derive(serde::Deserialize)]
+            struct Req { input: String }
+            let Ok(r) = serde_json::from_slice::<Req>(body) else {
+                return text(StatusCode::BAD_REQUEST, "bad json");
+            };
+            let out = lancer_core::transform::smart_decode(r.input.as_bytes());
+            json(&serde_json::json!({ "ok": true, "text": String::from_utf8_lossy(&out) }))
         }
 
         // ── §5.7 Nuclei-style Templates ──────────────────────────────────
@@ -794,6 +1084,27 @@ async fn dynamic_route(
             }
         }
     }
+    // PATCH /v1/history/{id}  → set inline comment / highlight color
+    if method == Method::PATCH {
+        if let Some(id_str) = path.strip_prefix("/v1/history/") {
+            if let Ok(id) = id_str.parse::<uuid::Uuid>() {
+                #[derive(serde::Deserialize)]
+                struct P { comment: Option<String>, color: Option<String> }
+                let Ok(p) = serde_json::from_slice::<P>(body) else {
+                    return text(StatusCode::BAD_REQUEST, "bad json");
+                };
+                let storage = state.project.read().clone();
+                let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+                if let Some(c) = &p.comment {
+                    let _ = s.history().set_comment(id, Some(c)).await;
+                }
+                if let Some(c) = &p.color {
+                    let _ = s.history().set_color(id, Some(c)).await;
+                }
+                return json(&serde_json::json!({ "ok": true }));
+            }
+        }
+    }
 
     // POST /v1/findings/{id}/triage  → AI/heuristic CVSS scoring
     if method == Method::POST {
@@ -886,6 +1197,80 @@ async fn dynamic_route(
             // (Library uses internal Vec; we expose only add — so emulate by re-allocating a fresh wrapper.)
             let _ = kept; // placeholder: full delete needs library API change
             return json(&serde_json::json!({ "ok": true }));
+        }
+    }
+
+    // ── Plugins: enable/disable, uninstall, install-from-text ─────────────────
+    if method == Method::POST {
+        if let Some(rest) = path.strip_prefix("/v1/plugins/") {
+            if let Some(id) = rest.strip_suffix("/toggle") {
+                #[derive(serde::Deserialize)]
+                struct T { enabled: bool }
+                let t: T = serde_json::from_slice(body).unwrap_or(T { enabled: true });
+                state.plugins.enable(id, t.enabled);
+                return json(&serde_json::json!({ "ok": true, "id": id, "enabled": t.enabled }));
+            }
+            if rest == "upload" {
+                // GUI posts JSON {name, content} (a plugin.toml body). Write into a managed
+                // plugins dir next to the cwd and load it. Multi-file Rhai plugins that
+                // reference an external script still load if the script sits beside it.
+                #[derive(serde::Deserialize)]
+                struct U { name: String, content: String }
+                let Ok(u) = serde_json::from_slice::<U>(body) else {
+                    return text(StatusCode::BAD_REQUEST, "expected {name, content}");
+                };
+                let stem = std::path::Path::new(&u.name)
+                    .file_stem().and_then(|s| s.to_str()).unwrap_or("plugin").to_string();
+                let dir = std::path::PathBuf::from("plugins").join(&stem);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    return text(StatusCode::INTERNAL_SERVER_ERROR, &format!("mkdir: {e}"));
+                }
+                let manifest = dir.join("plugin.toml");
+                if let Err(e) = std::fs::write(&manifest, u.content.as_bytes()) {
+                    return text(StatusCode::INTERNAL_SERVER_ERROR, &format!("write: {e}"));
+                }
+                match state.plugins.load_one(&manifest) {
+                    Ok(_) => return json(&serde_json::json!({ "ok": true, "loaded": stem })),
+                    Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+                }
+            }
+        }
+    }
+    if method == Method::DELETE {
+        if let Some(id) = path.strip_prefix("/v1/plugins/") {
+            let removed = state.plugins.remove(id);
+            return json(&serde_json::json!({ "ok": removed }));
+        }
+    }
+
+    // ── Organizer: edit tags/notes/title, delete ─────────────────────────────
+    if method == Method::PUT {
+        if let Some(id_str) = path.strip_prefix("/v1/organizer/") {
+            if let Ok(id) = id_str.parse::<uuid::Uuid>() {
+                #[derive(serde::Deserialize)]
+                struct P { title: Option<String>, tags: Option<Vec<String>>, notes: Option<String> }
+                let Ok(p) = serde_json::from_slice::<P>(body) else {
+                    return text(StatusCode::BAD_REQUEST, "bad json");
+                };
+                let storage = state.project.read().clone();
+                let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+                return match s.organizer().update(id, p.title, p.tags, p.notes).await {
+                    Ok(_) => json(&serde_json::json!({ "ok": true })),
+                    Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+                };
+            }
+        }
+    }
+    if method == Method::DELETE {
+        if let Some(id_str) = path.strip_prefix("/v1/organizer/") {
+            if let Ok(id) = id_str.parse::<uuid::Uuid>() {
+                let storage = state.project.read().clone();
+                let Some(s) = storage else { return text(StatusCode::CONFLICT, "no project") };
+                return match s.organizer().delete(id).await {
+                    Ok(_) => json(&serde_json::json!({ "ok": true })),
+                    Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+                };
+            }
         }
     }
 
@@ -1200,6 +1585,24 @@ async fn dynamic_route(
                 };
             }
         }
+        // POST /v1/modules/{id}/set-state  → persistent off|on|auto (§52)
+        if let Some(id) = rest.strip_suffix("/set-state") {
+            if method == Method::POST {
+                #[derive(serde::Deserialize)]
+                struct S { state: String, idle_timeout_min: Option<u32> }
+                let Ok(s) = serde_json::from_slice::<S>(body) else {
+                    return text(StatusCode::BAD_REQUEST, "bad json");
+                };
+                let st = match s.state.as_str() {
+                    "on"   => ModuleState::On,
+                    "auto" => ModuleState::Auto { idle_timeout_min: s.idle_timeout_min.unwrap_or(5) },
+                    _      => ModuleState::Off,
+                };
+                state.modules.set_state(id, st);
+                persist_modules(&state.modules);
+                return json(&serde_json::json!({ "ok": true, "id": id, "state": s.state }));
+            }
+        }
     }
     if method == Method::GET && path == "/v1/modules/presets" {
         return json(&state.module_presets.list());
@@ -1213,6 +1616,31 @@ async fn dynamic_route(
     }
 
     text(StatusCode::NOT_FOUND, "not found")
+}
+
+/// `~/.lancer/modules.toml` — persistent per-module enable/disable state (§52).
+fn modules_toml_path() -> std::path::PathBuf {
+    let base = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    base.join(".lancer").join("modules.toml")
+}
+
+/// Snapshot the registry's module states into modules.toml.
+fn persist_modules(reg: &ModuleRegistry) {
+    let mut toml = lancer_modules::ModulesToml::default();
+    for (id, st) in reg.states_snapshot() {
+        let (state, idle) = match st {
+            ModuleState::Off => ("off".to_string(), None),
+            ModuleState::On => ("on".to_string(), None),
+            ModuleState::Auto { idle_timeout_min } => ("auto".to_string(), Some(idle_timeout_min)),
+        };
+        toml.modules.insert(id, lancer_modules::ModuleConfig {
+            state, auto_idle_timeout_min: idle, sudo_method: None,
+        });
+    }
+    let _ = toml.save(&modules_toml_path());
 }
 
 fn register_module(reg: &Arc<ModuleRegistry>, m: Box<dyn lancer_modules::LancerModule>) {
@@ -1304,25 +1732,111 @@ async fn issues_list(state: &AppState) -> Response<Full<Bytes>> {
 }
 
 async fn report(state: &AppState, query: &str) -> Response<Full<Bytes>> {
-    use lancer_report::{render_html, render_json, render_markdown, render_sarif, render_xml, ReportFilter, ReportMeta};
+    use lancer_report::{render_html, render_json, render_markdown, render_pdf, render_sarif, render_tera, render_xml, ReportFilter, ReportMeta, DEFAULT_TERA_TEMPLATE};
+    use lancer_storage::issues::{Confidence, Severity};
     let storage = state.project.read().clone();
     let Some(storage) = storage else { return text(StatusCode::CONFLICT, "no project open") };
     let Ok(issues) = storage.issues().list().await else { return text(StatusCode::INTERNAL_SERVER_ERROR, "db") };
     let fmt = parse_query(query, "format").unwrap_or_else(|| "json".into());
-    let meta = ReportMeta::new("Lancer project");
-    let f = ReportFilter::default();
-    let (ct, body) = match fmt.as_str() {
-        "html"     => ("text/html; charset=utf-8", render_html(&meta, &issues, &f)),
-        "markdown" => ("text/markdown", render_markdown(&meta, &issues, &f)),
-        "sarif"    => ("application/sarif+json", render_sarif(&meta, &issues, &f)),
-        "xml"      => ("application/xml", render_xml(&meta, &issues, &f)),
-        _          => ("application/json", render_json(&meta, &issues, &f)),
+
+    // Build a filter from query params (?min_severity=High&min_confidence=Firm&include_fp=1&host=foo).
+    let f = ReportFilter {
+        min_severity: parse_query(query, "min_severity").and_then(|s| Severity::parse(&s)),
+        min_confidence: parse_query(query, "min_confidence").and_then(|s| Confidence::parse(&s)),
+        include_fp: matches!(parse_query(query, "include_fp").as_deref(), Some("1") | Some("true")),
+        host_filter: parse_query(query, "host").filter(|s| !s.is_empty()),
+    };
+
+    let mut meta = ReportMeta::new("Lancer project");
+    // Auto executive summary (?summary=1) from severity tallies.
+    if matches!(parse_query(query, "summary").as_deref(), Some("1") | Some("true")) {
+        let mut crit = 0; let mut high = 0; let mut med = 0; let mut low = 0; let mut info = 0;
+        for i in &issues {
+            match i.severity {
+                Severity::Critical => crit += 1,
+                Severity::High => high += 1,
+                Severity::Medium => med += 1,
+                Severity::Low => low += 1,
+                Severity::Info => info += 1,
+            }
+        }
+        meta.executive_summary = Some(format!(
+            "This assessment identified {} finding(s): {} critical, {} high, {} medium, {} low, {} informational. \
+             Critical and high findings should be remediated as a priority.",
+            issues.len(), crit, high, med, low, info));
+    }
+
+    let (ct, body): (&str, Vec<u8>) = match fmt.as_str() {
+        "html"     => ("text/html; charset=utf-8", render_html(&meta, &issues, &f).into_bytes()),
+        "markdown" => ("text/markdown", render_markdown(&meta, &issues, &f).into_bytes()),
+        "sarif"    => ("application/sarif+json", render_sarif(&meta, &issues, &f).into_bytes()),
+        "xml"      => ("application/xml", render_xml(&meta, &issues, &f).into_bytes()),
+        "pdf"      => ("application/pdf", render_pdf(&meta, &issues, &f)),
+        "tera"     => {
+            let kept: Vec<_> = issues.iter().filter(|i| f.keep(i)).cloned().collect();
+            match render_tera(DEFAULT_TERA_TEMPLATE, &meta, &kept) {
+                Ok(s) => ("text/html; charset=utf-8", s.into_bytes()),
+                Err(e) => return text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            }
+        }
+        _          => ("application/json", render_json(&meta, &issues, &f).into_bytes()),
     };
     Response::builder()
         .status(200)
         .header("content-type", ct)
         .body(Full::new(Bytes::from(body)))
         .unwrap()
+}
+
+/// BYO-LLM completion for Repeater AI buttons / report drafting (§16/§27).
+async fn ai_complete(_state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
+    use lancer_ai::{prompts, Anthropic, LlmMessage, LlmProvider, LlmRequest, Ollama, OpenAi};
+    #[derive(serde::Deserialize)]
+    struct R {
+        action: Option<String>,   // explain | investigate | validate | report | custom
+        content: String,          // request / response / finding text
+        prompt: Option<String>,   // custom system prompt
+        provider: Option<String>, // openai | anthropic | ollama
+        model: Option<String>,
+        api_key: Option<String>,
+    }
+    let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+    let system: String = match r.action.as_deref() {
+        Some("investigate") => prompts::INVESTIGATE.to_string(),
+        Some("validate")    => prompts::VALIDATE.to_string(),
+        Some("report")      => prompts::REPORT.to_string(),
+        Some("custom")      => r.prompt.clone().unwrap_or_else(|| prompts::EXPLAIN.to_string()),
+        _                   => prompts::EXPLAIN.to_string(),
+    };
+    let provider_name = r.provider.clone().unwrap_or_else(|| "ollama".into());
+    let model = r.model.unwrap_or_else(|| match provider_name.as_str() {
+        "openai"    => "gpt-4o-mini".into(),
+        "anthropic" => "claude-3-5-haiku-20241022".into(),
+        _           => "llama3".into(),
+    });
+    let api_key = r.api_key.unwrap_or_default();
+    let mut req = LlmRequest::default();
+    req.model = model;
+    req.system = Some(system);
+    req.messages = vec![LlmMessage { role: "user".into(), content: r.content }];
+    req.max_tokens = Some(1024);
+    let provider: Box<dyn LlmProvider> = match provider_name.as_str() {
+        "openai"    => Box::new(OpenAi { api_key, ..Default::default() }),
+        "anthropic" => Box::new(Anthropic { api_key, ..Default::default() }),
+        _           => Box::new(Ollama::default()),
+    };
+    match provider.complete(&req).await {
+        Ok(resp) => json(&serde_json::json!({ "ok": true, "content": resp.content, "provider": resp.provider })),
+        Err(e) => json(&serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
+}
+
+fn mobile_frida_script(kind: &str) -> &'static str {
+    match kind {
+        "ios"     => lancer_mobile::frida::IOS_SSL_PIN_BYPASS,
+        "flutter" => lancer_mobile::frida::FLUTTER_BYPASS,
+        _         => lancer_mobile::frida::ANDROID_SSL_PIN_BYPASS,
+    }
 }
 
 async fn repeater(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
@@ -1346,6 +1860,13 @@ async fn repeater(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
 }
 
 async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
+    // Accept payloads as either a flat list (one set) or a list of sets.
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Payloads {
+        Sets(Vec<Vec<String>>),
+        Flat(Vec<String>),
+    }
     #[derive(serde::Deserialize)]
     struct R {
         request: String,
@@ -1353,7 +1874,7 @@ async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
         host: Option<String>,
         port: Option<u16>,
         kind: Option<String>,
-        payloads: Option<Vec<Vec<String>>>,
+        payloads: Option<Payloads>,
     }
     let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
     let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
@@ -1361,13 +1882,21 @@ async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
     if let Some(h) = r.host { if !h.is_empty() { req.meta.host = h; } }
     if let Some(p) = r.port { if p > 0 { req.meta.port = p; } }
 
-    let kind = match r.kind.as_deref() {
-        Some("BatteringRam") => AttackKind::BatteringRam,
-        Some("Pitchfork")    => AttackKind::Pitchfork,
-        Some("ClusterBomb")  => AttackKind::ClusterBomb,
-        _                    => AttackKind::Sniper,
+    // Case/separator-insensitive attack kind ("battering-ram", "BatteringRam", "battering_ram" all work).
+    let kind_norm: String = r.kind.as_deref().unwrap_or("sniper")
+        .chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase();
+    let kind = match kind_norm.as_str() {
+        "batteringram" => AttackKind::BatteringRam,
+        "pitchfork"    => AttackKind::Pitchfork,
+        "clusterbomb"  => AttackKind::ClusterBomb,
+        _              => AttackKind::Sniper,
     };
-    let sets: Vec<PayloadSet> = r.payloads.unwrap_or_default().into_iter()
+    let raw_sets: Vec<Vec<String>> = match r.payloads {
+        Some(Payloads::Sets(s)) => s,
+        Some(Payloads::Flat(f)) => vec![f],
+        None => Vec::new(),
+    };
+    let sets: Vec<PayloadSet> = raw_sets.into_iter()
         .map(|items| PayloadSet::Simple(items))
         .collect();
 

@@ -51,7 +51,7 @@ pub struct ReportFilter {
 }
 
 impl ReportFilter {
-    fn keep(&self, issue: &Issue) -> bool {
+    pub fn keep(&self, issue: &Issue) -> bool {
         if !self.include_fp && issue.false_positive {
             return false;
         }

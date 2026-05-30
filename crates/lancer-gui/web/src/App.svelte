@@ -30,6 +30,8 @@
   import CmsScan from "./views/CmsScan.svelte";
   import Exploits from "./views/Exploits.svelte";
   import Modules from "./views/Modules.svelte";
+  import Mobile from "./views/Mobile.svelte";
+  import Iac from "./views/Iac.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -68,6 +70,7 @@
     { id: "sequencer", label: "Sequencer" },
     { id: "decoder",   label: "Decoder" },
     { id: "comparer",  label: "Comparer" },
+    { id: "scanner",   label: "Scanner" },
     { id: "logger",    label: "Logger" },
     { id: "organizer", label: "Organizer" },
     { id: "findings",  label: "Findings" },
@@ -84,6 +87,8 @@
     { id: "fuzz",       label: "Stateful Fuzz" },
     { id: "cms",        label: "CMS Scan" },
     { id: "exploits",   label: "Exploit DB" },
+    { id: "mobile",     label: "Mobile" },
+    { id: "iac",        label: "IaC" },
     { id: "modules",    label: "Modules" },
     { id: "cookies",   label: "Cookies" },
     { id: "plugins",   label: "Plugins" },
@@ -234,6 +239,8 @@
     {#if active === "fuzz"}<StatefulFuzz />{/if}
     {#if active === "cms"}<CmsScan />{/if}
     {#if active === "exploits"}<Exploits />{/if}
+    {#if active === "mobile"}<Mobile />{/if}
+    {#if active === "iac"}<Iac />{/if}
     {#if active === "modules"}<Modules />{/if}
     {#if active === "cookies"}<Cookies />{/if}
     {#if active === "plugins"}<Plugins />{/if}

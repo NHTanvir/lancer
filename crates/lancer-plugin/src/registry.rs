@@ -82,6 +82,14 @@ impl PluginRegistry {
             p.enabled = enabled;
         }
     }
+
+    /// Remove a loaded plugin by id. Returns true if one was removed.
+    pub fn remove(&self, id: &str) -> bool {
+        let mut list = self.plugins.write();
+        let before = list.len();
+        list.retain(|p| p.manifest.id != id);
+        list.len() != before
+    }
 }
 
 fn walkdir(root: &Path) -> Result<Vec<PathBuf>> {

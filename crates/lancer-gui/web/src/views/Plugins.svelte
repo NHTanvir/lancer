@@ -90,10 +90,13 @@
   async function onFileSelected(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
     try {
-      await fetch("/api/v1/plugins/upload", { method: "POST", body: fd });
+      const content = await file.text();
+      await fetch("/api/v1/plugins/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: file.name, content }),
+      });
       await load();
     } catch {}
     e.target.value = "";

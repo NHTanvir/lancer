@@ -41,8 +41,71 @@
   // Context menu
   let ctxMenu = null;
 
-  // Burp AI tooltip
-  let showAiTooltip = false;
+  // ── Burp AI ───────────────────────────────────────────────────────────────────
+  let aiMenuOpen = false;
+  let aiLoading = false;
+  let aiError = "";
+  let aiResult = "";       // returned markdown-ish content
+  let aiProvider = "";     // provider echoed back from the server
+  let aiAction = "";       // which action produced aiResult (for the panel title)
+  let aiPanelOpen = false; // results panel visibility
+
+  const AI_ACTIONS = [
+    { id: "explain",     label: "Explain",     desc: "Plain-English summary of the request" },
+    { id: "investigate", label: "Investigate", desc: "Suggest follow-up tests & payloads" },
+    { id: "validate",    label: "Validate",    desc: "Assess exploitability of the exchange" },
+  ];
+
+  function aiContent(s) {
+    // Concatenate the current tab's request + response (if present).
+    const reqText = (s?.request || "").trim();
+    const respText = (s?.response || "").trim();
+    if (respText) {
+      return `=== HTTP REQUEST ===\n${reqText}\n\n=== HTTP RESPONSE ===\n${respText}`;
+    }
+    return reqText;
+  }
+
+  async function runAi(action) {
+    aiMenuOpen = false;
+    const s = tabStates[activeTab];
+    if (!s) return;
+    const content = aiContent(s);
+    if (!content) { aiError = "Nothing to analyze — the request is empty."; aiPanelOpen = true; aiResult = ""; return; }
+
+    aiAction = action;
+    aiLoading = true;
+    aiError = "";
+    aiResult = "";
+    aiProvider = "";
+    aiPanelOpen = true;
+
+    const provider = localStorage.getItem("lancer.ai.provider") || "ollama";
+    const model = localStorage.getItem("lancer.ai.model") || "";
+    const api_key = localStorage.getItem("lancer.ai.key") || "";
+
+    try {
+      const r = await fetch("/api/v1/ai", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, content, provider, model, api_key }),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        aiResult = data.content || "(empty response)";
+        aiProvider = data.provider || provider;
+      } else {
+        aiError = data.error || `Request failed (HTTP ${r.status}).`;
+      }
+    } catch (e) {
+      aiError = e.message || String(e);
+    } finally {
+      aiLoading = false;
+    }
+  }
+
+  function closeAiPanel() { aiPanelOpen = false; }
+  function copyAiResult() { if (aiResult) navigator.clipboard.writeText(aiResult).catch(() => {}); }
 
   // ── Derived ───────────────────────────────────────────────────────────────────
   $: state = tabStates[activeTab] || tabStates[Object.keys(tabStates)[0]];
@@ -343,10 +406,61 @@
 
   function ctxSendToIntruder() {
     const s = tabStates[activeTab];
-    localStorage.setItem("intruder_prefill", JSON.stringify({
-      request: s.request, scheme: s.scheme, host: s.host, port: s.port
+    // Matches Intruder.svelte onMount which reads "lancer.send.intruder" {scheme,host,port,raw}.
+    localStorage.setItem("lancer.send.intruder", JSON.stringify({
+      scheme: s.scheme, host: s.host, port: s.port, raw: s.request
     }));
     window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "intruder" }));
+    closeCtx();
+  }
+
+  function ctxSendToSequencer() {
+    const s = tabStates[activeTab];
+    localStorage.setItem("lancer.send.sequencer", JSON.stringify({
+      scheme: s.scheme, host: s.host, port: s.port, raw: s.request
+    }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "sequencer" }));
+    closeCtx();
+  }
+
+  function ctxSendToComparer() {
+    const s = tabStates[activeTab];
+    // Diff this request against its own response by default.
+    localStorage.setItem("lancer.send.comparer", JSON.stringify({
+      item1: s.request || "", item2: s.response || ""
+    }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "comparer" }));
+    closeCtx();
+  }
+
+  function ctxSendToDecoder() {
+    const s = tabStates[activeTab];
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: s.request || "" }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
+    closeCtx();
+  }
+
+  function ctxCopyFetch() {
+    const s = tabStates[activeTab];
+    const url = `${s.scheme}://${s.host}:${s.port}${inspectorData.fullPath}`;
+    const headers = {};
+    for (const h of inspectorData.headers) headers[h.name] = h.value;
+    const init = { method: inspectorData.method, headers };
+    if (inspectorData.body) init.body = inspectorData.body;
+    const js = `fetch(${JSON.stringify(url)}, ${JSON.stringify(init, null, 2)});`;
+    navigator.clipboard.writeText(js).catch(() => {});
+    closeCtx();
+  }
+
+  function ctxCopyPowerShell() {
+    const s = tabStates[activeTab];
+    const url = `${s.scheme}://${s.host}:${s.port}${inspectorData.fullPath}`;
+    const hdrs = inspectorData.headers
+      .map(h => `    ${JSON.stringify(h.name)} = ${JSON.stringify(h.value)}`).join("\n");
+    let ps = `$headers = @{\n${hdrs}\n}\n`;
+    ps += `Invoke-WebRequest -Uri '${url}' -Method ${inspectorData.method} -Headers $headers`;
+    if (inspectorData.body) ps += ` -Body ${JSON.stringify(inspectorData.body)}`;
+    navigator.clipboard.writeText(ps).catch(() => {});
     closeCtx();
   }
 
@@ -399,8 +513,9 @@
         localStorage.removeItem("repeater_prefill");
       } catch {}
     }
-    document.addEventListener("click", closeCtx);
-    return () => document.removeEventListener("click", closeCtx);
+    const onDocClick = () => { closeCtx(); aiMenuOpen = false; };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
   });
 </script>
 
@@ -480,21 +595,39 @@
 
       <div style="flex:1"></div>
 
-      <!-- Burp AI (stub) -->
-      <div class="burp-ai-wrap">
+      <!-- Burp AI -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="burp-ai-wrap" on:click|stopPropagation>
         <button
           class="toolbar-btn btn-ai"
-          on:mouseenter={() => (showAiTooltip = true)}
-          on:mouseleave={() => (showAiTooltip = false)}
+          class:btn-ai-active={aiMenuOpen}
+          title="AI-assisted analysis"
+          disabled={aiLoading}
+          on:click={() => (aiMenuOpen = !aiMenuOpen)}
         >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <path d="M7 1l1.2 3.8H12L9 7.3l1.2 3.7L7 9.1 3.8 11l1.2-3.7L2 4.8h3.8z"
-              fill="currentColor" opacity="0.9"/>
-          </svg>
+          {#if aiLoading}
+            <svg class="spin" width="11" height="11" viewBox="0 0 12 12" fill="none">
+              <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="14 8"/>
+            </svg>
+          {:else}
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1l1.2 3.8H12L9 7.3l1.2 3.7L7 9.1 3.8 11l1.2-3.7L2 4.8h3.8z"
+                fill="currentColor" opacity="0.9"/>
+            </svg>
+          {/if}
           Burp AI
+          <svg width="8" height="8" viewBox="0 0 8 8" style="margin-left:2px"><path d="M1 3l3 3 3-3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        {#if showAiTooltip}
-          <div class="ai-tooltip">Coming soon</div>
+        {#if aiMenuOpen}
+          <div class="ai-menu">
+            {#each AI_ACTIONS as a}
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <div class="ai-menu-item" on:click={() => runAi(a.id)}>
+                <span class="ai-menu-label">{a.label}</span>
+                <span class="ai-menu-desc">{a.desc}</span>
+              </div>
+            {/each}
+          </div>
         {/if}
       </div>
     </div>
@@ -832,6 +965,45 @@
         {/if}
       </div>
     </div>
+
+    <!-- 5. Burp AI results panel -->
+    {#if aiPanelOpen}
+      <div class="ai-panel">
+        <div class="ai-panel-hdr">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1l1.2 3.8H12L9 7.3l1.2 3.7L7 9.1 3.8 11l1.2-3.7L2 4.8h3.8z" fill="currentColor" opacity="0.9"/>
+          </svg>
+          <span class="ai-panel-title">
+            Burp AI
+            {#if aiAction}<span class="ai-panel-action">· {aiAction}</span>{/if}
+          </span>
+          {#if aiProvider && !aiLoading && !aiError}
+            <span class="ai-panel-prov">{aiProvider}</span>
+          {/if}
+          <div style="flex:1"></div>
+          {#if aiResult && !aiLoading}
+            <button class="ai-panel-btn" title="Copy result" on:click={copyAiResult}>Copy</button>
+          {/if}
+          <button class="ai-panel-btn ai-panel-close" title="Close" on:click={closeAiPanel}>×</button>
+        </div>
+        <div class="ai-panel-body">
+          {#if aiLoading}
+            <div class="ai-loading">
+              <svg class="spin" width="16" height="16" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="14 8"/>
+              </svg>
+              <span>Asking the model…</span>
+            </div>
+          {:else if aiError}
+            <div class="ai-err">{aiError}</div>
+          {:else if aiResult}
+            <pre class="ai-content">{aiResult}</pre>
+          {:else}
+            <div class="ai-empty">No content returned.</div>
+          {/if}
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -844,15 +1016,17 @@
     <div class="ctx-item ctx-disabled">Scan</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxSendToIntruder}>Send to Intruder <span class="ctx-shortcut">Ctrl+I</span></div>
-    <div class="ctx-item ctx-disabled">Send to Sequencer</div>
-    <div class="ctx-item ctx-disabled">Send to Comparer</div>
-    <div class="ctx-item ctx-disabled">Send to Decoder</div>
+    <div class="ctx-item" on:click={ctxSendToSequencer}>Send to Sequencer</div>
+    <div class="ctx-item" on:click={ctxSendToComparer}>Send to Comparer</div>
+    <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxChangeMethod}>Change request method</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={() => { navigator.clipboard.writeText(state.request || ""); closeCtx(); }}>Copy <span class="ctx-shortcut">Ctrl+C</span></div>
     <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
     <div class="ctx-item" on:click={ctxCopyCurl}>Copy as curl command (bash)</div>
+    <div class="ctx-item" on:click={ctxCopyFetch}>Copy as fetch (JS)</div>
+    <div class="ctx-item" on:click={ctxCopyPowerShell}>Copy as PowerShell</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxPasteHostAsRequest}>Paste host / URL as request</div>
     <div class="ctx-item" on:click={ctxAddToSiteMap}>Add to site map</div>
@@ -1011,27 +1185,121 @@
     gap: 4px;
   }
   .btn-ai svg { opacity: 0.85; }
-  .ai-tooltip {
+  .btn-ai-active {
+    color: #e03a00;
+    border-color: #e03a00;
+    background: #fff3ef;
+  }
+
+  /* AI action dropdown */
+  .ai-menu {
     position: absolute;
     right: 0;
     top: calc(100% + 6px);
-    background: #333;
-    color: #fff;
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 4px;
-    white-space: nowrap;
-    z-index: 500;
-    pointer-events: none;
+    background: #ffffff;
+    border: 1px solid #c0c0c0;
+    border-radius: 5px;
+    padding: 4px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+    z-index: 600;
+    min-width: 230px;
   }
-  .ai-tooltip::before {
-    content: "";
-    position: absolute;
-    top: -5px;
-    right: 12px;
-    border: 5px solid transparent;
-    border-bottom-color: #333;
-    border-top: none;
+  .ai-menu-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .ai-menu-item:hover { background: #fff3ef; }
+  .ai-menu-label { font-size: 12px; font-weight: 600; color: #333; }
+  .ai-menu-desc { font-size: 10.5px; color: #888; }
+
+  /* AI results panel (bottom of view) */
+  .ai-panel {
+    flex-shrink: 0;
+    max-height: 38%;
+    display: flex;
+    flex-direction: column;
+    border-top: 2px solid #e03a00;
+    background: #ffffff;
+    overflow: hidden;
+  }
+  .ai-panel-hdr {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #dedede;
+    flex-shrink: 0;
+    color: #e03a00;
+    min-height: 30px;
+  }
+  .ai-panel-title { font-size: 12px; font-weight: 700; color: #333; }
+  .ai-panel-action { font-weight: 400; color: #888; text-transform: capitalize; }
+  .ai-panel-prov {
+    font-size: 10px;
+    font-weight: 700;
+    background: #eaf4fb;
+    color: #2980b9;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 4px;
+  }
+  .ai-panel-btn {
+    background: #ececec;
+    border: 1px solid #c8c8c8;
+    border-radius: 3px;
+    color: #333;
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .ai-panel-btn:hover { background: #e0e0e0; }
+  .ai-panel-close { font-size: 14px; padding: 0 7px; line-height: 1.2; }
+
+  .ai-panel-body {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+  }
+  .ai-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: #767676;
+    font-size: 12px;
+  }
+  .ai-loading svg { color: #e03a00; }
+  .ai-err {
+    margin: 10px;
+    background: #fde8e8;
+    color: #c0392b;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .ai-content {
+    margin: 0;
+    padding: 12px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #212121;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .ai-empty {
+    padding: 14px;
+    color: #aaa;
+    font-style: italic;
+    font-size: 12px;
   }
 
   /* Spin animation */

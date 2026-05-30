@@ -15,12 +15,24 @@ use crate::ActiveCheck;
 
 pub struct SsrfCheck;
 
-const PROBES: &[&str] = &[
-    "http://169.254.169.254/latest/meta-data/",
-    "http://metadata.google.internal/computeMetadata/v1/",
+/// Non-cloud SSRF probes (the cloud-metadata endpoints come from the shared
+/// `lancer_tools::cloud_metadata::PROBES` table so coverage stays in sync).
+const EXTRA_PROBES: &[&str] = &[
     "http://127.0.0.1:22",
+    "http://[::1]:22",
     "file:///etc/hostname",
+    "http://169.254.169.254/",
 ];
+
+/// Every probe URL we inject: the full cloud-metadata table (AWS IMDSv1/v2, GCP,
+/// Azure, DigitalOcean, Oracle, Alibaba) plus the loopback/file extras.
+fn probe_urls() -> Vec<&'static str> {
+    lancer_tools::cloud_metadata::PROBES
+        .iter()
+        .map(|p| p.url)
+        .chain(EXTRA_PROBES.iter().copied())
+        .collect()
+}
 
 #[async_trait]
 impl ActiveCheck for SsrfCheck {
@@ -39,7 +51,10 @@ impl ActiveCheck for SsrfCheck {
         let mut issues = Vec::new();
         let aws_rx = Regex::new(r"(?i)ami-id|instance-id|iam/security-credentials").unwrap();
         let gcp_rx = Regex::new(r"(?i)Metadata-Flavor: Google|computeMetadata/v1/").unwrap();
-        for p in PROBES {
+        let azure_rx = Regex::new(r#"(?i)"compute"|"vmId"|"azEnvironment"|"subscriptionId""#).unwrap();
+        let alibaba_rx = Regex::new(r"(?i)100\.100\.100\.200|owner-account-id|zone-id").unwrap();
+        let do_rx = Regex::new(r"(?i)droplet[_-]?id|metadata/v1/").unwrap();
+        for p in probe_urls() {
             let Some(req) = substitute(base, point, p) else { continue };
             let Ok(resp) = client.send(&req).await else { continue };
             let body = resp.body_text().unwrap_or("");
@@ -48,6 +63,15 @@ impl ActiveCheck for SsrfCheck {
                 break;
             } else if gcp_rx.is_match(body) {
                 issues.push(make(base, point, "GCP instance metadata", Confidence::Firm));
+                break;
+            } else if azure_rx.is_match(body) {
+                issues.push(make(base, point, "Azure instance metadata", Confidence::Firm));
+                break;
+            } else if alibaba_rx.is_match(body) {
+                issues.push(make(base, point, "Alibaba Cloud instance metadata", Confidence::Firm));
+                break;
+            } else if do_rx.is_match(body) {
+                issues.push(make(base, point, "DigitalOcean droplet metadata", Confidence::Tentative));
                 break;
             } else if (200..300).contains(&resp.status) && body.contains("SSH-") {
                 issues.push(make(base, point, "SSH banner from 127.0.0.1", Confidence::Firm));
