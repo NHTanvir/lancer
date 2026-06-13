@@ -235,7 +235,9 @@
     { label: "SHA-256",    fn: (s) => hashHex("SHA-256", s) },
     { label: "SHA-384",    fn: (s) => hashHex("SHA-384", s) },
     { label: "SHA-512",    fn: (s) => hashHex("SHA-512", s) },
+    { label: "SHA-3-224",  fn: (s) => backendHash("sha3-224", s) },
     { label: "SHA-3-256",  fn: (s) => backendHash("sha3-256", s) },
+    { label: "SHA-3-384",  fn: (s) => backendHash("sha3-384", s) },
     { label: "SHA-3-512",  fn: (s) => backendHash("sha3-512", s) },
   ];
   const formatOps = [
