@@ -40,6 +40,7 @@
   import IdMutator from "./views/IdMutator.svelte";
   import ResponseDiffer from "./views/ResponseDiffer.svelte";
   import FlowGrapher from "./views/FlowGrapher.svelte";
+  import Scripts from "./views/Scripts.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -107,6 +108,7 @@
     { id: "modules",    label: "Modules" },
     { id: "cookies",   label: "Cookies" },
     { id: "sessions",  label: "Sessions" },
+    { id: "scripts",   label: "Scripts" },
     { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
     { id: "settings",  label: "Settings" },
@@ -318,6 +320,7 @@
     {#if active === "modules"}<Modules />{/if}
     {#if active === "cookies"}<Cookies />{/if}
     {#if active === "sessions"}<SessionHandling />{/if}
+    {#if active === "scripts"}<Scripts />{/if}
     {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}
     {#if active === "settings"}<Settings />{/if}

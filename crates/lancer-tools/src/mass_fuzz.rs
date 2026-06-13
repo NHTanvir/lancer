@@ -57,6 +57,9 @@ pub struct MassFuzzConfig {
     pub filter_size: Vec<usize>,
     #[serde(default)]
     pub max_requests: Option<usize>,
+    /// Recurse into discovered directories up to this depth (0 = no recursion).
+    #[serde(default)]
+    pub recursion_depth: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -73,7 +76,43 @@ pub struct MassFuzzResult {
 /// Hard cap so a careless wordlist × extension product can't run forever.
 const HARD_CAP: usize = 50_000;
 
+/// True when a result looks like a browsable directory worth recursing into.
+fn is_dir_hit(r: &MassFuzzResult) -> bool {
+    matches!(r.status, 200 | 301 | 302 | 401 | 403) && !r.word.contains('.')
+}
+
+/// Run the fuzz, recursing into discovered directories up to
+/// `cfg.recursion_depth`. Each discovered dir spawns a child template
+/// `…/<word>/FUZZ`.
 pub async fn run(cfg: MassFuzzConfig, client: HttpClient) -> Vec<MassFuzzResult> {
+    let depth = cfg.recursion_depth.unwrap_or(0);
+    if depth == 0 {
+        return run_once(&cfg, &cfg.url, &client).await;
+    }
+    let mut all: Vec<MassFuzzResult> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut queue: Vec<(String, usize)> = vec![(cfg.url.clone(), 0)];
+    while let Some((tpl, d)) = queue.pop() {
+        if !seen.insert(tpl.clone()) {
+            continue;
+        }
+        let sub = run_once(&cfg, &tpl, &client).await;
+        for r in &sub {
+            if d < depth && is_dir_hit(r) {
+                let child = tpl.replacen("FUZZ", &format!("{}/FUZZ", r.word), 1);
+                queue.push((child, d + 1));
+            }
+        }
+        all.extend(sub);
+        if all.len() > HARD_CAP {
+            break;
+        }
+    }
+    all
+}
+
+/// One non-recursive fuzz pass over `url_template`.
+async fn run_once(cfg: &MassFuzzConfig, url_template: &str, client: &HttpClient) -> Vec<MassFuzzResult> {
     let method = cfg.method.clone().unwrap_or_else(|| "GET".into());
     let concurrency = cfg.concurrency.unwrap_or(40).clamp(1, 256);
     let sem = Arc::new(Semaphore::new(concurrency));
@@ -86,7 +125,7 @@ pub async fn run(cfg: MassFuzzConfig, client: HttpClient) -> Vec<MassFuzzResult>
         if w.is_empty() { continue; }
         for e in &exts {
             let token = format!("{w}{e}");
-            let url = cfg.url.replace("FUZZ", &token);
+            let url = url_template.replace("FUZZ", &token);
             work.push((token, url));
             if work.len() >= cap { break 'outer; }
         }

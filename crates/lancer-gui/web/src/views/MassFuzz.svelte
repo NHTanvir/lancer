@@ -6,6 +6,7 @@
   let wordsText = "";
   let extensions = "";
   let concurrency = 40;
+  let recursionDepth = 0;
   let matchStatus = "200,204,301,302,307,401,403";
   let filterStatus = "404";
   let filterSize = "";
@@ -44,6 +45,7 @@
           url, method, words,
           extensions: parseList(extensions).map(e => e.startsWith(".") || e === "" ? e : "." + e),
           concurrency: +concurrency,
+          recursion_depth: +recursionDepth,
           match_status: parseNums(matchStatus),
           filter_status: parseNums(filterStatus),
           filter_size: parseNums(filterSize),
@@ -78,6 +80,7 @@
         <button class="btn-sec" on:click={loadCommon}>Load common</button>
         <label class="fld">Extensions<input bind:value={extensions} placeholder=".php,.bak,~" /></label>
         <label class="fld">Concurrency<input type="number" bind:value={concurrency} min="1" max="256" /></label>
+        <label class="fld">Recursion depth<input type="number" bind:value={recursionDepth} min="0" max="3" /></label>
       </div>
       <div class="col">
         <label class="fld">Match status (mc)<input bind:value={matchStatus} placeholder="200,301" /></label>

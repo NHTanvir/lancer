@@ -40,7 +40,7 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 17 | Session handling | ✅ | `lancer-session` cookie jar + macros + rules complete in backend. **batch-13:** new **Sessions** GUI tab — Session Handling **Rules editor** (name/enabled/tool-scope/url-regex + ordered action builder: SetHeader/SetCookie/UseCookieJar/RunMacro/PromptUser) via `/v1/sessions/rules` CRUD, and **Macros** list (create/run/delete) via `/v1/macros` + `/v1/macros/{id}/run`. Cookie jar now has per-cookie delete (`DELETE /v1/cookies/{key}`). Remaining: in-flight rule application in the proxy pipeline, macro step-recording from Repeater |
 | 18 | Project management | ✅ | SQLite project file ✅. Temporary in-memory default; disk projects auto-snapshot. **batch-14:** **File menu** in the topbar — New (temporary) / Open… (path → `/v1/project/open`) / current-project label / **Recent projects** list (localStorage). Config library still pending |
 | 19 | Reporting | ✅ | HTML/JSON/Markdown/SARIF/XML/PDF all rendered via `lancer-report`. **batch-14:** the **Jira / Linear / GitHub / DefectDojo / Faraday-CSV** exporters are now wired into `GET /v1/report?format=…` and exposed as format buttons in the Reports tab (download as JSON/CSV) |
-| 20 | Extensibility | 🟡 | Rhai built-in + WASM (`wasmtime`) + Lua (`mlua`) + Python (`pyo3`) + Native (`cdylib`) + JVM (Montoya, `jni`) all in `lancer-plugin`/`lancer-jvm`. **No plugin manager UI** — can't install/enable/disable plugins from the app. No BApp-store equivalent. No Bambda editor in GUI. No BCheck editor in GUI |
+| 20 | Extensibility | 🟡 | Rhai + WASM + Lua + Python + Native + JVM hosts all in `lancer-plugin`/`lancer-jvm`; plugin manager toggle/upload/delete present. **batch-16:** new **Scripts** tab — **Bambda (Rhai)** editor (test filter/passive-check vs a sample req+resp via `/v1/bambda/test`) + **BCheck (DSL)** validator (`/v1/bchecks/validate`). Still missing: BApp-store / install-from-URL |
 | 21 | CLI / Headless / REST API | ✅ | `lancer-cli` has 29 subcommands. `lancer-api` exposes proxy + history + scan + intruder + repeater + report. **Missing**: Docker image not verified, no documented CI/CD examples |
 | 22 | Mobile testing | ✅ | batch-12: new Mobile GUI tab + `/v1/mobile/*` (iOS install steps, .mobileconfig profile, Frida Android/iOS/Flutter scripts). CLI still available |
 | 23 | Network settings | 🟡 | batch-12: `GET/PUT /v1/proxy/settings` + Settings → Network GUI (upstream HTTP/SOCKS, TLS pass-through, DNS overrides, platform auth rows). NTLM/Negotiate still placeholder handshakes; listener re-bind applies on restart |
@@ -647,6 +647,19 @@ These need substantial new systems, not wiring, and remain open:
 - **§1.3 WebSocket frame capture** — DEFERRED: the proxy serves buffered `Full<Bytes>` responses and has no WS upgrade-tunnel path; full frame capture needs delicate proxy-core rework (dual `hyper::upgrade::on` + frame-decoding bidirectional copy) that cannot be runtime-verified safely here without risking the working HTTP proxy.
 - **§23 NTLM/Negotiate** platform auth — BLOCKED on system Kerberos/SSPI libs; **§25** 100k-req/s benchmark, **§26** live-collab cursor sync, **§29** eBPF BPF object, **§1.1** inbound HTTP/3, and the **public hosted Collaborator** remain net-new infra.
 - **Data corpora** (200+/800+ secret patterns, 120+ LLM probes, 10k routes, 200+ gadget classes, real ysoserial/exploit-db datasets) remain below the aspirational plan counts.
+
+---
+
+# IMPLEMENTATION STATUS — 2026-06-13 (batch-16) — CORPORA + EDITORS + LOGGER
+
+Implementable leftovers from the gap list (verified `cargo check --workspace` clean + `vite build` clean):
+
+- **Data corpora expansion** — `lancer-secrets` **25→69** patterns (Google/NPM/PyPI/HuggingFace/DigitalOcean/Square/Shopify/Discord/Telegram/Slack-webhook/Datadog/NewRelic/Grafana/Sentry/basic-auth-in-URL/JDBC/generic + more); gadget-probe **15→54** classes (Xalan/Spring-AOP/Hibernate5/c3p0/ROME/Vaadin/Rhino/RMI/JNDI/fastjson/…); LLM-scan **~26→55** probes (payload-splitting, grandma-exploit, token-smuggling, SSRF-via-tool, destructive-tool, hiring/loan bias, weak-crypto/path-traversal code, CDATA/im_start injection); API-route library **~90→283** templates (REST resource patterns, cloud metadata, k8s, actuators, CMS, secret/VCS exposure, monitoring).
+- **§12 Logger** — added **Source (Tool/Proxy) column**, source filter (All/Proxy/Tool), and **per-tool capture toggles** (persisted) over the history `tool_generated` flag.
+- **§4.6 Mass Fuzz** — **recursive content discovery**: discovered directories (200/301/401/403, no extension) spawn `…/<dir>/FUZZ` child passes up to a configurable depth; GUI gained a Recursion-depth control.
+- **§20 Extensibility** — new **Scripts** tab: **Bambda (Rhai)** editor that tests filter-request / filter-response / passive-check scripts against a sample request+response (`POST /v1/bambda/test`), and a **BCheck (DSL)** editor that validates/parses via the real runner (`POST /v1/bchecks/validate`).
+
+Remaining honest gaps: §6 scanner-payload auto-correlate + RSA callbacks, §17 in-flight rule application + macro recording (proxy-core), standalone `lancer-fuzz` CLI + SecLists bundle, vim keybindings + detachable windows (Tauri-bound), and real external datasets (ysoserial/exploit-db). Corpora are now substantially larger curated samples (not the literal 800/10k/200/120 aspirational counts, which need bundled third-party data feeds).
 
 ---
 

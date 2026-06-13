@@ -2527,6 +2527,7 @@ dependencies = [
  "lancer-replay",
  "lancer-report",
  "lancer-scanner",
+ "lancer-script",
  "lancer-secrets",
  "lancer-session",
  "lancer-shadow",

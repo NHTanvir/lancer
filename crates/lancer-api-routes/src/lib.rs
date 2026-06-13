@@ -110,6 +110,60 @@ pub fn default_route_library() -> Vec<&'static str> {
         // Static admin
         "/admin", "/administrator", "/wp-admin", "/wp-login.php",
         "/login", "/signin", "/console", "/dashboard",
+        // ── Expanded route library (batch-16) ──
+        // REST resource patterns
+        "/api/v1/roles", "/api/v1/permissions", "/api/v1/groups", "/api/v1/teams",
+        "/api/v1/tokens", "/api/v1/sessions", "/api/v1/keys", "/api/v1/apikeys",
+        "/api/v1/invites", "/api/v1/organizations", "/api/v1/workspaces",
+        "/api/v1/projects", "/api/v1/tasks", "/api/v1/jobs", "/api/v1/events",
+        "/api/v1/audit", "/api/v1/logs", "/api/v1/export", "/api/v1/import",
+        "/api/v1/billing", "/api/v1/invoices", "/api/v1/subscriptions", "/api/v1/plans",
+        "/api/v1/transactions", "/api/v1/wallets", "/api/v1/balances",
+        "/api/v1/messages", "/api/v1/comments", "/api/v1/reviews", "/api/v1/ratings",
+        "/api/v1/media", "/api/v1/images", "/api/v1/videos", "/api/v1/assets",
+        "/api/v1/feed", "/api/v1/timeline", "/api/v1/activity",
+        "/api/v1/devices", "/api/v1/sessions/current", "/api/v1/2fa", "/api/v1/mfa",
+        "/api/v1/password/reset", "/api/v1/password/forgot", "/api/v1/verify",
+        "/api/v1/oauth/token", "/api/v1/oauth/authorize", "/api/v1/sso",
+        "/api/internal", "/api/internal/admin", "/api/private", "/internal/api",
+        "/api/admin/users", "/api/admin/config", "/api/admin/flags",
+        // AWS / cloud metadata & service paths
+        "/latest/meta-data/", "/latest/meta-data/iam/security-credentials/",
+        "/latest/user-data/", "/latest/dynamic/instance-identity/document",
+        "/computeMetadata/v1/", "/metadata/instance",
+        "/2016-06-30/", "/2015-03-31/functions/",
+        // Kubernetes / container
+        "/api/v1/namespaces", "/api/v1/pods", "/api/v1/secrets", "/api/v1/configmaps",
+        "/api/v1/services", "/api/v1/nodes", "/apis/apps/v1/deployments",
+        "/v2/", "/v2/_catalog", "/v2/tags/list", // docker registry
+        // GraphQL / introspection
+        "/api/graphql/v1", "/gql", "/subscriptions",
+        // Spring / Java actuators (extended)
+        "/actuator/beans", "/actuator/configprops", "/actuator/mappings",
+        "/actuator/threaddump", "/actuator/loggers", "/actuator/metrics",
+        "/actuator/scheduledtasks", "/actuator/sessions", "/actuator/gateway/routes",
+        "/env", "/beans", "/trace", "/dump", "/mappings", "/configprops",
+        // PHP / CMS
+        "/wp-json/wp/v2/users", "/wp-json/wp/v2/posts", "/xmlrpc.php",
+        "/wp-content/debug.log", "/phpinfo.php", "/info.php", "/test.php",
+        "/administrator/index.php", "/user/login", "/admin/login",
+        // Secrets / config exposure
+        "/.env.development", "/.env.staging", "/.env.test",
+        "/config/database.yml", "/config/secrets.yml", "/appsettings.json",
+        "/web.config", "/application.properties", "/application.yml",
+        "/docker-compose.yml", "/Dockerfile", "/.dockerenv",
+        "/.npmrc", "/.pypirc", "/.netrc", "/credentials.json",
+        "/firebase.json", "/serviceAccount.json", "/gcp-credentials.json",
+        // Source / VCS exposure
+        "/.git/", "/.gitignore", "/.gitlab-ci.yml", "/.github/workflows/",
+        "/.hg/", "/.bzr/", "/CVS/", "/.DS_Store",
+        "/server-status", "/server-info", "/.htaccess", "/.htpasswd",
+        // Monitoring / observability
+        "/prometheus", "/grafana", "/kibana", "/_cat/indices", "/_cluster/health",
+        "/solr/", "/solr/admin/cores", "/elasticsearch/", "/_search",
+        // Misc dangerous
+        "/cgi-bin/", "/shell", "/cmd", "/exec", "/eval", "/proxy", "/redirect",
+        "/swagger/v1/swagger.json", "/api/swagger.json", "/api/swagger-ui.html",
     ]
 }
 

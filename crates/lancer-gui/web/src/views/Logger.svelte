@@ -5,15 +5,25 @@
   let filter = "";
   let selected = null;
   let pollInterval = null;
+  let sourceFilter = "all"; // all | proxy | tool
+  // §12 per-tool capture toggles (client-side view filter; persisted).
+  let capture = { proxy: true, tool: true };
+  try { const s = localStorage.getItem("lancer.logger.capture"); if (s) capture = JSON.parse(s); } catch {}
+  $: try { localStorage.setItem("lancer.logger.capture", JSON.stringify(capture)); } catch {}
 
-  $: filteredRows = rows.filter(r =>
-    !filter ||
-    (r.host && r.host.toLowerCase().includes(filter.toLowerCase())) ||
-    (r.path && r.path.toLowerCase().includes(filter.toLowerCase())) ||
-    (r.method && r.method.toLowerCase().includes(filter.toLowerCase())) ||
-    String(r.status || "").includes(filter) ||
-    (r.scheme && r.scheme.toLowerCase().includes(filter.toLowerCase()))
-  );
+  function sourceOf(r) { return r.tool_generated ? "tool" : "proxy"; }
+
+  $: filteredRows = rows.filter(r => {
+    const src = sourceOf(r);
+    if (!capture[src]) return false;
+    if (sourceFilter !== "all" && src !== sourceFilter) return false;
+    return !filter ||
+      (r.host && r.host.toLowerCase().includes(filter.toLowerCase())) ||
+      (r.path && r.path.toLowerCase().includes(filter.toLowerCase())) ||
+      (r.method && r.method.toLowerCase().includes(filter.toLowerCase())) ||
+      String(r.status || "").includes(filter) ||
+      (r.scheme && r.scheme.toLowerCase().includes(filter.toLowerCase()));
+  });
 
   function protocolLabel(r) {
     const s = (r.scheme || "http").toUpperCase();
@@ -155,6 +165,13 @@
     />
     <button class="toolbar-btn" on:click={load}>Reload</button>
     <button class="toolbar-btn" on:click={() => { rows = []; selected = null; }}>Clear</button>
+    <select class="src-sel" bind:value={sourceFilter} title="Filter by source tool">
+      <option value="all">All sources</option>
+      <option value="proxy">Proxy only</option>
+      <option value="tool">Tool only</option>
+    </select>
+    <label class="cap-tog" title="Capture proxy traffic"><input type="checkbox" bind:checked={capture.proxy} /> Proxy</label>
+    <label class="cap-tog" title="Capture tool-generated traffic"><input type="checkbox" bind:checked={capture.tool} /> Tools</label>
     <span class="dim" style="font-size:12px;margin-left:auto">{filteredRows.length} entries</span>
   </div>
 
@@ -164,6 +181,7 @@
         <thead>
           <tr>
             <th>#</th>
+            <th>Tool</th>
             <th>Protocol</th>
             <th>Host</th>
             <th>Method</th>
@@ -185,6 +203,7 @@
               on:contextmenu={(e) => onRowContextMenu(e, row)}
             >
               <td class="dim mono">{i + 1}</td>
+              <td><span class="src-badge src-{sourceOf(row)}">{row.tool_generated ? "Tool" : "Proxy"}</span></td>
               <td class="dim">{protocolLabel(row)}</td>
               <td>{row.host || "-"}</td>
               <td class={methodClass(row.method)}>{row.method || "-"}</td>
@@ -199,7 +218,7 @@
           {/each}
           {#if filteredRows.length === 0}
             <tr>
-              <td colspan="11" class="empty-cell">
+              <td colspan="12" class="empty-cell">
                 {rows.length === 0
                   ? "No requests logged yet. Browse via the proxy to populate this log."
                   : "No entries match the current filter."}
@@ -279,6 +298,11 @@
     border: 1px solid #c8c8c8; border-radius: 3px;
     cursor: pointer;
   }
+  .src-sel { padding: 4px 6px; font-size: 12px; border: 1px solid #c8c8c8; border-radius: 3px; }
+  .cap-tog { display: flex; align-items: center; gap: 3px; font-size: 12px; color: #555; }
+  .src-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+  .src-proxy { background: #e6f0fb; color: #2e6fae; }
+  .src-tool { background: #fff1e6; color: #c2620a; }
   .toolbar-btn:hover { background: #e4e4e4; }
 
   .logger-body {

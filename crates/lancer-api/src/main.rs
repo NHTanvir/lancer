@@ -1883,6 +1883,45 @@ async fn dynamic_route(
         };
     }
 
+    // ── §20 Bambda script tester (Rhai filter / passive-check) ───────────────
+    if method == Method::POST && path == "/v1/bambda/test" {
+        #[derive(serde::Deserialize)]
+        struct R { script: String, kind: String, request: Option<String>, response: Option<String> }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let eng = lancer_script::ScriptEngine::new();
+        let req = r.request.as_deref()
+            .and_then(|s| HttpRequest::parse_wire(s.as_bytes()).ok())
+            .unwrap_or_else(|| HttpRequest::builder("GET", "http://example.com/").unwrap());
+        let resp = r.response.as_deref()
+            .and_then(|s| lancer_core::HttpResponse::parse_wire(s.as_bytes()).ok());
+        let result = match r.kind.as_str() {
+            "filter_request" => eng.filter_request(&r.script, &req).map(|b| serde_json::json!({ "ok": true, "matched": b })),
+            "filter_response" => match &resp {
+                Some(rp) => eng.filter_response(&r.script, rp).map(|b| serde_json::json!({ "ok": true, "matched": b })),
+                None => Ok(serde_json::json!({ "ok": false, "error": "filter_response needs a sample response" })),
+            },
+            "passive_check" => match &resp {
+                Some(rp) => eng.passive_check(&r.script, &req, rp).map(|f| serde_json::json!({ "ok": true, "findings": f })),
+                None => Ok(serde_json::json!({ "ok": false, "error": "passive_check needs a sample response" })),
+            },
+            _ => Ok(serde_json::json!({ "ok": false, "error": "unknown kind" })),
+        };
+        return match result {
+            Ok(v) => json(&v),
+            Err(e) => json(&serde_json::json!({ "ok": false, "error": e.to_string() })),
+        };
+    }
+    // ── §5.6 BCheck validator ────────────────────────────────────────────────
+    if method == Method::POST && path == "/v1/bchecks/validate" {
+        #[derive(serde::Deserialize)]
+        struct R { yaml: String }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        return match lancer_scanner::bcheck::BCheck::parse(&r.yaml) {
+            Ok(bc) => json(&serde_json::json!({ "ok": true, "name": bc.name, "probes": bc.probes.len() })),
+            Err(e) => json(&serde_json::json!({ "ok": false, "error": e.to_string() })),
+        };
+    }
+
     // ── §33 Payload encyclopedia ─────────────────────────────────────────────
     if method == Method::GET && path == "/v1/payloads" {
         return json(&lancer_tools::payload_library::bundled());
