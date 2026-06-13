@@ -1906,12 +1906,43 @@ async fn repeater(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
 }
 
 async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
+    use lancer_tools::{PayloadProcessor, GrepConfig, GrepExtract};
     // Accept payloads as either a flat list (one set) or a list of sets.
     #[derive(serde::Deserialize)]
     #[serde(untagged)]
     enum Payloads {
         Sets(Vec<Vec<String>>),
         Flat(Vec<String>),
+    }
+    // Typed payload set — lets the GUI/CLI drive Numbers/Dates/BruteForce/etc.
+    // instead of only literal Simple lists. `type` is case/separator-insensitive.
+    #[derive(serde::Deserialize)]
+    struct PayloadSpec {
+        #[serde(rename = "type")]
+        kind: String,
+        items: Option<Vec<String>>,
+        from: Option<String>,
+        to: Option<String>,
+        step: Option<i64>,
+        charset: Option<String>,
+        min_len: Option<usize>,
+        max_len: Option<usize>,
+        count: Option<usize>,
+        base: Option<String>,
+        firsts: Option<Vec<String>>,
+        lasts: Option<Vec<String>>,
+        sep: Option<String>,
+        path: Option<String>,
+    }
+    // Grep config as the GUI collects it (extracts use start/end boundaries; we
+    // compile those to a non-greedy regex the backend understands).
+    #[derive(serde::Deserialize)]
+    struct GrepExtractSpec { label: Option<String>, desc: Option<String>, regex: Option<String>, start: Option<String>, end: Option<String> }
+    #[derive(serde::Deserialize)]
+    struct GrepSpec {
+        #[serde(default)] match_strings: Vec<String>,
+        #[serde(default)] extracts: Vec<GrepExtractSpec>,
+        #[serde(default = "default_true")] reflect_payload: bool,
     }
     #[derive(serde::Deserialize)]
     struct R {
@@ -1921,6 +1952,13 @@ async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
         port: Option<u16>,
         kind: Option<String>,
         payloads: Option<Payloads>,
+        payload_specs: Option<Vec<PayloadSpec>>,
+        processors: Option<Vec<PayloadProcessor>>,
+        grep: Option<GrepSpec>,
+        max_concurrency: Option<usize>,
+        throttle_ms: Option<u64>,
+        retry_on_error: Option<bool>,
+        max_retries: Option<usize>,
     }
     let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
     let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
@@ -1937,21 +1975,84 @@ async fn intruder(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
         "clusterbomb"  => AttackKind::ClusterBomb,
         _              => AttackKind::Sniper,
     };
-    let raw_sets: Vec<Vec<String>> = match r.payloads {
-        Some(Payloads::Sets(s)) => s,
-        Some(Payloads::Flat(f)) => vec![f],
-        None => Vec::new(),
+    // Typed payload specs take precedence; otherwise fall back to literal lists.
+    let sets: Vec<PayloadSet> = if let Some(specs) = r.payload_specs {
+        specs.into_iter().map(|s| {
+            let k: String = s.kind.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase();
+            match k.as_str() {
+                "numbers" => PayloadSet::Numbers {
+                    from: s.from.as_deref().and_then(|v| v.parse().ok()).unwrap_or(0),
+                    to: s.to.as_deref().and_then(|v| v.parse().ok()).unwrap_or(100),
+                    step: s.step.unwrap_or(1),
+                },
+                "bruteforce" => PayloadSet::BruteForce {
+                    charset: s.charset.unwrap_or_else(|| "abcdefghijklmnopqrstuvwxyz".into()),
+                    min_len: s.min_len.unwrap_or(1), max_len: s.max_len.unwrap_or(3),
+                },
+                "null" => PayloadSet::Null { count: s.count.unwrap_or(10) },
+                "dates" => {
+                    let parse = |v: Option<String>| v.as_deref()
+                        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+                    match (parse(s.from), parse(s.to)) {
+                        (Some(from), Some(to)) => PayloadSet::Dates { from, to },
+                        _ => PayloadSet::Simple(s.items.unwrap_or_default()),
+                    }
+                }
+                "charfrobber" => PayloadSet::CharFrobber { base: s.base.unwrap_or_default() },
+                "bitflipper" => PayloadSet::BitFlipper { base: s.base.unwrap_or_default() },
+                "casemodification" => PayloadSet::CaseModification { base: s.base.unwrap_or_default() },
+                "usernamegenerator" => PayloadSet::UsernameGenerator {
+                    firsts: s.firsts.unwrap_or_default(), lasts: s.lasts.unwrap_or_default(),
+                    sep: s.sep.unwrap_or_else(|| ".".into()),
+                },
+                "fromfile" => PayloadSet::FromFile { path: s.path.unwrap_or_default().into() },
+                _ => PayloadSet::Simple(s.items.unwrap_or_default()),
+            }
+        }).collect()
+    } else {
+        let raw_sets: Vec<Vec<String>> = match r.payloads {
+            Some(Payloads::Sets(s)) => s,
+            Some(Payloads::Flat(f)) => vec![f],
+            None => Vec::new(),
+        };
+        raw_sets.into_iter().map(PayloadSet::Simple).collect()
     };
-    let sets: Vec<PayloadSet> = raw_sets.into_iter()
-        .map(|items| PayloadSet::Simple(items))
-        .collect();
 
     let template = ParsedTemplate::parse(req, lancer_tools::DEFAULT_MARKER);
     if template.positions.is_empty() {
         return text(StatusCode::BAD_REQUEST, "no payload markers (§…§) in request");
     };
 
-    let cfg = IntruderConfig { kind, ..Default::default() };
+    // Build grep config from the GUI's match/extract rules (start/end → regex).
+    let grep = match r.grep {
+        Some(g) => GrepConfig {
+            match_strings: g.match_strings.into_iter().filter(|s| !s.is_empty()).collect(),
+            extracts: g.extracts.into_iter().filter_map(|e| {
+                let label = e.label.or(e.desc).unwrap_or_else(|| "extract".into());
+                let regex = if let Some(rx) = e.regex.filter(|r| !r.is_empty()) {
+                    rx
+                } else {
+                    let start = regex_escape(&e.start.unwrap_or_default());
+                    let end = regex_escape(&e.end.unwrap_or_default());
+                    if start.is_empty() && end.is_empty() { return None; }
+                    format!("{start}(.*?){end}")
+                };
+                Some(GrepExtract { label, regex })
+            }).collect(),
+            reflect_payload: g.reflect_payload,
+        },
+        None => GrepConfig { match_strings: Vec::new(), extracts: Vec::new(), reflect_payload: true },
+    };
+
+    let cfg = IntruderConfig {
+        kind,
+        max_concurrency: r.max_concurrency.filter(|&c| c > 0).unwrap_or(10),
+        throttle_ms: r.throttle_ms.unwrap_or(0),
+        retry_on_error: r.retry_on_error.unwrap_or(true),
+        max_retries: r.max_retries.unwrap_or(2),
+        processors: r.processors.unwrap_or_default(),
+        grep,
+    };
     let intruder = Intruder::new(state.client.clone(), cfg);
     match intruder.run(template, sets).await {
         Ok(results) => json(&results),
@@ -1978,6 +2079,20 @@ async fn find_free_proxy_addr(preferred: SocketAddr) -> SocketAddr {
 
 fn parse_query(query: &str, key: &str) -> Option<String> {
     query.split('&').find_map(|pair| pair.strip_prefix(&format!("{key}=")).map(|v| v.to_string()))
+}
+
+fn default_true() -> bool { true }
+
+/// Escape regex metacharacters in a literal so it can be embedded in a pattern.
+fn regex_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if "\\.+*?()|[]{}^$#&-~".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 fn text(status: StatusCode, body: &str) -> Response<Full<Bytes>> {

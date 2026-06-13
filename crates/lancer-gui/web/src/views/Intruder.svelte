@@ -98,8 +98,16 @@
     // The request template carries the §…§ markers; payloadList is one payload set.
     // Cluster Bomb/Pitchfork with multiple positions reuse this set per position.
     const sets=[payloadList];
+    // Grep config the results table renders as dynamic columns (start/end
+    // boundaries compile to a regex server-side).
+    const grep={
+      match_strings: grepMatchEnabled ? grepMatchRules.filter(r=>r.enabled&&r.expr).map(r=>r.expr) : [],
+      extracts: grepExtractEnabled ? grepExtractRules.filter(r=>r.enabled).map(r=>({label:r.desc||"extract",start:r.start||"",end:r.end||""})) : [],
+      reflect_payload: grepPayloadsEnabled,
+    };
+    activeGrepCols={ matches: grep.match_strings.slice(), extracts: grep.extracts.map(e=>e.label) };
     try {
-      const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",payloads:sets})});
+      const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",payloads:sets,grep,max_concurrency:parseInt(sThreads,10)||10,throttle_ms:parseInt(sThrottle,10)||0,max_retries:parseInt(sRetries,10)||0})});
       if (r.ok) { results=await r.json(); }
       else { attackError=`Attack failed (${r.status}): ${(await r.text())||"see server log"}`; results=[]; }
     } catch (e) {
@@ -123,6 +131,9 @@
   let grepMatchEnabled=false; let grepMatchRules=[];
   let grepExtractEnabled=false; let grepExtractRules=[];
   let grepPayloadsEnabled=false; let grepPayloadsExpr="";
+  // Dynamic grep result columns derived from the config sent with each attack.
+  let activeGrepCols={matches:[],extracts:[]};
+  $: atkColCount=7+activeGrepCols.matches.length+activeGrepCols.extracts.length+(grepPayloadsEnabled?1:0);
 
   // Settings
   let sThreads=10; let sRetries=3; let sPause=2000; let sThrottle=0;
@@ -543,10 +554,14 @@
     <div class="attack-body">
       <div class="attack-table-wrap">
         <table class="attack-table">
-          <thead><tr><th>#</th><th>Payload</th><th>Status</th><th>Error</th><th>Timeout</th><th>Length</th><th>Comment</th></tr></thead>
+          <thead><tr><th>#</th><th>Payload</th><th>Status</th><th>Error</th><th>Timeout</th><th>Length</th><th>Comment</th>
+            {#each activeGrepCols.matches as m}<th title={"grep-match: "+m}>≈ {m.length>12?m.slice(0,12)+"…":m}</th>{/each}
+            {#each activeGrepCols.extracts as e}<th title={"grep-extract: "+e}>⌑ {e}</th>{/each}
+            {#if grepPayloadsEnabled}<th title="payload reflected in response">Reflected</th>{/if}
+          </tr></thead>
           <tbody>
-            {#if running && results.length===0}<tr><td colspan="7" class="dim" style="text-align:center;padding:18px">Sending requests…</td></tr>{/if}
-            {#if !running && results.length===0 && !attackError}<tr><td colspan="7" class="dim" style="text-align:center;padding:18px">No results.</td></tr>{/if}
+            {#if running && results.length===0}<tr><td colspan={atkColCount} class="dim" style="text-align:center;padding:18px">Sending requests…</td></tr>{/if}
+            {#if !running && results.length===0 && !attackError}<tr><td colspan={atkColCount} class="dim" style="text-align:center;padding:18px">No results.</td></tr>{/if}
             {#each filteredResults as r}
               <tr class:atk-sel={selectedResult===r} on:click={()=>{selectedResult=r;resultReqTab="request"}}>
                 <td class="dim atk-num">{r.index}</td>
@@ -556,6 +571,9 @@
                 <td class={r.timeout?"atk-warn":"dim"}>{r.timeout?"✓":""}</td>
                 <td class="dim atk-num">{r.length??"—"}</td>
                 <td class="dim">{r.comment||""}</td>
+                {#each activeGrepCols.matches as _m, gi}<td class="dim" style="text-align:center">{(r.grep&&r.grep.matches&&r.grep.matches[gi])?"✓":""}</td>{/each}
+                {#each activeGrepCols.extracts as _e, gi}<td class="atk-pl">{(r.grep&&r.grep.extracts&&r.grep.extracts[gi])||""}</td>{/each}
+                {#if grepPayloadsEnabled}<td class="dim" style="text-align:center">{(r.grep&&r.grep.payload_reflected)?"✓":""}</td>{/if}
               </tr>
             {/each}
           </tbody>
