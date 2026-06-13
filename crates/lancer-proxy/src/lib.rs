@@ -24,6 +24,7 @@ pub mod mitm;
 pub mod dns;
 pub mod http3;
 pub mod platform_auth;
+pub mod ntlm;
 pub mod settings;
 pub mod sse;
 pub mod upstream;

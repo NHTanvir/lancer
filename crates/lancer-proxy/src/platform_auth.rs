@@ -49,7 +49,25 @@ pub fn answer_challenge(
     match scheme_lower.as_str() {
         "basic" if cred.scheme == AuthScheme::Basic => Some(basic(&cred.username, &cred.password)),
         "digest" if cred.scheme == AuthScheme::Digest => digest(challenge, cred, method, uri),
-        "ntlm" if cred.scheme == AuthScheme::Ntlm => Some(format!("NTLM {}", "<ntlm-step-1>")),
+        "ntlm" if cred.scheme == AuthScheme::Ntlm => {
+            // First leg: bare "NTLM" → Type 1. Second leg: "NTLM <type2>" → Type 3.
+            match challenge.split_whitespace().nth(1) {
+                Some(type2) => {
+                    let nonce: [u8; 8] = rand::random();
+                    let ts = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos() as u64 / 100 + 116_444_736_000_000_000)
+                        .unwrap_or(0);
+                    let (domain, user) = match cred.username.split_once('\\') {
+                        Some((d, u)) => (d.to_string(), u.to_string()),
+                        None => (String::new(), cred.username.clone()),
+                    };
+                    crate::ntlm::type3(type2, &user, &cred.password, &domain, nonce, ts)
+                        .map(|t3| format!("NTLM {t3}"))
+                }
+                None => Some(format!("NTLM {}", crate::ntlm::type1())),
+            }
+        }
         "negotiate" if cred.scheme == AuthScheme::Negotiate => {
             Some(format!("Negotiate {}", "<spnego-step-1>"))
         }

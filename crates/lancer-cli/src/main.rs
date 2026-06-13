@@ -109,6 +109,8 @@ enum Cmd {
     Modules(commands::modules::ModulesArgs),
     /// §4.6 High-speed content/parameter fuzzer (ffuf-equivalent).
     Fuzz(commands::fuzz::FuzzArgs),
+    /// §25 Throughput benchmark (req/s + latency percentiles).
+    Bench(commands::bench::BenchArgs),
 }
 
 fn main() -> Result<()> {
@@ -163,6 +165,7 @@ fn main() -> Result<()> {
             Cmd::Shodan(a) => commands::shodan::run(a).await,
             Cmd::Modules(a) => commands::modules::run(a).await,
             Cmd::Fuzz(a) => commands::fuzz::run_cmd(a).await,
+            Cmd::Bench(a) => commands::bench::run(a).await,
         }
     })
 }
