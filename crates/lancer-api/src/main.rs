@@ -1777,6 +1777,21 @@ async fn dynamic_route(
         }
     }
 
+    // ── §4.6 Mass Fuzz ───────────────────────────────────────────────────────
+    if method == Method::GET && path == "/v1/massfuzz/wordlist" {
+        return json(&lancer_tools::mass_fuzz::COMMON_WORDLIST);
+    }
+    if method == Method::POST && path == "/v1/massfuzz" {
+        let cfg: lancer_tools::mass_fuzz::MassFuzzConfig = match serde_json::from_slice(body) {
+            Ok(c) => c, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        if !cfg.url.contains("FUZZ") {
+            return text(StatusCode::BAD_REQUEST, "url must contain the FUZZ marker");
+        }
+        let results = lancer_tools::mass_fuzz::run(cfg, state.client.clone()).await;
+        return json(&results);
+    }
+
     // ── §6 Collaborator / OAST ───────────────────────────────────────────────
     if method == Method::GET && path == "/v1/collaborator/status" {
         return json(&state.oast.status());

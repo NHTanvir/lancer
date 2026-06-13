@@ -34,6 +34,7 @@
   import Iac from "./views/Iac.svelte";
   import Collaborator from "./views/Collaborator.svelte";
   import SessionHandling from "./views/SessionHandling.svelte";
+  import MassFuzz from "./views/MassFuzz.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -68,6 +69,7 @@
     { id: "target",    label: "Target" },
     { id: "proxy",     label: "Proxy" },
     { id: "intruder",  label: "Intruder" },
+    { id: "massfuzz",  label: "Mass Fuzz" },
     { id: "repeater",  label: "Repeater" },
     { id: "sequencer", label: "Sequencer" },
     { id: "decoder",   label: "Decoder" },
@@ -222,6 +224,7 @@
     {#if active === "target"}<Target />{/if}
     {#if active === "proxy"}<Proxy />{/if}
     {#if active === "intruder"}<Intruder />{/if}
+    {#if active === "massfuzz"}<MassFuzz />{/if}
     {#if active === "repeater"}<Repeater />{/if}
     {#if active === "sequencer"}<Sequencer />{/if}
     {#if active === "decoder"}<Decoder />{/if}

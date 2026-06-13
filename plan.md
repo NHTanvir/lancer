@@ -93,7 +93,7 @@ After deep research into the 27-tool 2026 AI-era bug bounty toolkit, 8 tools are
 |---|---|---|---|
 | 1 | **katana** (deep JS crawler) | §5.1.1 Deep JS-Rendering Crawler | added 2026-05-26 ❌ |
 | 2 | **nuclei** (templated scanner) | §5.7 Nuclei-Style Template Engine | added 2026-05-26 ❌ |
-| 3 | **ffuf** (content fuzzer) | §4.6 Mass Fuzz Mode | added 2026-05-26 ❌ |
+| 3 | **ffuf** (content fuzzer) | §4.6 Mass Fuzz Mode | ✅ 2026-06-13 (batch-13) |
 | 4 | **jsluice** (JS analysis) | §34 JS Mining (Passive) | added 2026-05-26 ❌ |
 | 5 | **trufflehog** (secret patterns) | NEW §35 Passive Secret Scanner | ✅ 2026-05-29 |
 | 6 | **interactsh** (OOB testing) | §6 Collaborator (was stub) | full plan below ❌ |
@@ -1365,7 +1365,10 @@ These ran against real targets through the proxy / API; all returned expected re
 - [F] Throttle between requests
 - [F] Ctrl+Click column copy
 
-### 4.6 Mass Fuzz Mode `[N]` ❌
+### 4.6 Mass Fuzz Mode `[N]` ✅ (batch-13)
+
+**Implemented:** `lancer-tools/src/mass_fuzz.rs` — high-speed async fuzzer with `FUZZ`-marker URL templating, word×extension expansion, tokio-semaphore concurrency (1–256), ffuf-style match/filter sets (`-mc`/`-fc`/`-fs`), per-request status/size/word/line/time. API `POST /v1/massfuzz` + `GET /v1/massfuzz/wordlist` (bundled common list). New **Mass Fuzz** GUI tab (URL/method/wordlist/extensions/concurrency/filters + live-filterable results). Remaining vs full spec: standalone `lancer-fuzz` CLI binary, recursive discovery, SecLists bundle, AI wordlist gen, response calibration auto-baseline, streaming.
+
 
 High-speed async fuzzer built into Intruder as a new attack type. New `lancer-tools/intruder/mass_fuzz` module. New `lancer-fuzz` CLI binary sharing the same library.
 
