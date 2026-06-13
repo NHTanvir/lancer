@@ -111,6 +111,8 @@ enum Cmd {
     Fuzz(commands::fuzz::FuzzArgs),
     /// §25 Throughput benchmark (req/s + latency percentiles).
     Bench(commands::bench::BenchArgs),
+    /// §58 MCP server — expose Lancer to AI agents over stdio (Model Context Protocol).
+    Mcp(commands::mcp::McpArgs),
 }
 
 fn main() -> Result<()> {
@@ -166,6 +168,7 @@ fn main() -> Result<()> {
             Cmd::Modules(a) => commands::modules::run(a).await,
             Cmd::Fuzz(a) => commands::fuzz::run_cmd(a).await,
             Cmd::Bench(a) => commands::bench::run(a).await,
+            Cmd::Mcp(a) => commands::mcp::run(a).await,
         }
     })
 }

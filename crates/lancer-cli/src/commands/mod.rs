@@ -39,3 +39,4 @@ pub mod shodan;
 pub mod modules;
 pub mod fuzz;
 pub mod bench;
+pub mod mcp;

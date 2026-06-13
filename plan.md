@@ -650,6 +650,40 @@ These need substantial new systems, not wiring, and remain open:
 
 ---
 
+# IMPLEMENTATION STATUS — 2026-06-13 (batch-21) — BURP-SITE AUDIT (Infiltrator + MCP server)
+
+Audited plan.md against PortSwigger's live Community + Professional feature lists
+(portswigger.net/burp/pro/features, /documentation/desktop/tools, the 7-Pro-exclusives
+blog, and 2025 releases). plan.md already mirrors every Burp tool **except two**:
+
+## §57 Burp Infiltrator equivalent `[N]`
+Burp Infiltrator patches a target app's **bytecode** (JVM 1.4–1.8 / .NET 2.0–4.5) to inject
+taint-tracking hooks; when Scanner input reaches an unsafe sink (exec, file I/O, SQL, etc.)
+the hook fingerprints the Collaborator payload and pingbacks with the sink identifier —
+catching vulns masked by input transformation/filtering with no in-band signal.
+- Lancer design: a `lancer-infiltrator` toolkit that emits a **JVM java-agent jar** (ASM
+  bytecode weaving) and a **.NET profiler** which, on a matched §6 OAST payload reaching a
+  sink, do a DNS pingback `<sink-id>.<payload>.<domain>` — correlated by the existing OAST
+  server (so Lancer reports "input reached `Runtime.exec` server-side").
+- **Status: agent-gated** (parallel to §29 eBPF) — the JVM agent / .NET profiler are
+  separate build-time artifacts requiring the target's runtime; the OAST correlation side
+  is already implemented (batch-13/17).
+
+## §58 Lancer MCP Server `[N]` — expose Lancer to AI agents
+Burp ships an **MCP server** (SSE `127.0.0.1:9876` + stdio proxy) so AI clients (Claude
+Desktop/Code) can drive Burp: send HTTP/1.1+HTTP/2 requests, read traffic, run tools.
+Lancer's `§44 MCP Scanner` is the *opposite* (it scans other MCP servers); this is Lancer's
+**own** MCP server exposing its API as MCP tools.
+- ✅ **Implemented (batch-21):** `lancer-mcp-server` crate + `lancer mcp` CLI — a JSON-RPC
+  2.0 **stdio MCP server** (initialize / tools/list / tools/call) exposing Lancer over MCP:
+  `history_list`, `repeater_send`, `scan_active`, `scan_passive`, `intruder`,
+  `collaborator_generate`, `collaborator_interactions`, `transform`, `mass_fuzz`,
+  `dual_session_replay`, `id_fuzz`, `flow_graph`, `issues_list`, `report`. Proxies to a
+  running `lancer-api` (configurable `--api`). Point Claude Desktop/Code at
+  `lancer mcp --api http://127.0.0.1:9191` and an AI agent can drive the whole workbench.
+
+---
+
 # IMPLEMENTATION STATUS — 2026-06-13 (batch-17→20) — LEFTOVERS + INFRA
 
 Worked through the remaining implementable gap list (each `cargo check --workspace` clean + `vite build` clean):
