@@ -45,6 +45,27 @@
     } catch (e) { importError = `Could not reach API (${e})`; }
     finally { importing = false; }
   }
+  // §5.1.1 Deep JS-rendering crawl (headless Chromium; needs lancer-api built --features chromium)
+  let showCrawl = false;
+  let crawlUrl = "https://example.com/";
+  let crawlWait = 800;
+  let crawlResult = null;
+  let crawlError = "";
+  let crawling = false;
+  async function doDeepCrawl() {
+    crawlError = ""; crawlResult = null; crawling = true;
+    try {
+      const r = await fetch("/api/v1/crawl/deep", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: crawlUrl, wait_ms: +crawlWait }),
+      });
+      const d = await r.json();
+      if (d.ok === false) crawlError = d.error || "crawl failed";
+      else crawlResult = d;
+    } catch (e) { crawlError = `Could not reach API (${e})`; }
+    finally { crawling = false; }
+  }
+
   async function scanImported() {
     for (const req of importResults) {
       try { await fetch("/api/v1/scan/full", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: req.url }) }); } catch {}
@@ -168,8 +189,30 @@
             {scanning ? "Starting..." : "New scan"}
           </button>
           <button class="btn-import" on:click={() => (showImport = !showImport)}>{showImport ? "Hide import" : "Import API spec ▾"}</button>
+          <button class="btn-import" on:click={() => (showCrawl = !showCrawl)}>{showCrawl ? "Hide deep crawl" : "Deep JS crawl ▾"}</button>
         </div>
       </div>
+
+      {#if showCrawl}
+        <div class="card" style="margin-top:12px;max-width:820px">
+          <div class="card-title">Deep JS-rendering crawl — headless Chromium (renders client-side JS, then extracts links / scripts / fetch endpoints)</div>
+          <div class="import-row">
+            <input bind:value={crawlUrl} placeholder="https://target/" style="flex:1" />
+            <label class="dim" style="font-size:11px">wait ms<input type="number" bind:value={crawlWait} style="width:80px;margin-left:4px" /></label>
+            <button class="btn-orange" on:click={doDeepCrawl} disabled={crawling}>{crawling ? "Rendering…" : "Crawl"}</button>
+          </div>
+          <div class="dim" style="font-size:11px;margin-top:4px">Requires lancer-api built with <code>--features chromium</code> + a Chrome/Chromium binary.</div>
+          {#if crawlError}<div class="imp-err">{crawlError}</div>{/if}
+          {#if crawlResult}
+            <div class="imp-results" style="margin-top:8px">
+              <div class="imp-req"><strong>{crawlResult.title || crawlResult.url}</strong></div>
+              {#each [...(crawlResult.links||[]), ...(crawlResult.endpoints||[]), ...(crawlResult.scripts||[])] as u}
+                <div class="imp-req"><code class="imp-url">{u}</code></div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       {#if showImport}
         <div class="card" style="margin-top:12px;max-width:820px">

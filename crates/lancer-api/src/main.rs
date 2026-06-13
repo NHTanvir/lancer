@@ -2082,6 +2082,17 @@ async fn dynamic_route(
         };
     }
 
+    // ── §5.1.1 Deep JS-rendering crawler (headless Chromium) ─────────────────
+    if method == Method::POST && path == "/v1/crawl/deep" {
+        #[derive(serde::Deserialize)]
+        struct R { url: String, wait_ms: Option<u64> }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        return match lancer_tools::js_crawler::crawl_js(&r.url, r.wait_ms.unwrap_or(800)).await {
+            Ok(res) => json(&res),
+            Err(e) => json(&serde_json::json!({ "ok": false, "error": e.to_string() })),
+        };
+    }
+
     // ── §33 Payload encyclopedia ─────────────────────────────────────────────
     if method == Method::GET && path == "/v1/payloads" {
         return json(&lancer_tools::payload_library::bundled());

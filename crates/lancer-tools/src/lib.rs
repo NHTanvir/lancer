@@ -15,6 +15,7 @@ pub mod grep;
 pub mod intruder;
 pub mod logger;
 pub mod mass_fuzz;
+pub mod js_crawler;
 pub mod oauth_client;
 pub mod organizer_tools;
 pub mod param_miner;

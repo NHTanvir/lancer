@@ -36,3 +36,10 @@ serde_yaml.workspace = true
 base64.workspace = true
 flate2.workspace = true
 rand = "0.8"
+futures = { workspace = true }
+# §13/§7/§5.1.1 headless-Chromium features — optional, off by default.
+chromiumoxide = { version = "0.7", optional = true, default-features = false, features = ["tokio-runtime"] }
+
+[features]
+# Deep JS-rendering crawler / embedded browser / live DOM Invader via headless Chrome.
+chromium = ["dep:chromiumoxide"]

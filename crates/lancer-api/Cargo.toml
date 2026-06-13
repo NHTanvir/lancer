@@ -12,6 +12,8 @@ path = "src/main.rs"
 [features]
 # §1.1 inbound HTTP/3 (QUIC) listener — set LANCER_HTTP3_ADDR to enable at runtime.
 http3 = ["lancer-proxy/http3"]
+# §5.1.1/§13/§7 headless-Chromium deep-JS crawler — needs a Chrome binary at runtime.
+chromium = ["lancer-tools/chromium"]
 
 [dependencies]
 lancer-core.workspace = true
