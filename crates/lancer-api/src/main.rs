@@ -72,6 +72,7 @@ use lancer_cms::{CmsScanRequest, CmsScanResult};
 use lancer_exploitdb::ExploitDb;
 use lancer_modules::{ModuleRegistry, ModuleState, default_modules, Preset, PresetStore};
 use lancer_oast::{OastServer, OastConfig};
+use lancer_replay::{dual_session::SessionCreds, flow_graph::FlowEntry};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -1828,6 +1829,58 @@ async fn dynamic_route(
             }
             Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
         }
+    }
+
+    // ── Access-control suite: dual-session replay / id-fuzz / resp-diff / flow ─
+    if method == Method::POST && path == "/v1/replay/dual" {
+        #[derive(serde::Deserialize)]
+        struct R { request: String, scheme: Option<String>, host: Option<String>, port: Option<u16>,
+            session_a: SessionCreds, session_b: SessionCreds }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
+        req.meta.scheme = r.scheme.unwrap_or_else(|| "https".into());
+        if let Some(h) = r.host { if !h.is_empty() { req.meta.host = h; } }
+        if let Some(p) = r.port { if p > 0 { req.meta.port = p; } }
+        return match lancer_replay::dual_replay(&state.client, &req, &r.session_a, &r.session_b).await {
+            Ok(res) => json(&res),
+            Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        };
+    }
+    if method == Method::POST && path == "/v1/replay/idfuzz" {
+        #[derive(serde::Deserialize)]
+        struct R { request: String, scheme: Option<String>, host: Option<String>, port: Option<u16> }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
+        req.meta.scheme = r.scheme.unwrap_or_else(|| "https".into());
+        if let Some(h) = r.host { if !h.is_empty() { req.meta.host = h; } }
+        if let Some(p) = r.port { if p > 0 { req.meta.port = p; } }
+        return match lancer_replay::fuzz_ids(&state.client, &req).await {
+            Ok(res) => json(&res),
+            Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        };
+    }
+    if method == Method::POST && path == "/v1/replay/respdiff" {
+        #[derive(serde::Deserialize)]
+        struct R { a: String, b: String }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        return json(&lancer_replay::diff_responses(&r.a, &r.b));
+    }
+    if method == Method::GET && path == "/v1/replay/flowgraph" {
+        let storage = state.project.read().clone();
+        let Some(s) = storage else { return json(&lancer_replay::build_flow_graph(&[])) };
+        return match s.history().list(&lancer_storage::HistoryFilter { limit: Some(2000), ..Default::default() }).await {
+            Ok(rows) => {
+                let entries: Vec<FlowEntry> = rows.iter().map(|e| FlowEntry {
+                    host: e.host.clone(),
+                    path: e.path.clone(),
+                    method: e.method.clone(),
+                    referer: e.request.header("referer").map(|s| s.to_string()),
+                    status: e.status.map(|s| s as u16),
+                }).collect();
+                json(&lancer_replay::build_flow_graph(&entries))
+            }
+            Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        };
     }
 
     // ── §33 Payload encyclopedia ─────────────────────────────────────────────

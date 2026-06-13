@@ -1,0 +1,15 @@
+[package]
+name = "lancer-replay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Access-control / IDOR / flow-analysis suite: dual-session replay, ID-mutation fuzzer, response differ, and flow grapher."
+
+[dependencies]
+lancer-core.workspace = true
+lancer-tools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+bytes.workspace = true

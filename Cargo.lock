@@ -2524,6 +2524,7 @@ dependencies = [
  "lancer-oast",
  "lancer-plugin",
  "lancer-proxy",
+ "lancer-replay",
  "lancer-report",
  "lancer-scanner",
  "lancer-secrets",
@@ -2982,6 +2983,19 @@ dependencies = [
  "webpki-roots 0.26.11",
  "wry",
  "x509-parser",
+]
+
+[[package]]
+name = "lancer-replay"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "lancer-core",
+ "lancer-tools",
+ "regex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

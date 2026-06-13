@@ -650,6 +650,36 @@ These need substantial new systems, not wiring, and remain open:
 
 ---
 
+# IMPLEMENTATION STATUS — 2026-06-13 (batch-15) — ACCESS-CONTROL / IDOR SUITE
+
+New **`lancer-replay`** crate + 4 cohesive GUI tabs implementing an access-control / IDOR / business-logic testing suite. All four are fully wired (backend `cargo check --workspace` clean, GUI `vite build` clean) and reachable as top-level tabs.
+
+## §53 Dual-Session Replay Engine `[N]` ✅ (batch-15)
+Intercepts/replays one request under **two session identities** and compares the responses — the canonical broken-access-control / IDOR check.
+- Backend `lancer-replay/src/dual_session.rs`; API `POST /v1/replay/dual` (request + scheme/host/port + `session_a`/`session_b` creds = cookie / authorization / extra headers).
+- Applies each session's creds to a cloned request, replays both, scores **body similarity** (Jaccard), emits an **access-control verdict** (`access_control_issue` true when the low-priv session reaches the same 200 resource ≥90% identical; recognises 401/403 as correctly denied).
+- GUI **Dual-Session** tab: request editor + two session panels + side-by-side responses + colour-coded verdict banner.
+
+## §54 ID Mutation Fuzzer `[N]` ✅ (batch-15)
+Works on a **live captured request**: detects ID-like values, mutates them, replays each, flags reaching another object.
+- Backend `lancer-replay/src/id_mutate.rs`; API `POST /v1/replay/idfuzz`.
+- Detects **integers** (`\b\d{1,12}\b`) and **UUIDs** in URL + body; mutations: ±1/±10/0/1/+1000/99999 for ints, zero/max/hex-flip for UUIDs (replay budget-capped at 120).
+- Compares each mutated response to the same-id **baseline**; flags `interesting` when 200 + content meaningfully differs but isn't an error page. One-click **→ Repeater** to confirm.
+- GUI **ID Fuzzer** tab: request editor + detected candidates + results table (loc / original / mutated / status / length / similarity / IDOR? ) with an "only interesting" filter.
+
+## §55 Response Differ `[N]` ✅ (batch-15)
+Structured, response-aware diff for side-by-side request/response context.
+- Backend `lancer-replay/src/resp_diff.rs`; API `POST /v1/replay/respdiff` (`{a,b}` raw responses).
+- Parses status line / headers / body; reports same-status, lengths, **body similarity %**, added/removed line counts, and header set differences (only-in-A / only-in-B / changed).
+- GUI **Resp Differ** tab: two response panes + metrics + 3-column header diff.
+
+## §56 Flow Grapher `[N]` ✅ (batch-15)
+Reads the proxy request log in **real time** and renders the application navigation graph.
+- Backend `lancer-replay/src/flow_graph.rs`; API `GET /v1/replay/flowgraph` (maps up to 2000 history rows → nodes = host+path, edges from **Referer** header with temporal-sequence fallback).
+- GUI **Flow Graph** tab: circular SVG layout (node size = hit count, edge width = traversal count), click-to-highlight a node's in/out edges, auto-refresh, adjacency detail panel.
+
+---
+
 # IMPLEMENTATION STATUS — 2026-06-13 (batch-14) — GUI SURFACE PASS
 
 Wired the remaining already-built backends to the GUI (each verified with `cargo check --workspace` clean + `vite build` clean):

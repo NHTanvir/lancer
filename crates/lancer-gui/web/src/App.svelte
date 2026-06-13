@@ -36,6 +36,10 @@
   import SessionHandling from "./views/SessionHandling.svelte";
   import MassFuzz from "./views/MassFuzz.svelte";
   import Payloads from "./views/Payloads.svelte";
+  import DualSession from "./views/DualSession.svelte";
+  import IdMutator from "./views/IdMutator.svelte";
+  import ResponseDiffer from "./views/ResponseDiffer.svelte";
+  import FlowGrapher from "./views/FlowGrapher.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -78,6 +82,10 @@
     { id: "payloads",  label: "Payloads" },
     { id: "scanner",   label: "Scanner" },
     { id: "collaborator", label: "Collaborator" },
+    { id: "dualsession", label: "Dual-Session" },
+    { id: "idmutator",   label: "ID Fuzzer" },
+    { id: "respdiff",    label: "Resp Differ" },
+    { id: "flowgraph",   label: "Flow Graph" },
     { id: "logger",    label: "Logger" },
     { id: "organizer", label: "Organizer" },
     { id: "findings",  label: "Findings" },
@@ -286,6 +294,10 @@
     {#if active === "logger"}<Logger />{/if}
     {#if active === "scanner"}<Scanner />{/if}
     {#if active === "collaborator"}<Collaborator />{/if}
+    {#if active === "dualsession"}<DualSession />{/if}
+    {#if active === "idmutator"}<IdMutator />{/if}
+    {#if active === "respdiff"}<ResponseDiffer />{/if}
+    {#if active === "flowgraph"}<FlowGrapher />{/if}
     {#if active === "organizer"}<Organizer />{/if}
     {#if active === "findings"}<Findings />{/if}
     {#if active === "jsmining"}<JsMining />{/if}
