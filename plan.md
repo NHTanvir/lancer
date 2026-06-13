@@ -641,11 +641,31 @@ A full audit (plan §1–§52 + granular Burp inventory) against the *actual* `c
 
 These need substantial new systems, not wiring, and remain open:
 - **§6 Collaborator / OOB server** — ✅ DONE in batch-13 (`lancer-oast` crate: DNS/HTTP/SMTP listeners + correlation engine + GUI tab). Remaining polish: auto-correlate scanner-emitted payloads, RSA-encrypted callbacks, hosted public tier.
-- **§13 Embedded Chromium browser** + **§7 DOM Invader runtime** + **§5.1.1 deep JS-render crawler** — require headless Chromium / a browser extension. "Open Browser" still shells out to system Chrome.
-- **§4.6 Mass Fuzz + `lancer-fuzz` binary** and the remaining Intruder payload-set/processor variants — net-new high-speed engine.
-- **§1.3 WebSocket frame capture** — the listener still tunnels WS without decoding into `WsStore` (table stays empty).
-- **§23 NTLM/Negotiate** platform auth — still placeholder handshakes; **§25** 100k-req/s benchmark suite, **§26** live-collab cursor sync, **§29** eBPF BPF object, and **§17 Session Rules/Macros GUI** are not built.
+- **§4.6 Mass Fuzz** — ✅ DONE in batch-13 (`lancer-tools/mass_fuzz` + GUI). Remaining: standalone `lancer-fuzz` CLI binary, recursive discovery, SecLists bundle.
+- **§17 Session Rules/Macros GUI** — ✅ DONE in batch-13 (Sessions tab: rules editor + action builder + macros). Remaining: in-flight rule application in the proxy pipeline, macro step-recording from Repeater.
+- **§13 Embedded Chromium browser** + **§7 DOM Invader runtime** + **§5.1.1 deep JS-render crawler** — BLOCKED: require a bundled headless Chromium binary / browser extension. "Open Browser" still shells out to system Chrome.
+- **§1.3 WebSocket frame capture** — DEFERRED: the proxy serves buffered `Full<Bytes>` responses and has no WS upgrade-tunnel path; full frame capture needs delicate proxy-core rework (dual `hyper::upgrade::on` + frame-decoding bidirectional copy) that cannot be runtime-verified safely here without risking the working HTTP proxy.
+- **§23 NTLM/Negotiate** platform auth — BLOCKED on system Kerberos/SSPI libs; **§25** 100k-req/s benchmark, **§26** live-collab cursor sync, **§29** eBPF BPF object, **§1.1** inbound HTTP/3, and the **public hosted Collaborator** remain net-new infra.
 - **Data corpora** (200+/800+ secret patterns, 120+ LLM probes, 10k routes, 200+ gadget classes, real ysoserial/exploit-db datasets) remain below the aspirational plan counts.
+
+---
+
+# IMPLEMENTATION STATUS — 2026-06-13 (batch-13) — DEEP FEATURE PASS
+
+A ground-truth audit (8 parallel agents over the real `crates/` code) found 148 gaps; 17 genuinely blocked on external infra, the rest implementable. This batch shipped the highest-value ones, each verified with `cargo check` (workspace clean) + `vite build` (GUI clean):
+
+- **§6 Collaborator** — new `lancer-oast` crate: self-hosted OAST server with real **DNS (UDP) + HTTP + SMTP** listeners, payload allocation, and a right-to-left subdomain **correlation engine**; `/v1/collaborator/*` + new **Collaborator** GUI tab (start/stop, config, generate→clipboard, live interactions filtered by protocol, auto-poll). Unprivileged default ports (5353/8088/1825).
+- **§4 Intruder** — grep-match / grep-extract (start/end→regex) / grep-payloads-reflected wired GUI→API→`GrepConfig` and rendered as **dynamic result columns**; resource pool (threads/throttle/retries) wired; API now accepts **typed `payload_specs`** (Numbers/Dates/BruteForce/Null/CharFrobber/BitFlipper/CaseMod/UsernameGen/FromFile) + chained `processors`.
+- **§4.6 Mass Fuzz** — `lancer-tools/mass_fuzz` ffuf-style engine + `/v1/massfuzz` + **Mass Fuzz** GUI tab (FUZZ marker, word×ext, concurrency, mc/fc/fs filters, bundled wordlist).
+- **§17 Session Handling** — **Sessions** GUI tab: Rules editor with ordered action builder (SetHeader/SetCookie/UseCookieJar/RunMacro/PromptUser) + Macros list (create/run/delete); `/v1/sessions/rules` + `/v1/macros` CRUD; per-cookie delete.
+- **§5.4 Scanner config** — **Configuration** subtab: preset selector + per-check enable/disable + concurrency/throttle, persisted via `GET/PUT /v1/scan/config`, applied to every scan.
+- **§5.7 Templates** — implemented `size` + `dsl` matcher evaluation (contains/comparison/`&&`/`||` over status_code/content_length/body) without an engine dep.
+- **§2.3 Issues** — mark/unmark false-positive, severity/confidence override, add-manual-issue (`PATCH`/`POST /v1/issues`) + hide-FP toggle.
+- **§8 Sequencer** — removed all fabricated `Math.random()`; **Manual** + **Live capture** now use the real backend FIPS battery; new `POST /v1/sequencer/capture` re-issues the selected request N times and extracts the real token (cookie/header/body).
+- **§9 Decoder** — added SHA-3-224 / SHA-3-384.
+- **§10 Comparer** — Hex view toggle + search-in-diff.
+- **§19.2 Findings** — duplicate-detection button (`GET /v1/findings/duplicates`).
+- **§33 Payload Encyclopedia** — surfaced `payload_library` via `/v1/payloads` + searchable **Payloads** GUI tab (copy / →Repeater / →Intruder).
 
 ---
 
