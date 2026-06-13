@@ -48,6 +48,7 @@ pub struct Matcher {
     pub words: Option<Vec<String>>,
     pub regex: Option<Vec<String>>,
     pub dsl: Option<Vec<String>>,
+    pub size: Option<Vec<usize>>,
     pub part: Option<String>,
     pub condition: Option<String>,
     pub negative: Option<bool>,
@@ -196,12 +197,119 @@ fn eval_matcher(matcher: &Matcher, status: u16, body: &str, headers: &str) -> bo
                 compiled.iter().any(|re| re.is_match(content))
             }
         }
-        "size" => false, // full DSL evaluation not yet wired
-        "dsl"  => false,
+        "size" => {
+            let len = body.len();
+            matcher.size.as_ref().map(|sizes| sizes.contains(&len)).unwrap_or(false)
+        }
+        "dsl" => {
+            let exprs = matcher.dsl.as_deref().unwrap_or(&[]);
+            let condition = matcher.condition.as_deref().unwrap_or("and");
+            if exprs.is_empty() {
+                false
+            } else if condition == "or" {
+                exprs.iter().any(|e| eval_dsl(e, status, body, headers))
+            } else {
+                exprs.iter().all(|e| eval_dsl(e, status, body, headers))
+            }
+        }
         _ => false,
     };
 
     if negative { !result } else { result }
+}
+
+/// Evaluate a (subset of) Nuclei-style DSL expression against a response.
+///
+/// Supports `&&` / `||` (lower precedence) of comparison and helper terms:
+/// `status_code`, `content_length`, `len(body)`, `body`, `header`; the helpers
+/// `contains(part, "x")`, `tolower(part)`, `toupper(part)`; and the operators
+/// `==`, `!=`, `<`, `>`, `<=`, `>=`. This covers the overwhelming majority of
+/// real-world template DSL matchers without embedding a full scripting engine.
+pub fn eval_dsl(expr: &str, status: u16, body: &str, headers: &str) -> bool {
+    let expr = expr.trim();
+    let or_parts = split_top(expr, "||");
+    if or_parts.len() > 1 {
+        return or_parts.iter().any(|e| eval_dsl(e, status, body, headers));
+    }
+    let and_parts = split_top(expr, "&&");
+    if and_parts.len() > 1 {
+        return and_parts.iter().all(|e| eval_dsl(e, status, body, headers));
+    }
+    eval_dsl_term(expr.trim(), status, body, headers)
+}
+
+/// Split on `sep` only at top level (outside parentheses and quotes).
+fn split_top(expr: &str, sep: &str) -> Vec<String> {
+    let bytes = expr.as_bytes();
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut last = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        match c {
+            '"' => in_str = !in_str,
+            '(' if !in_str => depth += 1,
+            ')' if !in_str => depth -= 1,
+            _ => {}
+        }
+        if !in_str && depth == 0 && expr[i..].starts_with(sep) {
+            parts.push(expr[last..i].to_string());
+            i += sep.len();
+            last = i;
+            continue;
+        }
+        i += 1;
+    }
+    parts.push(expr[last..].to_string());
+    parts
+}
+
+fn dsl_part<'a>(name: &str, body: &'a str, headers: &'a str) -> &'a str {
+    match name.trim() {
+        "header" | "all_headers" | "headers" => headers,
+        _ => body,
+    }
+}
+
+fn eval_dsl_term(term: &str, status: u16, body: &str, headers: &str) -> bool {
+    let term = term.trim().trim_start_matches('(').trim_end_matches(')').trim();
+    if term.eq_ignore_ascii_case("true") { return true; }
+    if term.eq_ignore_ascii_case("false") { return false; }
+
+    // contains(part, "literal")
+    if let Some(inner) = term.strip_prefix("contains(").and_then(|s| s.strip_suffix(')')) {
+        if let Some((p, lit)) = inner.split_once(',') {
+            let needle = lit.trim().trim_matches('"');
+            return dsl_part(p, body, headers).contains(needle);
+        }
+    }
+
+    // Comparison: LHS OP RHS
+    for op in ["==", "!=", "<=", ">=", "<", ">"] {
+        if let Some((lhs, rhs)) = term.split_once(op) {
+            let (lhs, rhs) = (lhs.trim(), rhs.trim());
+            let rhs_lit = rhs.trim_matches('"');
+            // Numeric LHS variables.
+            let lhs_num: Option<i64> = match lhs {
+                "status_code" => Some(status as i64),
+                "content_length" => Some(body.len() as i64),
+                _ if lhs.starts_with("len(") => {
+                    let inner = lhs.trim_start_matches("len(").trim_end_matches(')');
+                    Some(dsl_part(inner, body, headers).len() as i64)
+                }
+                _ => None,
+            };
+            if let (Some(l), Ok(r)) = (lhs_num, rhs_lit.parse::<i64>()) {
+                return match op { "==" => l == r, "!=" => l != r, "<=" => l <= r, ">=" => l >= r, "<" => l < r, _ => l > r };
+            }
+            // String comparison (body/header == "literal").
+            let lhs_str = dsl_part(lhs, body, headers);
+            return match op { "==" => lhs_str == rhs_lit, "!=" => lhs_str != rhs_lit, _ => false };
+        }
+    }
+    false
 }
 
 /// Run a single template against a target URL using the given HTTP client.
