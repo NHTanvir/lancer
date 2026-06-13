@@ -21,39 +21,39 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 ## Status by section
 | § | Area | Status | Notes |
 |---|------|--------|-------|
-| 1 | Proxy | 🟡 | Intercept/HTTP history/CA cert all ✅. **batch-14:** Match & Replace now **fully editable** (name/target-dropdown/match/replace/regex inline) + reorder + JSON import/export; intercept toolbar **Action ▼ dropdown** (Send to Repeater/Intruder/Comparer + Copy as curl/PowerShell/fetch). Still open: WebSocket frame capture (table empty), HTTP/3 inbound, NTLM/Negotiate |
+| 1 | Proxy | ✅ | Intercept / HTTP history / CA cert / editable Match&Replace (+reorder/import/export) / Action ▼ dropdown all ✅. **batch-19/22/23:** real **NTLMv2** handshake, **in-flight session rules**, and **WebSocket frame capture** (transparent tunnel decoding every frame → WsStore). Remaining: inbound HTTP/3 (cargo feature dep-broken — h3-quinn/quinn `StreamId` E0616), Negotiate/Kerberos (system GSSAPI/SSPI) |
 | 2 | Target | ✅ | Site map ✅. Issues ✅ (mark-FP / override / add-manual, batch-13). **batch-14:** **Scope CRUD** confirmed working (add/edit/delete/enable in Scope tab); **Engagement tools menu** wired — right-click → Find comments/scripts/references, Generate CSRF PoC, ClickBandit, Analyze target, Search across responses, each opening a results modal (with iframe preview for PoCs) over `/v1/engagement/*` |
 | 3 | Repeater | ✅ | Send + tabs + raw editor + Inspector + Render + Burp-AI + Send-to-X + Copy-as-X. **batch-14:** **tab rename** (double-click / F2), **duplicate tab** (right-click / ⎘), and **editable Inspector** (query params / headers / body params as add/edit/remove rows that rebuild the raw request). Still open: HTTP/2 frame editor, WebSocket mode (both dep-blocked) |
-| 4 | Intruder | 🟡 | 4 attack kinds + payload sets via `/v1/intruder` ✅. **batch-13:** grep-match / grep-extract (start/end→regex) / grep-payloads-reflected now wired GUI→API→`GrepConfig` and rendered as **dynamic result columns**; resource pool (threads/throttle/retries) wired to `IntruderConfig`; API now accepts **typed `payload_specs`** (Numbers/Dates/BruteForce/Null/CharFrobber/BitFlipper/CaseMod/UsernameGen/FromFile) + chained `processors`. Remaining: GUI type-selector to drive payload_specs/processors; save/load attack. §4.6 Mass Fuzz / `lancer-fuzz` still absent |
+| 4 | Intruder | ✅ | 4 attack kinds + grep-match/extract/payloads **dynamic columns** + resource pool + typed `payload_specs` (Numbers/Dates/BruteForce/Null/CharFrobber/BitFlipper/CaseMod/UsernameGen/FromFile) + chained `processors`. **batch-14:** GUI payload **type-selector** drives payload_specs/processors. §4.6 **Mass Fuzz** + `lancer fuzz` CLI done (batch-13/16/17). Remaining: save/load attack file |
 | 5 | Scanner | ✅ | 30 active + 7 passive checks in `lancer-scanner`. Crawler, API-spec import, OAuth client backend-complete. BCheck DSL runner present. **batch-13:** new **Configuration** subtab — preset selector (Lightweight/Balanced/Deep/AuditOnly/CrawlOnly/PassiveOnly/OwaspTop10) + per-check enable/disable + concurrency/throttle, persisted via `GET/PUT /v1/scan/config` and applied to every subsequent scan |
 | 6 | Collaborator | ✅ | batch-13: new **`lancer-oast`** crate — self-hosted OAST server with real DNS (UDP, answers A + records every lookup), HTTP, and SMTP listeners + payload allocation + right-to-left subdomain **correlation engine**. Wired via `/v1/collaborator/{generate,interactions,poll,payloads,status,config,server/start,server/stop}` + new **Collaborator** GUI tab (server start/stop, config, generate-payload→clipboard, live interactions table filtered by DNS/HTTP/SMTP, auto-poll). Defaults to unprivileged ports (5353/8088/1825) so it runs without root. Remaining: scanner-check auto-correlation, RSA-encrypted callbacks, hosted public tier |
-| 7 | DOM Invader | 🟡 | `lancer-dom` does **static** DOM-sink / postMessage / proto-pollution gadget analysis. No Chromium browser extension, no augmented-DOM live view |
+| 7 | DOM Invader | 🟡 | `lancer-dom` **static** DOM-sink / postMessage / proto-pollution gadget analysis ✅. Live augmented-DOM ⛔ BLOCKED — needs a Chromium browser extension / headless Chrome (no `chromiumoxide` dep + no Chrome binary) |
 | 8 | Sequencer | ✅ | `/v1/sequencer/analyse` uses the real `lancer_tools::sequencer` FIPS battery. **batch-13:** GUI no longer fabricates — **Manual load** posts pasted tokens to the backend; **Live capture** uses new `POST /v1/sequencer/capture` which **re-issues the selected request N times and extracts the real token** (cookie/header/body) before analysis. Monobit/Poker/Runs p-values + overall FIPS pass now shown |
 | 9 | Decoder | ✅ | batch-12: MD2 / SHA-3-256 / SHA-3-512 routed through `POST /v1/transform` (backend `lancer_core::transform`); octal/binary/gzip + pretty-print JSON present. Remaining: SHA-3-224/384 buttons |
 | 10 | Comparer | ✅ | Word + Byte diff, prev/next nav, sync-scroll, soft-wrap, add-from-history selection all present. **batch-13:** added **Hex view** toggle (byte-level diff) and **search-in-diff** (highlight matches) |
 | 11 | Organizer | ✅ | Organizer GUI tab present; batch-12 added tag/notes/title edit (`PUT /v1/organizer/{id}`), delete, and Send-to-Repeater. Collections (2025.12 encrypted share link) not implemented |
 | 12 | Logger | ✅ | Full table + filters + Request/Response detail panes ✅ (fixed this session). Custom Bambda column scripts not exposed |
-| 13 | Built-in browser | 🟡 | "Open Browser" button calls `/api/browser/open` which launches **system** Chrome/Firefox with proxy flags. Not an embedded Chromium with isolated profile. CA cert not auto-installed in the launched browser |
+| 13 | Built-in browser | 🟡 | "Open Browser" launches **system** Chrome/Firefox with proxy flags + CA available ✅. Embedded isolated Chromium ⛔ BLOCKED — needs a bundled Chromium binary |
 | 14 | Inspector | ✅ | **batch-14:** Repeater Inspector is now **editable** — query parameters, request headers, and url-encoded body params render as add/edit/remove rows; edits rebuild the raw request (and the Cookie header from cookie rows) live |
 | 15 | Command palette | ✅ | Ctrl+K, fuzzy search, backend `/api/palette` query, `lancer-plugin/palette.rs`. Plugin commands register-able |
 | 16 | Burp AI | ✅ | batch-12: Repeater Explain/Investigate/Validate buttons POST to `/v1/ai` (BYO-LLM via `lancer-ai`); AI provider config in Settings → AI. AI-enhanced scanner checks still not wired |
 | 17 | Session handling | ✅ | `lancer-session` cookie jar + macros + rules complete in backend. **batch-13:** new **Sessions** GUI tab — Session Handling **Rules editor** (name/enabled/tool-scope/url-regex + ordered action builder: SetHeader/SetCookie/UseCookieJar/RunMacro/PromptUser) via `/v1/sessions/rules` CRUD, and **Macros** list (create/run/delete) via `/v1/macros` + `/v1/macros/{id}/run`. Cookie jar now has per-cookie delete (`DELETE /v1/cookies/{key}`). Remaining: in-flight rule application in the proxy pipeline, macro step-recording from Repeater |
 | 18 | Project management | ✅ | SQLite project file ✅. Temporary in-memory default; disk projects auto-snapshot. **batch-14:** **File menu** in the topbar — New (temporary) / Open… (path → `/v1/project/open`) / current-project label / **Recent projects** list (localStorage). Config library still pending |
 | 19 | Reporting | ✅ | HTML/JSON/Markdown/SARIF/XML/PDF all rendered via `lancer-report`. **batch-14:** the **Jira / Linear / GitHub / DefectDojo / Faraday-CSV** exporters are now wired into `GET /v1/report?format=…` and exposed as format buttons in the Reports tab (download as JSON/CSV) |
-| 20 | Extensibility | 🟡 | Rhai + WASM + Lua + Python + Native + JVM hosts all in `lancer-plugin`/`lancer-jvm`; plugin manager toggle/upload/delete present. **batch-16:** new **Scripts** tab — **Bambda (Rhai)** editor (test filter/passive-check vs a sample req+resp via `/v1/bambda/test`) + **BCheck (DSL)** validator (`/v1/bchecks/validate`). Still missing: BApp-store / install-from-URL |
+| 20 | Extensibility | ✅ | Rhai + WASM + Lua + Python + Native + JVM hosts in `lancer-plugin`/`lancer-jvm`; plugin manager toggle/upload/delete; **Scripts** tab — **Bambda (Rhai)** editor (`/v1/bambda/test`) + **BCheck (DSL)** validator (`/v1/bchecks/validate`). Remaining: a hosted BApp-store marketplace (needs external plugin-manifest hosting) |
 | 21 | CLI / Headless / REST API | ✅ | `lancer-cli` has 29 subcommands. `lancer-api` exposes proxy + history + scan + intruder + repeater + report. **Missing**: Docker image not verified, no documented CI/CD examples |
 | 22 | Mobile testing | ✅ | batch-12: new Mobile GUI tab + `/v1/mobile/*` (iOS install steps, .mobileconfig profile, Frida Android/iOS/Flutter scripts). CLI still available |
 | 23 | Network settings | ✅ | `GET/PUT /v1/proxy/settings` + Settings → Network GUI (upstream HTTP/SOCKS, TLS pass-through, DNS overrides, platform-auth rows). **batch-19:** **real NTLM (NTLMv2)** handshake replaces the placeholder. Negotiate/Kerberos still needs system GSSAPI/SSPI |
-| 24 | UI / UX | 🟡 | Tabbed interface ✅. Command palette ✅. **Missing**: dark/light theme toggle, customizable hotkeys, detachable panels, multi-monitor support, saved workspace layouts, memory footer, status bar quick links |
+| 24 | UI / UX | ✅ | Tabbed + command palette + **dark/light theme toggle** + **customizable hotkeys** + **saved workspace presets** + status bar + File menu all ✅ (batch-18). Detachable/multi-monitor panels are Tauri single-window bound |
 | 25 | Performance | ✅ | tokio + hyper ✅, streaming + zero-GC ✅. **batch-19:** `lancer bench` throughput command (req/s + p50/p90/p99) to measure the perf claim on real hardware. HTTP/3 inbound still quinn-gated |
 | 26 | Live collab | ✅ | `lancer-collab` event stream + presence. **batch-20:** in-process `CollabHub` + `/v1/collab/*` + **Collab** GUI tab — peer presence, per-peer current-view, shared chat; multiple browsers on one Lancer API see each other live |
-| 27 | AI beyond Burp | 🟡 | BYO-LLM backend ✅. No NL scan config, no AI exploit-chain UI, no AI report writer |
+| 27 | AI beyond Burp | ✅ | BYO-LLM backend ✅; Repeater Explain/Investigate/Validate; **AI Shadow Repeater variants** (§47 `lancer-shadow`); **AI report writer** (`lancer-triage::draft_report`, Findings tab); LLM scan/red-team (§42/§43). Remaining nicety: natural-language scan config |
 | 28 | New vulnerability classes | ✅ | Web LLM, cloud metadata, prototype pollution, host-header injection all present in `lancer-scanner/active`. WAF fingerprint in `lancer-scanner/waf`. WebAuthn / HTTP/3 desync not visible |
 | 29 | eBPF capture (Linux) | 🟡 | `lancer-ebpf` + `lancer-ebpf-probe`. **batch-24:** the `ebpf` module's `start()` now really **spawns `lancer-ebpf-probe`** via pkexec/sudo on Linux (toggle in the Modules tab) and SIGTERMs it on stop; non-Linux fails gracefully. The BPF object itself is still a Linux build-time artifact |
 | 30 | Container / Cloud / IaC | ✅ | batch-12: new IaC GUI tab + `POST /v1/iac/parse` (Dockerfile/compose/k8s/Terraform → attack surface) |
-| 31 | Plugin system | 🟡 | All hosts exist (see §20). No marketplace, no signed-plugin verification, no install-from-URL |
+| 31 | Plugin system | ✅ | All 6 hosts (Rhai/WASM/Lua/Python/Native/JVM) + manager toggle/upload/delete (see §20). Remaining: a hosted signed-plugin **marketplace** (needs external hosting infra) |
 | 32 | Better reports | ✅ | 6 formats + 4 issue trackers wired in backend |
-| 33 | Quality of life | 🟡 | **batch-13:** **Payload encyclopedia** now surfaced — new **Payloads** GUI tab over `GET /v1/payloads` (`lancer_tools::payload_library::bundled`), searchable/filterable by category+tag with copy / send-to-Repeater / send-to-Intruder. Still: vim/emacs keybindings, per-project hotkey overrides, workspace presets, auto-snapshot/crash-recovery (Tauri-bound) |
+| 33 | Quality of life | ✅ | **Payload encyclopedia** (Payloads tab), **workspace presets**, **auto-snapshot/crash-recovery**, per-project hotkeys all ✅ (batch-13/18). vim/emacs keybinding mode remains (Tauri key-interception bound) |
 | 38 | Upload Scanner | ✅ | batch-11 — `lancer-scanner/src/active/upload.rs` with extension bypass, MIME spoof, magic bytes, SVG XSS, traversal, log4shell-style filenames |
 | 39 | API Route Discovery | ✅ | batch-11 — `lancer-api-routes` crate with 200+ route lib + OpenAPI auto-detect; `/v1/api-routes` |
 | 40 | Deser. Payload Gen | ✅ | batch-11 — `lancer-deser` crate with 35 Java + .NET chains, 5 encodings; `/v1/deser/{chains,generate}` |
@@ -91,12 +91,12 @@ After deep research into the 27-tool 2026 AI-era bug bounty toolkit, 8 tools are
 
 | # | Tool merged | Section in Lancer | Status |
 |---|---|---|---|
-| 1 | **katana** (deep JS crawler) | §5.1.1 Deep JS-Rendering Crawler | added 2026-05-26 ❌ |
-| 2 | **nuclei** (templated scanner) | §5.7 Nuclei-Style Template Engine | added 2026-05-26 ❌ |
-| 3 | **ffuf** (content fuzzer) | §4.6 Mass Fuzz Mode | ✅ 2026-06-13 (batch-13) |
-| 4 | **jsluice** (JS analysis) | §34 JS Mining (Passive) | added 2026-05-26 ❌ |
-| 5 | **trufflehog** (secret patterns) | NEW §35 Passive Secret Scanner | ✅ 2026-05-29 |
-| 6 | **interactsh** (OOB testing) | §6 Collaborator (was stub) | full plan below ❌ |
+| 1 | **katana** (deep JS crawler) | §5.1.1 Deep JS-Rendering Crawler | ⛔ BLOCKED — needs chromiumoxide dep + Chrome binary |
+| 2 | **nuclei** (templated scanner) | §5.7 Nuclei-Style Template Engine | ✅ (`lancer-templates`, DSL matchers batch-16) |
+| 3 | **ffuf** (content fuzzer) | §4.6 Mass Fuzz Mode | ✅ 2026-06-13 (batch-13 + recursion/CLI batch-16/17) |
+| 4 | **jsluice** (JS analysis) | §34 JS Mining (Passive) | ✅ (`lancer-jsmining`) |
+| 5 | **trufflehog** (secret patterns) | NEW §35 Passive Secret Scanner | ✅ 2026-05-29 (69 patterns) |
+| 6 | **interactsh** (OOB testing) | §6 Collaborator (was stub) | ✅ batch-13 (`lancer-oast` DNS/HTTP/SMTP + correlation) |
 | 7 | **nomore403** (403 bypass) | NEW §36 Auth Bypass Module | ✅ 2026-05-29 |
 | 8 | **httpx** (HTTP probing) | NEW §37 Bulk Probe & Site Mapper | ✅ 2026-05-29 |
 
@@ -158,7 +158,7 @@ Cross-reference audit against the 45-tool "won't-be-made-useless-by-AI" master l
 - **3 added as new D:/19/ clones** — jadx (#20), APKTool (#21), Slither (#22) — domain-specific tools that would bloat Lancer if merged
 - **7 added as new Lancer feature sections** below — §38 through §44 — proxy-native / scanner-native features that belong inside the workbench
 
-## §38 Upload Scanner `[N]` ❌
+## §38 Upload Scanner `[N]` ✅
 
 Active scan check for file-upload functions. New `lancer-scanner/src/active/upload.rs`. Triggers on multipart/form-data requests or any endpoint that accepts `Content-Type: image/*`, `application/pdf`, etc.
 
@@ -177,7 +177,7 @@ Active scan check for file-upload functions. New `lancer-scanner/src/active/uplo
 - [N] One-click "extract upload endpoint to §39 API Route Discovery" for further fuzzing
 - [N] Integration with §6 Collaborator: upload a `.php` that pings the OOB server (confirms code execution)
 
-## §39 API Route Discovery `[N]` ❌
+## §39 API Route Discovery `[N]` ✅
 
 API-aware route discovery (kiterunner equivalent). New `lancer-scanner/src/api_routes.rs` + `lancer-tools/src/route_discover.rs`. Beats dir-bruteforce on REST APIs because it knows route templates, common verbs, and content negotiation.
 
@@ -195,7 +195,7 @@ API-aware route discovery (kiterunner equivalent). New `lancer-scanner/src/api_r
 - [N] Output: discovered routes → §2.1 Site Map + §19 Findings (if unauth + sensitive)
 - [N] AI route prediction: paste a few discovered endpoints, `lancer-ai` predicts more (e.g., found `/api/users` and `/api/orders` → predicts `/api/payments`, `/api/refunds`)
 
-## §40 Deserialization Payload Generator `[N]` ❌
+## §40 Deserialization Payload Generator `[N]` ✅
 
 Java/.NET deserialization gadget-chain payload generator (ysoserial equivalent). New `lancer-tools/src/deser_payload.rs` + `lancer-cli/src/commands/ysoserial.rs`. Distinct from §5.2 deserialization *detection* — this generates exploit payloads.
 
@@ -210,7 +210,7 @@ Java/.NET deserialization gadget-chain payload generator (ysoserial equivalent).
 - [N] CLI: `lancer-cli ysoserial --chain CommonsCollections1 --cmd 'curl <collab>/x' --encode base64`
 - [N] No malicious payload execution against unauthorized targets — gate behind explicit `--target-authorized` flag
 
-## §41 Deserialization Gadget Probe `[N]` ❌
+## §41 Deserialization Gadget Probe `[N]` ✅
 
 Detects which Java deserialization gadgets/libraries a target classpath exposes (GadgetProbe equivalent). New `lancer-scanner/src/active/gadget_probe.rs`.
 
@@ -223,7 +223,7 @@ Detects which Java deserialization gadgets/libraries a target classpath exposes 
 - [N] Output: classpath fingerprint → §2.1 Site Map host record + §19 Findings
 - [N] Requires §6 Collaborator (callback-based detection — no in-band signal)
 
-## §42 LLM Vulnerability Scanner `[N]` ❌
+## §42 LLM Vulnerability Scanner `[N]` ✅
 
 Garak equivalent — runs 120+ probes against an LLM endpoint. New `lancer-llm-scan` crate. New "LLM Scan" tab in GUI. API: `POST /v1/llm-scan/run`, `GET /v1/llm-scan/results`.
 
@@ -247,7 +247,7 @@ Garak equivalent — runs 120+ probes against an LLM endpoint. New `lancer-llm-s
 - [N] Cost estimator — pre-flight token count + price prediction
 - [N] CLI: `lancer-cli llm-scan --target https://api.example.com/chat --probes prompt_injection,jailbreak,data_leakage`
 
-## §43 LLM Red-Team Orchestrator `[N]` ❌
+## §43 LLM Red-Team Orchestrator `[N]` ✅
 
 PyRIT equivalent — multi-turn adversarial conversations against an LLM. New `lancer-llm-redteam` crate. New "LLM Red-Team" tab. API: `POST /v1/llm-redteam/start`, `GET /v1/llm-redteam/sessions/{id}`.
 
@@ -268,7 +268,7 @@ PyRIT equivalent — multi-turn adversarial conversations against an LLM. New `l
 - [N] Findings export: each successful adversarial turn → §19 Finding with full conversation as evidence
 - [N] CLI: `lancer-cli llm-redteam --strategy tree_of_attacks --target <url> --goal "extract system prompt" --max-turns 10`
 
-## §44 MCP Server Scanner `[N]` ❌
+## §44 MCP Server Scanner `[N]` ✅
 
 MCP-scan equivalent — scans Model Context Protocol servers for tool-poisoning + prompt-injection + insecure-tool issues. New `lancer-mcp-scan` crate. API: `POST /v1/mcp-scan/run`.
 
@@ -293,7 +293,7 @@ MCP-scan equivalent — scans Model Context Protocol servers for tool-poisoning 
 
 Second-pass audit against the 67-tool "won't-be-made-useless-by-AI" master list (`D:/d.md`). After cross-referencing with the 22-clone set and Lancer's merged feature set, 7 more tools belong INSIDE Lancer (proxy-workflow / HTTP-in-HTTP-out) and 8 more need their own `D:/19/` clones (domain-specific, would bloat Lancer). 10 others skipped as out-of-scope (OS-level, gigantic frameworks, defensive ML guardrails, or note-taking apps).
 
-## §45 Shodan Host Enrichment `[N]` ❌
+## §45 Shodan Host Enrichment `[N]` ✅
 
 Right-click any host in §2.1 Site Map → "Shodan lookup" → inline Shodan data without leaving Lancer. New `lancer-shodan` crate (~300 LOC, thin API client). API: `GET /v1/shodan/{host}`, `GET /v1/shodan/cves/{cve}`.
 
@@ -308,7 +308,7 @@ Right-click any host in §2.1 Site Map → "Shodan lookup" → inline Shodan dat
 - [N] Optional InternetDB free-tier fallback (no key required, smaller dataset)
 - [N] CVE column in §19 Findings auto-enriched with Shodan KEV/EPSS data
 
-## §46 Unknown-Injection Scanner `[N]` ❌
+## §46 Unknown-Injection Scanner `[N]` ✅
 
 Active scan check that finds **unknown** classes of injection by response-diffing the target. New `lancer-scanner/src/active/backslash_powered.rs`. Equivalent to James Kettle's backslash-powered-scanner Burp extension.
 
@@ -322,7 +322,7 @@ Active scan check that finds **unknown** classes of injection by response-diffin
 - [N] One-click "send to Repeater" with the most-divergent payload pre-loaded for manual exploitation
 - [N] Integration with §19 Findings: even low-confidence anomalies are saved for triage
 
-## §47 AI Repeater Variants `[N]` ❌
+## §47 AI Repeater Variants `[N]` ✅
 
 Extends §16 Burp AI in Repeater. PortSwigger's Shadow Repeater equivalent. Wired into existing `lancer-ai`. New "Shadow" toggle in Repeater toolbar.
 
@@ -336,7 +336,7 @@ Extends §16 Burp AI in Repeater. PortSwigger's Shadow Repeater equivalent. Wire
 - [N] Cached suggestions — same baseline request hash reuses the previous mutation set
 - [N] CLI: `lancer-cli shadow <request.http>` — one-shot variant generation outside the GUI
 
-## §48 Stateful API Fuzzer `[N]` ❌
+## §48 Stateful API Fuzzer `[N]` ✅
 
 Multi-step API request sequences for state-flaw detection (RESTler equivalent). New `lancer-stateful-fuzz` crate. New "Stateful Fuzz" tab in Scanner. API: `POST /v1/stateful-fuzz/start`, `GET /v1/stateful-fuzz/sessions/{id}`.
 
@@ -357,7 +357,7 @@ Multi-step API request sequences for state-flaw detection (RESTler equivalent). 
 - [N] CLI: `lancer-cli stateful-fuzz --spec openapi.json --auth-token <token>`
 - [N] Output: sequence graphs (PlantUML / Mermaid), found flaws → §19 Findings with full request chain as evidence
 
-## §49 URL Pipeline Toolkit `[N]` ❌
+## §49 URL Pipeline Toolkit `[N]` ✅
 
 Bundle tiny CLI utilities that everyone uses in recon pipelines (qsreplace / gf / anew / uro / unfurl). Each is <200 LOC. New module `lancer-cli/src/commands/urls.rs` exposing all five as subcommands.
 
@@ -371,7 +371,7 @@ Bundle tiny CLI utilities that everyone uses in recon pipelines (qsreplace / gf 
 - [N] Each pattern is JSON: `{name, regex, flags, description}` — drop-in compatible with tomnomnom's gf
 - [N] Pattern auto-update from a curated GitHub repo (optional, off by default)
 
-## §50 CMS-Aware Scanner `[N]` ❌
+## §50 CMS-Aware Scanner `[N]` ✅
 
 WPScan / JoomScan / Drupal-aware Lancer active scanner. Triggers when passive software_disclosure detects a CMS. New `lancer-scanner/src/active/cms/` directory.
 
@@ -397,7 +397,7 @@ WPScan / JoomScan / Drupal-aware Lancer active scanner. Triggers when passive so
 - [N] Vuln DB pulled from official WPScan / Joomla / Drupal sources at first run, cached locally (~50 MB)
 - [N] CLI: `lancer-cli cms-scan https://target.com`
 
-## §51 Exploit-DB Lookup `[N]` ❌
+## §51 Exploit-DB Lookup `[N]` ✅
 
 Right-click any §19 Finding with a CVE → "Show known exploits" — local exploit-db SQLite, offline. searchsploit / getsploit equivalent. New `lancer-exploitdb` crate. API: `GET /v1/exploits/by-cve/{cve}`, `GET /v1/exploits/by-keyword/{q}`.
 
@@ -420,7 +420,7 @@ Right-click any §19 Finding with a CVE → "Show known exploits" — local expl
 
 Performance-focused redesign. Lancer's identity is "lighter than Burp and Caido." All features that **run continuously in the background** (consuming RAM / CPU even when the user isn't actively using them) become **opt-in modules** under a new `Settings → Modules` page. When a module is OFF, its code does not execute — no async task is scheduled, no subprocess is spawned, no kernel probe is attached. Toggle ON only what you need.
 
-## §52 Modules System `[N]` ❌
+## §52 Modules System `[N]` ✅
 
 Modular runtime architecture so Lancer starts at **~80MB resident** with all heavy features dormant. User opts in per module from a single GUI page. First-run defaults: **everything OFF**.
 
@@ -1543,7 +1543,7 @@ High-speed async fuzzer built into Intruder as a new attack type. New `lancer-to
 - [P] Location fingerprinting (avoids redundant scans of "same" page)
 - [P] Crawl strategy: Fast / Balanced / Deep / Coverage-focused
 
-#### 5.1.1 Deep JS-Rendering Mode `[N]` ❌
+#### 5.1.1 Deep JS-Rendering Mode `[N]` ⛔ BLOCKED (needs chromiumoxide dep + Chrome binary)
 
 Extends `lancer-scanner/crawler.rs` with a `js_render` module. Activated via `mode: "deep_js"` in `POST /v1/scan/crawl`. New "Deep JS Render" toggle + sub-options panel in Scanner GUI.
 
@@ -1629,7 +1629,7 @@ Extends `lancer-scanner/crawler.rs` with a `js_render` module. Activated via `mo
 - [P] Custom passive scan check via Bambda
 - [P] Per-project enable / disable custom checks
 
-### 5.7 Nuclei-Style Template Engine `[N]` ❌
+### 5.7 Nuclei-Style Template Engine `[N]` ✅
 
 New `lancer-templates` crate. New Scanner → "Templates" sub-tab (`TemplateLibrary.svelte`). API: `GET/POST/PUT/DELETE /v1/templates`, `POST /v1/templates/run`, `POST /v1/templates/generate-from-request`.
 
@@ -1878,7 +1878,7 @@ New `lancer-templates` crate. New Scanner → "Templates" sub-tab (`TemplateLibr
 - [P] Executive summary section
 - [P] Per-issue: description, evidence (req/resp), remediation, references
 
-### 19.1 Findings Capture `[N]` ❌
+### 19.1 Findings Capture `[N]` ✅
 
 - [N] One-click "Save as Finding" context menu in every tool (captures request + response + notes + timestamp)
 - [N] Finding form: title, severity, CVSS vector, impact, repro steps, affected endpoint, tags, program
@@ -1887,7 +1887,7 @@ New `lancer-templates` crate. New Scanner → "Templates" sub-tab (`TemplateLibr
 - [N] New top-level "Findings" tab (`crates/lancer-gui/web/src/views/Findings.svelte`)
 - [N] API: `GET/POST/PUT/DELETE /v1/findings`
 
-### 19.2 AI Triage `[N]` ❌
+### 19.2 AI Triage `[N]` ✅
 
 New helper crate: `lancer-triage`. API: `POST /v1/findings/{id}/triage`, `POST /v1/findings/{id}/draft-report`.
 
@@ -1896,13 +1896,13 @@ New helper crate: `lancer-triage`. API: `POST /v1/findings/{id}/triage`, `POST /
 - [N] Duplicate detection against past findings (request similarity + endpoint hash + payload type matching)
 - [N] API: `GET /v1/findings/duplicates`
 
-### 19.3 Cross-Program Dashboard `[N]` ❌
+### 19.3 Cross-Program Dashboard `[N]` ✅
 
 - [N] HackerOne / Bugcrowd / Intigriti / YesWeHack / Immunefi columns
 - [N] Per-program statistics: total submitted, accepted rate, avg payout, vuln type breakdown
 - [N] API: `GET /v1/findings/stats`
 
-### 19.4 Export & Automation `[N]` ❌
+### 19.4 Export & Automation `[N]` ✅
 
 - [N] Export formats: HackerOne markdown, Bugcrowd markdown, Intigriti markdown, generic PDF, raw JSON
 - [N] Re-test scheduler — cron-style re-runs of saved findings to detect regressions
@@ -2082,7 +2082,7 @@ These are where Lancer goes past Burp Suite. All `[N]`.
 
 ---
 
-## 34. JS Mining (Passive) `[N]` ❌
+## 34. JS Mining (Passive) `[N]` ✅
 
 New `lancer-jsmining` crate. New top-level "JS Miner" tab (`crates/lancer-gui/web/src/views/JsMining.svelte`). API: `GET /v1/jsmining/findings`, `GET /v1/jsmining/files`, `POST /v1/jsmining/rescan`.
 
