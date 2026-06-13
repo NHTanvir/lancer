@@ -1699,6 +1699,20 @@ async fn dynamic_route(
         return json(&*state.macros.read());
     }
     if method == Method::POST && path == "/v1/macros" {
+        // Accept either a full Macro, or {name, raw_steps:[wire strings]} from the
+        // Repeater recorder (parsed into MacroSteps server-side).
+        #[derive(serde::Deserialize)]
+        struct Recorded { name: String, raw_steps: Vec<String> }
+        if let Ok(rec) = serde_json::from_slice::<Recorded>(body) {
+            use lancer_session::{MacroStep};
+            let steps: Vec<MacroStep> = rec.raw_steps.iter()
+                .filter_map(|s| HttpRequest::parse_wire(s.as_bytes()).ok())
+                .map(|request| MacroStep { request, extracts: Vec::new(), substitutions: Vec::new() })
+                .collect();
+            let m = Macro { id: uuid::Uuid::new_v4(), name: rec.name, steps };
+            state.macros.write().push(m.clone());
+            return json(&m);
+        }
         let mut m: Macro = match serde_json::from_slice(body) {
             Ok(m) => m, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
         };

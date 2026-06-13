@@ -114,6 +114,71 @@
     { id: "settings",  label: "Settings" },
   ];
 
+  // ── §24 Hotkey customizer + §33 workspace presets ──────────────────────────
+  const DEFAULT_HOTKEYS = {
+    "ctrl+k": "palette", "ctrl+e": "repeater", "ctrl+i": "intruder",
+    "ctrl+shift+p": "proxy", "ctrl+shift+s": "scanner", "ctrl+shift+t": "target",
+    "ctrl+shift+l": "logger", "ctrl+shift+d": "decoder", "ctrl+shift+m": "theme",
+  };
+  let hotkeys = { ...DEFAULT_HOTKEYS };
+  try { const s = localStorage.getItem("lancer.hotkeys"); if (s) hotkeys = JSON.parse(s); } catch {}
+  let showHotkeys = false;
+  let workspaces = [];
+  try { workspaces = JSON.parse(localStorage.getItem("lancer.workspaces") || "[]"); } catch {}
+
+  function comboFromEvent(e) {
+    const parts = [];
+    if (e.ctrlKey || e.metaKey) parts.push("ctrl");
+    if (e.shiftKey) parts.push("shift");
+    if (e.altKey) parts.push("alt");
+    const k = (e.key || "").toLowerCase();
+    if (!["control", "shift", "alt", "meta"].includes(k)) parts.push(k);
+    return parts.join("+");
+  }
+  function runAction(action) {
+    if (action === "palette") { paletteOpen = true; return; }
+    if (action === "theme") { toggleTheme(); return; }
+    const tab = tabs.find(t => t.id === action);
+    if (tab) active = tab.id;
+  }
+  let capturingFor = null; // hotkey being rebound
+  function startCapture(action) { capturingFor = action; }
+  function onHotkeyCapture(e) {
+    if (!capturingFor) return;
+    e.preventDefault();
+    const combo = comboFromEvent(e);
+    if (["", "escape"].includes(combo)) { capturingFor = null; return; }
+    // remove combo from any other action, assign to this one
+    for (const c of Object.keys(hotkeys)) if (hotkeys[c] === capturingFor) delete hotkeys[c];
+    hotkeys[combo] = capturingFor;
+    hotkeys = hotkeys;
+    capturingFor = null;
+    try { localStorage.setItem("lancer.hotkeys", JSON.stringify(hotkeys)); } catch {}
+  }
+  function resetHotkeys() { hotkeys = { ...DEFAULT_HOTKEYS }; try { localStorage.setItem("lancer.hotkeys", JSON.stringify(hotkeys)); } catch {} }
+
+  function saveWorkspace() {
+    const name = prompt("Workspace preset name:");
+    if (!name) return;
+    const ws = { name, theme, active, hotkeys };
+    workspaces = [...workspaces.filter(w => w.name !== name), ws];
+    try { localStorage.setItem("lancer.workspaces", JSON.stringify(workspaces)); } catch {}
+  }
+  function loadWorkspace(ws) {
+    if (ws.theme) applyTheme(ws.theme);
+    if (ws.active) active = ws.active;
+    if (ws.hotkeys) { hotkeys = ws.hotkeys; try { localStorage.setItem("lancer.hotkeys", JSON.stringify(hotkeys)); } catch {} }
+  }
+  function deleteWorkspace(ws) {
+    workspaces = workspaces.filter(w => w.name !== ws.name);
+    try { localStorage.setItem("lancer.workspaces", JSON.stringify(workspaces)); } catch {}
+  }
+
+  // ── §33 Crash recovery — periodic snapshot of the active view ──────────────
+  function snapshotState() {
+    try { localStorage.setItem("lancer.recovery", JSON.stringify({ active, ts: Date.now() })); } catch {}
+  }
+
   // ── §18 File menu ──────────────────────────────────────────────────────────
   let fileMenuOpen = false;
   let projectInfo = { open: false, kind: "temporary", path: null };
@@ -173,13 +238,26 @@
     const statusTimer = setInterval(refreshStatus, 10000);
 
     function onKey(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if (capturingFor) { onHotkeyCapture(e); return; }
+      if (e.key === "Escape") { paletteOpen = false; showHotkeys = false; return; }
+      // Don't hijack typing in inputs/textareas (except the palette combo).
+      const combo = comboFromEvent(e);
+      const action = hotkeys[combo];
+      if (action) {
+        const tag = (e.target && e.target.tagName) || "";
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) && action !== "palette") return;
         e.preventDefault();
-        paletteOpen = true;
+        runAction(action);
       }
-      if (e.key === "Escape") paletteOpen = false;
     }
     window.addEventListener("keydown", onKey);
+
+    // §33 crash recovery: restore last active view, then snapshot periodically.
+    try {
+      const rec = JSON.parse(localStorage.getItem("lancer.recovery") || "null");
+      if (rec && rec.active && tabs.find(t => t.id === rec.active)) active = rec.active;
+    } catch {}
+    const recoveryTimer = setInterval(snapshotState, 20000);
 
     function onWinClick() { fileMenuOpen = false; }
     window.addEventListener("click", onWinClick);
@@ -196,6 +274,7 @@
       window.removeEventListener("click", onWinClick);
       window.removeEventListener("lancer:navigate", onLancerNavigate);
       clearInterval(statusTimer);
+      clearInterval(recoveryTimer);
     };
   });
 
@@ -272,6 +351,12 @@
           </svg>
         {/if}
       </button>
+      <button class="palette-btn" on:click={() => showHotkeys = true} title="Keyboard shortcuts & workspaces">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="4" width="14" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4 7h0M7 7h0M10 7h0M5 9.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      </button>
       <button class="palette-btn" on:click={() => paletteOpen = true} title="Command Palette (Ctrl+K)">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
           <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
@@ -345,6 +430,38 @@
     on:close={() => paletteOpen = false}
     on:navigate={onPaletteNavigate}
   />
+{/if}
+
+{#if showHotkeys}
+  <div class="hk-overlay" on:click={() => { showHotkeys = false; capturingFor = null; }}>
+    <div class="hk-modal" on:click|stopPropagation>
+      <div class="hk-head">
+        <strong>Keyboard shortcuts & workspaces</strong>
+        <button class="palette-btn" on:click={() => { showHotkeys = false; capturingFor = null; }}>×</button>
+      </div>
+      <div class="hk-body">
+        <div class="hk-section">Hotkeys <button class="hk-mini" on:click={resetHotkeys}>Reset defaults</button></div>
+        <table class="hk-table">
+          <tbody>
+            {#each Object.entries(hotkeys) as [combo, action]}
+              <tr>
+                <td class="hk-action">{action}</td>
+                <td><button class="hk-combo" class:capturing={capturingFor === action} on:click={() => startCapture(action)}>{capturingFor === action ? "press keys…" : combo}</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        <div class="hk-section">Workspace presets <button class="hk-mini" on:click={saveWorkspace}>Save current</button></div>
+        {#if workspaces.length === 0}
+          <div class="dim" style="font-size:12px">No saved workspaces. "Save current" stores the active view, theme, and hotkeys.</div>
+        {:else}
+          {#each workspaces as ws}
+            <div class="hk-ws"><span>{ws.name}</span><span class="dim">{ws.active} · {ws.theme}</span><button class="hk-mini" on:click={() => loadWorkspace(ws)}>Load</button><button class="hk-mini danger" on:click={() => deleteWorkspace(ws)}>×</button></div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -567,6 +684,20 @@
   :global([data-theme="dark"] .file-menu) { background: #2a2b2f; border-color: #3a3b3f; }
   :global([data-theme="dark"] .fm-item) { color: #ddd; }
   :global([data-theme="dark"] .fm-item:hover) { background: #34353a; }
+  .hk-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 400; display: flex; align-items: center; justify-content: center; }
+  .hk-modal { width: 460px; max-width: 92vw; max-height: 80vh; background: #fff; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; }
+  .hk-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #eee; }
+  .hk-body { padding: 12px 16px; overflow: auto; }
+  .hk-section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin: 12px 0 6px; display: flex; justify-content: space-between; align-items: center; }
+  .hk-table { width: 100%; }
+  .hk-action { font-size: 13px; color: #333; padding: 3px 0; }
+  .hk-combo { font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 3px 10px; border: 1px solid #c8c8c8; border-radius: 4px; background: #f7f7f7; cursor: pointer; }
+  .hk-combo.capturing { border-color: #e03a00; color: #e03a00; }
+  .hk-mini { font-size: 11px; padding: 2px 8px; border: 1px solid #c8c8c8; border-radius: 3px; background: #f0f0f0; cursor: pointer; }
+  .hk-mini.danger { color: #d42c2c; }
+  .hk-ws { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+  .hk-ws span:first-child { font-weight: 600; flex: 1; }
+  :global([data-theme="dark"] .hk-modal) { background: #232428; color: #e0e0e0; }
 
   .tabs {
     display: flex; align-items: stretch;

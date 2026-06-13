@@ -357,6 +357,27 @@
   }
 
   // ── Send / Cancel ──────────────────────────────────────────────────────────────
+  // ── §17 Macro recorder ──────────────────────────────────────────────────────
+  let recordingMacro = false;
+  let macroSteps = [];
+  function toggleRecord() {
+    if (recordingMacro) { recordingMacro = false; return; }
+    macroSteps = []; recordingMacro = true;
+  }
+  async function saveMacro() {
+    if (!macroSteps.length) { recordingMacro = false; return; }
+    const name = prompt(`Save macro with ${macroSteps.length} step(s) as:`);
+    if (!name) return;
+    try {
+      await fetch("/api/v1/macros", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, raw_steps: macroSteps }),
+      });
+      recordingMacro = false; macroSteps = [];
+      window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "sessions" }));
+    } catch {}
+  }
+
   async function send() {
     if (sending) return;
     const s = tabStates[activeTab];
@@ -388,6 +409,8 @@
       s.response = rawResp;
       s.history = [{ request: s.request, response: s.response }, ...s.history].slice(0, 50);
       s.histIdx = -1;
+      // §17 macro recording: capture each sent request as a step.
+      if (recordingMacro) macroSteps = [...macroSteps, s.request];
       // Update tab label with host
       const t = tabs.find(x => x.id === activeTab);
       if (t && s.host) t.label = s.host.length > 18 ? s.host.slice(0, 18) + "…" : s.host;
@@ -622,6 +645,16 @@
 
       <!-- Cancel -->
       <button class="toolbar-btn btn-cancel" on:click={cancel} disabled={!sending}>Cancel</button>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- §17 Macro recorder -->
+      <button class="toolbar-btn" class:rec-on={recordingMacro} on:click={toggleRecord} title="Record each Send into a session macro">
+        {recordingMacro ? `● Recording (${macroSteps.length})` : "Record macro"}
+      </button>
+      {#if recordingMacro && macroSteps.length}
+        <button class="toolbar-btn" on:click={saveMacro}>Save macro</button>
+      {/if}
 
       <div class="toolbar-sep"></div>
 
@@ -1242,6 +1275,7 @@
   .nav-btn { gap: 1px; padding: 4px 8px; }
 
   .btn-cancel { color: #444; }
+  .rec-on { background: #fdeaea !important; color: #d42c2c !important; border-color: #f3c2c2 !important; }
 
   .toolbar-sep {
     width: 1px;
