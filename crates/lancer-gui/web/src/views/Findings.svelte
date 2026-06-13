@@ -34,6 +34,15 @@
 
   // Export
   let exportFmt = "hackerone";
+  let dupes = [];
+  let showDupes = false;
+
+  async function findDuplicates() {
+    try {
+      const r = await fetch("/api/v1/findings/duplicates");
+      if (r.ok) { dupes = await r.json(); showDupes = true; }
+    } catch {}
+  }
 
   const SEVERITIES  = ["Critical","High","Medium","Low","Info"];
   const PROGRAMS    = ["HackerOne","Bugcrowd","Intigriti","YesWeHack","Immunefi","Private"];
@@ -188,6 +197,7 @@
           {#each STATUSES as s}<option value={s}>{s}</option>{/each}
         </select>
         <div class="filter-spacer"></div>
+        <button class="btn-export" on:click={findDuplicates} title="Detect likely duplicate findings (same severity, similar endpoint + title)">Find duplicates</button>
         <div class="export-row">
           <select bind:value={exportFmt} class="export-select">
             <option value="hackerone">HackerOne MD</option>
@@ -199,6 +209,23 @@
           <button class="btn-export" on:click={exportFindings}>Export</button>
         </div>
       </div>
+
+      {#if showDupes}
+        <div class="dupes-banner">
+          <strong>{dupes.length}</strong> likely duplicate{dupes.length === 1 ? "" : "s"} found.
+          <button class="dupes-close" on:click={() => (showDupes = false)}>×</button>
+          {#each dupes as d}
+            <div class="dupe-row">
+              <span class="dupe-sim">{Math.round((d.similarity || 0) * 100)}%</span>
+              <span class="dupe-name">{(findings.find(f => f.id === d.finding_id) || {}).title || d.finding_id?.slice(0, 8)}</span>
+              <span class="dim">duplicate of</span>
+              <span class="dupe-name">{(findings.find(f => f.id === d.duplicate_of) || {}).title || d.duplicate_of?.slice(0, 8)}</span>
+              <span class="dim dupe-reason">— {d.reason}</span>
+            </div>
+          {/each}
+          {#if dupes.length === 0}<div class="dim">No duplicates detected.</div>{/if}
+        </div>
+      {/if}
 
       {#if loading}
         <div class="empty-state"><span class="dim">Loading findings…</span></div>
@@ -488,6 +515,12 @@
   .export-select { padding:4px 6px; font-size:12px; }
   .btn-export { background:#f0f0f0; border:1px solid #c8c8c8; border-radius:3px; padding:4px 10px; font-size:12px; cursor:pointer; }
   .btn-export:hover { background:#e4e4e4; }
+  .dupes-banner { position:relative; margin:6px 10px; padding:8px 12px; background:#fff8f0; border:1px solid #f0d9c0; border-radius:4px; font-size:12px; }
+  .dupes-close { position:absolute; top:4px; right:6px; background:none; border:none; font-size:16px; cursor:pointer; color:#999; }
+  .dupe-row { display:flex; gap:6px; align-items:center; margin-top:4px; flex-wrap:wrap; }
+  .dupe-sim { font-weight:700; color:#c73400; }
+  .dupe-name { font-weight:600; color:#333; }
+  .dupe-reason { font-size:11px; }
 
   /* Table */
   .findings-table-wrap { flex:1; overflow-y:auto; }

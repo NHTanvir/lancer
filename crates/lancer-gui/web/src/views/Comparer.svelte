@@ -7,7 +7,13 @@
   let diffOutput = [];
   let softWrap = true;
   let syncScroll = true;
+  let hexView = false;
+  let search = "";
   let diffIdx = -1;
+
+  function toHex(s) {
+    return Array.from(s).map(c => (c.codePointAt(0) & 0xff).toString(16).padStart(2, "0")).join(" ");
+  }
   let diffEl;
   let item1El;
   let item2El;
@@ -85,9 +91,12 @@
   // ── Diff engine ────────────────────────────────────────────────────────────
   function computeDiff() {
     if (!item1 && !item2) { diffOutput = []; diffIdx = -1; return; }
-    const seqA = diffMode === "words" ? item1.split(/(\s+)/) : [...item1];
-    const seqB = diffMode === "words" ? item2.split(/(\s+)/) : [...item2];
-    diffOutput = computeSeqDiff(seqA, seqB);
+    const a = hexView ? toHex(item1) : item1;
+    const b = hexView ? toHex(item2) : item2;
+    const byBytes = hexView || diffMode === "bytes";
+    const seqA = byBytes ? (hexView ? a.split(" ") : [...a]) : a.split(/(\s+)/);
+    const seqB = byBytes ? (hexView ? b.split(" ") : [...b]) : b.split(/(\s+)/);
+    diffOutput = computeSeqDiff(seqA, seqB).map(c => hexView ? { ...c, text: c.text + " " } : c);
     diffIdx = -1;
   }
 
@@ -117,7 +126,8 @@
     return result;
   }
 
-  $: if (item1 !== undefined || item2 !== undefined || diffMode) computeDiff();
+  $: if (item1 !== undefined || item2 !== undefined || diffMode || hexView) computeDiff();
+  function matchesSearch(text) { return search && text.toLowerCase().includes(search.toLowerCase()); }
 
   $: stats = {
     same:    diffOutput.filter(d => d.type === "same").length,
@@ -201,6 +211,8 @@
     </div>
     <label class="check-label"><input type="checkbox" bind:checked={softWrap} /> Soft wrap</label>
     <label class="check-label"><input type="checkbox" bind:checked={syncScroll} /> Sync scroll</label>
+    <label class="check-label"><input type="checkbox" bind:checked={hexView} /> Hex view</label>
+    <input class="search-box" bind:value={search} placeholder="Search in diff…" />
     <button class="sm-btn" class:mode-active={showSelect} on:click={() => showSelect = !showSelect}
       title="Toggle history selection tables">
       {showSelect ? "▲ Hide history" : "▼ Select from history"}
@@ -349,11 +361,11 @@
           {#each diffOutput as chunk, ci}
             {@const navIdx = diffChunkIndices.indexOf(ci)}
             {#if chunk.type === "same"}
-              <span class="chunk-same">{chunk.text}</span>
+              <span class="chunk-same" class:chunk-match={matchesSearch(chunk.text)}>{chunk.text}</span>
             {:else if chunk.type === "add"}
-              <span class="chunk-add" class:chunk-current={navIdx === diffIdx}>{chunk.text}</span>
+              <span class="chunk-add" class:chunk-current={navIdx === diffIdx} class:chunk-match={matchesSearch(chunk.text)}>{chunk.text}</span>
             {:else}
-              <span class="chunk-del" class:chunk-current={navIdx === diffIdx}>{chunk.text}</span>
+              <span class="chunk-del" class:chunk-current={navIdx === diffIdx} class:chunk-match={matchesSearch(chunk.text)}>{chunk.text}</span>
             {/if}
           {/each}
         </div>
@@ -530,6 +542,8 @@
   .chunk-add  { background: #eaf5ea; color: #1b8c1b; border-radius: 2px; }
   .chunk-del  { background: #fde8e8; color: #d42c2c; border-radius: 2px; text-decoration: line-through; }
   .chunk-current { outline: 2px solid #e03a00; box-shadow: 0 0 0 2px rgba(224,58,0,0.15); }
+  .chunk-match { background: #fff3a0 !important; color: #6b5700 !important; }
+  .search-box { font-size: 12px; padding: 3px 8px; border: 1px solid #c8c8c8; border-radius: 3px; width: 150px; }
   .empty-state-sm {
     display: flex; align-items: center; justify-content: center;
     height: 60px; color: #767676; font-size: 13px;
