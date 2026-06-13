@@ -41,6 +41,7 @@
   import ResponseDiffer from "./views/ResponseDiffer.svelte";
   import FlowGrapher from "./views/FlowGrapher.svelte";
   import Scripts from "./views/Scripts.svelte";
+  import Collab from "./views/Collab.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -109,6 +110,7 @@
     { id: "cookies",   label: "Cookies" },
     { id: "sessions",  label: "Sessions" },
     { id: "scripts",   label: "Scripts" },
+    { id: "collab",    label: "Collab" },
     { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
     { id: "settings",  label: "Settings" },
@@ -406,6 +408,7 @@
     {#if active === "cookies"}<Cookies />{/if}
     {#if active === "sessions"}<SessionHandling />{/if}
     {#if active === "scripts"}<Scripts />{/if}
+    {#if active === "collab"}<Collab />{/if}
     {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}
     {#if active === "settings"}<Settings />{/if}

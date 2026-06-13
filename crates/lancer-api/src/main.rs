@@ -136,6 +136,8 @@ struct AppState {
     macros:        Arc<RwLock<Vec<Macro>>>,
     // §5.4 Scan config library (live, applied to subsequent scans)
     scan_config:   Arc<RwLock<ScanConfig>>,
+    // §26 Live collaboration hub
+    collab:        lancer_collab::CollabHub,
 }
 
 #[tokio::main]
@@ -322,6 +324,7 @@ async fn main() -> Result<()> {
         session_rules: Arc::new(RwLock::new(Vec::new())),
         macros: Arc::new(RwLock::new(Vec::new())),
         scan_config: Arc::new(RwLock::new(ScanConfig::default())),
+        collab: lancer_collab::CollabHub::new(),
     });
 
     // Passive analysis consumer (§34 JS Mining + §35 Secret Scanner): runs the
@@ -1895,6 +1898,48 @@ async fn dynamic_route(
             }
             Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
         };
+    }
+
+    // ── §26 Live collaboration (presence / cursor / chat) ────────────────────
+    if method == Method::POST && path == "/v1/collab/join" {
+        #[derive(serde::Deserialize)]
+        struct R { display_name: String, color: Option<String> }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let peer = lancer_collab::Peer {
+            id: uuid::Uuid::new_v4(),
+            display_name: r.display_name,
+            color: r.color.unwrap_or_else(|| "#e03a00".into()),
+            joined_at: chrono::Utc::now(),
+        };
+        state.collab.publish(lancer_collab::CollabEvent::PeerJoined(peer.clone()));
+        return json(&peer);
+    }
+    if method == Method::POST && path == "/v1/collab/leave" {
+        #[derive(serde::Deserialize)]
+        struct R { id: uuid::Uuid }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        state.collab.publish(lancer_collab::CollabEvent::PeerLeft { id: r.id });
+        return json(&serde_json::json!({ "ok": true }));
+    }
+    if method == Method::POST && path == "/v1/collab/cursor" {
+        #[derive(serde::Deserialize)]
+        struct R { author: uuid::Uuid, surface: String, position: serde_json::Value }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        state.collab.publish(lancer_collab::CollabEvent::CursorMoved { author: r.author, surface: r.surface, position: r.position, ts: chrono::Utc::now() });
+        return json(&serde_json::json!({ "ok": true }));
+    }
+    if method == Method::POST && path == "/v1/collab/chat" {
+        #[derive(serde::Deserialize)]
+        struct R { author: uuid::Uuid, message: String }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        state.collab.publish(lancer_collab::CollabEvent::Chat { author: r.author, message: r.message, ts: chrono::Utc::now() });
+        return json(&serde_json::json!({ "ok": true }));
+    }
+    if method == Method::GET && path == "/v1/collab/state" {
+        return json(&serde_json::json!({
+            "peers": state.collab.peers(),
+            "events": state.collab.replay(100),
+        }));
     }
 
     // ── §6 OOB/SSRF scan correlated through the OAST server ──────────────────

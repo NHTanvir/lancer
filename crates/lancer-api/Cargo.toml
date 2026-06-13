@@ -41,6 +41,7 @@ lancer-mobile     = { path = "../lancer-mobile" }
 lancer-iac        = { path = "../lancer-iac" }
 lancer-oast       = { path = "../lancer-oast" }
 lancer-replay     = { path = "../lancer-replay" }
+lancer-collab     = { path = "../lancer-collab" }
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
