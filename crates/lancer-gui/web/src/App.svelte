@@ -32,6 +32,7 @@
   import Modules from "./views/Modules.svelte";
   import Mobile from "./views/Mobile.svelte";
   import Iac from "./views/Iac.svelte";
+  import Collaborator from "./views/Collaborator.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -71,6 +72,7 @@
     { id: "decoder",   label: "Decoder" },
     { id: "comparer",  label: "Comparer" },
     { id: "scanner",   label: "Scanner" },
+    { id: "collaborator", label: "Collaborator" },
     { id: "logger",    label: "Logger" },
     { id: "organizer", label: "Organizer" },
     { id: "findings",  label: "Findings" },
@@ -224,6 +226,7 @@
     {#if active === "comparer"}<Comparer />{/if}
     {#if active === "logger"}<Logger />{/if}
     {#if active === "scanner"}<Scanner />{/if}
+    {#if active === "collaborator"}<Collaborator />{/if}
     {#if active === "organizer"}<Organizer />{/if}
     {#if active === "findings"}<Findings />{/if}
     {#if active === "jsmining"}<JsMining />{/if}

@@ -39,6 +39,7 @@ members = [
     "crates/lancer-cms",
     "crates/lancer-exploitdb",
     "crates/lancer-modules",
+    "crates/lancer-oast",
 ]
 exclude = [
     # Built separately for the bpfel-unknown-none target.

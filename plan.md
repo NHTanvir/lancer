@@ -26,7 +26,7 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 3 | Repeater | 🟡 | Send + tabs + raw editor + Inspector + Render ✅. batch-12: Burp-AI buttons + Send-to-Sequencer/Comparer/Decoder + Copy-as-fetch/PowerShell now work. Still no HTTP/2 frame editor, no WebSocket mode, no tab rename/group, read-only Inspector |
 | 4 | Intruder | 🟡 | 4 attack kinds + payload sets via `/v1/intruder` ✅ — **batch-12 fixed the GUI↔API contract** (was 400ing + fabricating `Math.random()` results). Payload processing rules exist in `lancer-tools/payload_processor` but no UI. No Resource pool / throttle controls. No grep-match / grep-extract column config. §4.6 Mass Fuzz / `lancer-fuzz` still absent |
 | 5 | Scanner | ✅ | 27 active + 7 passive checks implemented in `lancer-scanner`. Crawler, API-spec import, OAuth client all backend-complete. BCheck DSL runner present. GUI exposes Full/Passive/Active. No per-check enable/disable, no preset selector |
-| 6 | Collaborator | ❌ | `lancer-scanner/collaborator.rs` exists but is stub — no public/self-hosted collaborator server, no polling, no payload generation, no GUI tab |
+| 6 | Collaborator | ✅ | batch-13: new **`lancer-oast`** crate — self-hosted OAST server with real DNS (UDP, answers A + records every lookup), HTTP, and SMTP listeners + payload allocation + right-to-left subdomain **correlation engine**. Wired via `/v1/collaborator/{generate,interactions,poll,payloads,status,config,server/start,server/stop}` + new **Collaborator** GUI tab (server start/stop, config, generate-payload→clipboard, live interactions table filtered by DNS/HTTP/SMTP, auto-poll). Defaults to unprivileged ports (5353/8088/1825) so it runs without root. Remaining: scanner-check auto-correlation, RSA-encrypted callbacks, hosted public tier |
 | 7 | DOM Invader | 🟡 | `lancer-dom` does **static** DOM-sink / postMessage / proto-pollution gadget analysis. No Chromium browser extension, no augmented-DOM live view |
 | 8 | Sequencer | ✅ | batch-12: `/v1/sequencer/analyse` now uses the real `lancer_tools::sequencer` FIPS battery (monobit/poker/runs/per-position entropy) instead of inline `Math.random()` |
 | 9 | Decoder | ✅ | batch-12: MD2 / SHA-3-256 / SHA-3-512 routed through `POST /v1/transform` (backend `lancer_core::transform`); octal/binary/gzip + pretty-print JSON present. Remaining: SHA-3-224/384 buttons |
@@ -640,7 +640,7 @@ A full audit (plan §1–§52 + granular Burp inventory) against the *actual* `c
 ## Knowingly NOT done (genuinely large / net-new infrastructure)
 
 These need substantial new systems, not wiring, and remain open:
-- **§6 Collaborator / OOB server** — needs a real DNS/HTTP/SMTP listener service + correlation engine (new networking crate). Blind/OOB confirmation for SSRF/blind-RCE/deser still unavailable.
+- **§6 Collaborator / OOB server** — ✅ DONE in batch-13 (`lancer-oast` crate: DNS/HTTP/SMTP listeners + correlation engine + GUI tab). Remaining polish: auto-correlate scanner-emitted payloads, RSA-encrypted callbacks, hosted public tier.
 - **§13 Embedded Chromium browser** + **§7 DOM Invader runtime** + **§5.1.1 deep JS-render crawler** — require headless Chromium / a browser extension. "Open Browser" still shells out to system Chrome.
 - **§4.6 Mass Fuzz + `lancer-fuzz` binary** and the remaining Intruder payload-set/processor variants — net-new high-speed engine.
 - **§1.3 WebSocket frame capture** — the listener still tunnels WS without decoding into `WsStore` (table stays empty).

@@ -38,6 +38,7 @@ lancer-modules    = { path = "../lancer-modules" }
 lancer-ai         = { path = "../lancer-ai" }
 lancer-mobile     = { path = "../lancer-mobile" }
 lancer-iac        = { path = "../lancer-iac" }
+lancer-oast       = { path = "../lancer-oast" }
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true

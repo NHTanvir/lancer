@@ -71,6 +71,7 @@ use lancer_stateful_fuzz::{FuzzRequest, SessionStore as FuzzStore};
 use lancer_cms::{CmsScanRequest, CmsScanResult};
 use lancer_exploitdb::ExploitDb;
 use lancer_modules::{ModuleRegistry, ModuleState, default_modules, Preset, PresetStore};
+use lancer_oast::{OastServer, OastConfig};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -127,6 +128,8 @@ struct AppState {
     exploitdb:     ExploitDb,
     modules:       Arc<ModuleRegistry>,
     module_presets: PresetStore,
+    // §6 Collaborator / OAST
+    oast:          Arc<OastServer>,
 }
 
 #[tokio::main]
@@ -309,6 +312,7 @@ async fn main() -> Result<()> {
         exploitdb,
         modules,
         module_presets,
+        oast: OastServer::with_defaults(),
     });
 
     // Passive analysis consumer (§34 JS Mining + §35 Secret Scanner): runs the
@@ -1613,6 +1617,48 @@ async fn dynamic_route(
         };
         state.module_presets.save(p.clone());
         return json(&p);
+    }
+
+    // ── §6 Collaborator / OAST ───────────────────────────────────────────────
+    if method == Method::GET && path == "/v1/collaborator/status" {
+        return json(&state.oast.status());
+    }
+    if method == Method::POST && path == "/v1/collaborator/generate" {
+        let p = state.oast.allocate();
+        return json(&p);
+    }
+    if method == Method::GET && path == "/v1/collaborator/interactions" {
+        return json(&state.oast.interactions());
+    }
+    if method == Method::POST && path == "/v1/collaborator/poll" {
+        return json(&state.oast.poll_since(None));
+    }
+    if method == Method::DELETE && path == "/v1/collaborator/interactions" {
+        state.oast.clear();
+        return json(&serde_json::json!({ "ok": true }));
+    }
+    if method == Method::GET && path == "/v1/collaborator/payloads" {
+        return json(&state.oast.payloads());
+    }
+    if method == Method::GET && path == "/v1/collaborator/config" {
+        return json(&state.oast.config());
+    }
+    if method == Method::PUT && path == "/v1/collaborator/config" {
+        let cfg: OastConfig = match serde_json::from_slice(&body) {
+            Ok(c) => c, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        state.oast.set_config(cfg);
+        return json(&serde_json::json!({ "ok": true }));
+    }
+    if method == Method::POST && path == "/v1/collaborator/server/start" {
+        return match state.oast.start().await {
+            Ok(_) => json(&state.oast.status()),
+            Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        };
+    }
+    if method == Method::POST && path == "/v1/collaborator/server/stop" {
+        state.oast.stop();
+        return json(&state.oast.status());
     }
 
     text(StatusCode::NOT_FOUND, "not found")

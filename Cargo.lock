@@ -2521,6 +2521,7 @@ dependencies = [
  "lancer-mcp-scan",
  "lancer-mobile",
  "lancer-modules",
+ "lancer-oast",
  "lancer-plugin",
  "lancer-proxy",
  "lancer-report",
@@ -2896,6 +2897,20 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "toml 0.8.23",
+ "uuid",
+]
+
+[[package]]
+name = "lancer-oast"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 
