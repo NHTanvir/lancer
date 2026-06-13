@@ -37,3 +37,4 @@ pub mod cms_scan;
 pub mod exploits;
 pub mod shodan;
 pub mod modules;
+pub mod fuzz;

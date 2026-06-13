@@ -1883,6 +1883,80 @@ async fn dynamic_route(
         };
     }
 
+    // ── §6 OOB/SSRF scan correlated through the OAST server ──────────────────
+    if method == Method::POST && path == "/v1/scan/oob" {
+        #[derive(serde::Deserialize)]
+        struct R { request: String, scheme: Option<String>, host: Option<String>, port: Option<u16> }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let Ok(mut base) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
+        base.meta.scheme = r.scheme.unwrap_or_else(|| "https".into());
+        if let Some(h) = r.host { if !h.is_empty() { base.meta.host = h; } }
+        if let Some(p) = r.port { if p > 0 { base.meta.port = p; } }
+        if !state.oast.is_running() {
+            return json(&serde_json::json!({ "ok": false, "error": "Start the OAST server first (Collaborator tab → Start server)." }));
+        }
+
+        // Build one injection variant per sink, each with its own correlatable payload.
+        let mut injected: Vec<(String, String, HttpRequest)> = Vec::new(); // (sink, payload_id, req)
+        let url = base.url();
+        // Query-param sinks.
+        if let Some(qpos) = url.find('?') {
+            let (prefix, qs) = url.split_at(qpos);
+            for pair in qs[1..].split('&') {
+                if let Some((k, _)) = pair.split_once('=') {
+                    let p = state.oast.allocate();
+                    let new_qs: String = qs[1..].split('&').map(|pr| {
+                        match pr.split_once('=') {
+                            Some((kk, _)) if kk == k => format!("{kk}=http://{}/", p.host),
+                            _ => pr.to_string(),
+                        }
+                    }).collect::<Vec<_>>().join("&");
+                    let new_url = format!("{prefix}?{new_qs}");
+                    if let Ok(mut req) = HttpRequest::builder(base.method.0.as_str(), &new_url) {
+                        req.headers = base.headers.clone();
+                        req.body = base.body.clone();
+                        injected.push((format!("query:{k}"), p.id, req));
+                    }
+                }
+            }
+        }
+        // Header sinks commonly vulnerable to SSRF.
+        for hname in ["Referer", "X-Forwarded-For", "X-Forwarded-Host", "X-Original-URL", "X-Real-IP", "True-Client-IP"] {
+            let p = state.oast.allocate();
+            let mut req = base.clone();
+            let v = if hname == "X-Forwarded-For" || hname == "X-Real-IP" || hname == "True-Client-IP" || hname == "X-Forwarded-Host" {
+                p.host.clone()
+            } else {
+                format!("http://{}/", p.host)
+            };
+            req.set_header(&hname.to_lowercase(), v);
+            injected.push((format!("header:{hname}"), p.id, req));
+        }
+
+        // Fire all variants.
+        for (_, _, req) in &injected {
+            let _ = state.client.send(req).await;
+        }
+        // Give callbacks a moment to arrive, then correlate.
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+        let hits = state.oast.interactions();
+        let confirmed: Vec<_> = injected.iter().filter_map(|(sink, pid, _)| {
+            let matched: Vec<_> = hits.iter().filter(|i| &i.payload_id == pid).collect();
+            if matched.is_empty() { None } else {
+                Some(serde_json::json!({
+                    "sink": sink,
+                    "payload_id": pid,
+                    "interactions": matched.iter().map(|i| serde_json::json!({"kind": i.kind, "remote_ip": i.remote_ip})).collect::<Vec<_>>(),
+                }))
+            }
+        }).collect();
+        return json(&serde_json::json!({
+            "ok": true,
+            "tested_sinks": injected.len(),
+            "confirmed": confirmed,
+        }));
+    }
+
     // ── §20 Bambda script tester (Rhai filter / passive-check) ───────────────
     if method == Method::POST && path == "/v1/bambda/test" {
         #[derive(serde::Deserialize)]

@@ -103,6 +103,24 @@
     } catch {}
   }
 
+  // §6 OOB/SSRF scan correlated through the OAST server.
+  let oobOpen = false;
+  let oobRequest = `GET /fetch?url=https://example.com HTTP/1.1\r\nHost: target.example\r\n\r\n`;
+  let oobScheme = "https", oobHost = "target.example", oobPort = 443;
+  let oobResult = null, oobBusy = false;
+  async function runOob() {
+    oobBusy = true; oobResult = null;
+    try {
+      const r = await fetch("/api/v1/scan/oob", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ request: oobRequest, scheme: oobScheme, host: oobHost, port: +oobPort }),
+      });
+      oobResult = await r.json();
+      await refresh();
+    } catch (e) { oobResult = { ok: false, error: String(e) }; }
+    finally { oobBusy = false; }
+  }
+
   function copy(text) { navigator.clipboard.writeText(text || "").catch(() => {}); }
   function fmtTime(t) { try { return new Date(t).toLocaleTimeString(); } catch { return t; } }
   function rawSummary(i) {
@@ -138,8 +156,36 @@
     {/if}
     <button class="toolbar-btn" on:click={() => (showConfig = !showConfig)}>{showConfig ? "Hide" : "Configure"}</button>
     <button class="toolbar-btn primary" on:click={generate}>Generate payload</button>
+    <button class="toolbar-btn" on:click={() => (oobOpen = !oobOpen)}>OOB scan</button>
     <span class="dim" style="margin-left:auto;font-size:12px">{status.payload_count} payloads · {status.interaction_count} hits</span>
   </div>
+
+  {#if oobOpen}
+    <div class="config-pane">
+      <div class="pane-title">OOB / SSRF scan — injects a correlated payload into every query param + SSRF header of a request, then reports which sink called back</div>
+      <textarea bind:value={oobRequest} style="width:100%;box-sizing:border-box;min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:8px;border:1px solid #c8c8c8;border-radius:4px"></textarea>
+      <div class="cfg-grid" style="margin-top:6px">
+        <label>Scheme<input bind:value={oobScheme} /></label>
+        <label>Host<input bind:value={oobHost} /></label>
+        <label>Port<input type="number" bind:value={oobPort} /></label>
+        <button class="btn-primary" on:click={runOob} disabled={oobBusy} style="align-self:flex-end">{oobBusy ? "Scanning…" : "Run OOB scan"}</button>
+      </div>
+      {#if oobResult}
+        {#if !oobResult.ok}
+          <div class="dim" style="color:#d42c2c;margin-top:8px">{oobResult.error}</div>
+        {:else if (oobResult.confirmed || []).length === 0}
+          <div class="dim" style="margin-top:8px">Tested {oobResult.tested_sinks} sinks — no out-of-band callbacks within the window.</div>
+        {:else}
+          <div style="margin-top:8px">
+            <strong style="color:#c0392b">⚠ {oobResult.confirmed.length} confirmed OOB sink(s)</strong> of {oobResult.tested_sinks} tested:
+            {#each oobResult.confirmed as c}
+              <div class="dupe-row" style="font-size:12px"><code class="corr">{c.sink}</code> — {(c.interactions || []).map(i => i.kind).join(", ")}</div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
 
   {#if showConfig}
     <div class="config-pane">

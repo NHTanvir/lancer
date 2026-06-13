@@ -107,6 +107,8 @@ enum Cmd {
     Shodan(commands::shodan::ShodanArgs),
     /// §52 Modules system (list / enable / disable / status / preset).
     Modules(commands::modules::ModulesArgs),
+    /// §4.6 High-speed content/parameter fuzzer (ffuf-equivalent).
+    Fuzz(commands::fuzz::FuzzArgs),
 }
 
 fn main() -> Result<()> {
@@ -160,6 +162,7 @@ fn main() -> Result<()> {
             Cmd::Exploits(a) => commands::exploits::run(a),
             Cmd::Shodan(a) => commands::shodan::run(a).await,
             Cmd::Modules(a) => commands::modules::run(a).await,
+            Cmd::Fuzz(a) => commands::fuzz::run_cmd(a).await,
         }
     })
 }
