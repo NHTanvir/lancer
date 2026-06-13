@@ -241,6 +241,15 @@ async fn main() -> Result<()> {
             listener = listener.with_ws_store(s.websockets());
         }
         let proxy = Arc::new(listener);
+        // §1.1 inbound HTTP/3 (QUIC) listener — opt-in via LANCER_HTTP3_ADDR.
+        #[cfg(feature = "http3")]
+        if let Some(addr) = std::env::var("LANCER_HTTP3_ADDR").ok().and_then(|s| s.parse().ok()) {
+            tokio::spawn(async move {
+                if let Err(e) = lancer_proxy::http3::runtime::inbound_listen(addr).await {
+                    warn!("HTTP/3 inbound listener exited: {e:#}");
+                }
+            });
+        }
         tokio::spawn(async move {
             if let Err(e) = proxy.run().await {
                 warn!("proxy exited: {e:#}");

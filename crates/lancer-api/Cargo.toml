@@ -9,6 +9,10 @@ description = "REST API server for headless Lancer automation."
 name = "lancer-api"
 path = "src/main.rs"
 
+[features]
+# §1.1 inbound HTTP/3 (QUIC) listener — set LANCER_HTTP3_ADDR to enable at runtime.
+http3 = ["lancer-proxy/http3"]
+
 [dependencies]
 lancer-core.workspace = true
 lancer-storage.workspace = true
