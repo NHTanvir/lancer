@@ -133,6 +133,8 @@ struct AppState {
     // §17 Session handling
     session_rules: Arc<RwLock<Vec<SessionRule>>>,
     macros:        Arc<RwLock<Vec<Macro>>>,
+    // §5.4 Scan config library (live, applied to subsequent scans)
+    scan_config:   Arc<RwLock<ScanConfig>>,
 }
 
 #[tokio::main]
@@ -318,6 +320,7 @@ async fn main() -> Result<()> {
         oast: OastServer::with_defaults(),
         session_rules: Arc::new(RwLock::new(Vec::new())),
         macros: Arc::new(RwLock::new(Vec::new())),
+        scan_config: Arc::new(RwLock::new(ScanConfig::default())),
     });
 
     // Passive analysis consumer (§34 JS Mining + §35 Secret Scanner): runs the
@@ -452,6 +455,22 @@ async fn dispatch(
         (Method::POST, "/v1/scan/active")  => scan_active(state, body).await,
         (Method::POST, "/v1/scan/full")    => scan_full(state, body).await,
         (Method::GET,  "/v1/scan/queue")   => json(&serde_json::json!({"queue":[]})),
+        (Method::GET,  "/v1/scan/config")  => {
+            let active: Vec<_> = lancer_scanner::active::registry().iter()
+                .map(|c| serde_json::json!({ "id": c.id(), "name": c.name() })).collect();
+            let passive: Vec<_> = lancer_scanner::passive::registry().iter()
+                .map(|c| serde_json::json!({ "id": c.id(), "name": c.name() })).collect();
+            json(&serde_json::json!({
+                "config": *state.scan_config.read(),
+                "available": { "active": active, "passive": passive },
+            }))
+        }
+        (Method::PUT, "/v1/scan/config") => {
+            match serde_json::from_slice::<ScanConfig>(body) {
+                Ok(cfg) => { *state.scan_config.write() = cfg; json(&serde_json::json!({ "ok": true })) }
+                Err(e) => text(StatusCode::BAD_REQUEST, &e.to_string()),
+            }
+        }
 
         // ── Issues ────────────────────────────────────────────────────────
         (Method::GET, "/v1/issues") => issues_list(state).await,
@@ -1830,7 +1849,7 @@ async fn scan_passive(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
     #[derive(serde::Deserialize)]
     struct R { url: String }
     let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
-    let engine = ScanEngine::new(ScanConfig::default(), state.client.clone(), state.project.read().as_ref().map(|s| s.issues()));
+    let engine = ScanEngine::new(state.scan_config.read().clone(), state.client.clone(), state.project.read().as_ref().map(|s| s.issues()));
     let Ok(req) = HttpRequest::builder("GET", &r.url) else { return text(StatusCode::BAD_REQUEST, "bad url") };
     match state.client.send(&req).await {
         Ok(resp) => json(&engine.run_passive(&req, &resp).await),
@@ -1844,7 +1863,7 @@ async fn scan_active(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
     let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
     let Ok(mut req) = HttpRequest::parse_wire(r.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
     req.meta.scheme = r.scheme.unwrap_or_else(|| "https".into());
-    let engine = ScanEngine::new(ScanConfig::default(), state.client.clone(), state.project.read().as_ref().map(|s| s.issues()));
+    let engine = ScanEngine::new(state.scan_config.read().clone(), state.client.clone(), state.project.read().as_ref().map(|s| s.issues()));
     match engine.run_active(&req).await {
         Ok(issues) => json(&issues),
         Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
@@ -1856,7 +1875,7 @@ async fn scan_full(state: &AppState, body: &[u8]) -> Response<Full<Bytes>> {
     struct R { url: String }
     let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
     let Ok(req) = HttpRequest::builder("GET", &r.url) else { return text(StatusCode::BAD_REQUEST, "bad url") };
-    let engine = ScanEngine::new(ScanConfig::default(), state.client.clone(), state.project.read().as_ref().map(|s| s.issues()));
+    let engine = ScanEngine::new(state.scan_config.read().clone(), state.client.clone(), state.project.read().as_ref().map(|s| s.issues()));
     let resp = match state.client.send(&req).await {
         Ok(r) => r,
         Err(e) => return text(StatusCode::BAD_GATEWAY, &e.to_string()),

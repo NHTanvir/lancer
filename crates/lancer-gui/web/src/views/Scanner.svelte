@@ -7,6 +7,34 @@
   let scanning = false;
   let queue = [];
 
+  // §5.4 scan config library
+  const PRESETS = ["Lightweight", "Balanced", "Deep", "AuditOnly", "CrawlOnly", "PassiveOnly", "OwaspTop10"];
+  let cfg = { preset: "Balanced", enabled_checks: null, disabled_checks: [], max_concurrency_per_host: 8, throttle_ms: 0, follow_redirects_on_audit: true };
+  let available = { active: [], passive: [] };
+  let cfgSaved = false;
+
+  async function loadConfig() {
+    try {
+      const r = await fetch("/api/v1/scan/config");
+      if (r.ok) { const d = await r.json(); cfg = d.config; available = d.available; }
+    } catch {}
+  }
+  function checkOn(id) { return !(cfg.disabled_checks || []).includes(id); }
+  function toggleCheck(id) {
+    const dis = new Set(cfg.disabled_checks || []);
+    if (dis.has(id)) dis.delete(id); else dis.add(id);
+    cfg.disabled_checks = [...dis];
+  }
+  async function saveConfig() {
+    try {
+      await fetch("/api/v1/scan/config", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...cfg, max_concurrency_per_host: +cfg.max_concurrency_per_host, throttle_ms: +cfg.throttle_ms }),
+      });
+      cfgSaved = true; setTimeout(() => (cfgSaved = false), 1500);
+    } catch {}
+  }
+
   function severityClass(s) {
     const m = { Critical: "badge-Critical", High: "badge-High", Medium: "badge-Medium", Low: "badge-Low", Info: "badge-Info" };
     return m[s] || "badge-Info";
@@ -58,6 +86,7 @@
     <button class="subtab" class:active={subtab==="queue"} on:click={() => subtab="queue"}>
       Scan queue {#if queue.length}<span class="tab-badge">{queue.length}</span>{/if}
     </button>
+    <button class="subtab" class:active={subtab==="config"} on:click={() => { subtab="config"; if(!available.active.length) loadConfig(); }}>Configuration</button>
   </div>
 
   <div class="panel">
@@ -114,6 +143,38 @@
         </div>
       </div>
 
+    {:else if subtab === "config"}
+      <div class="card" style="max-width:820px">
+        <div class="card-title">Scan preset</div>
+        <select bind:value={cfg.preset} class="preset-sel">
+          {#each PRESETS as p}<option value={p}>{p}</option>{/each}
+        </select>
+
+        <div class="cfg-row" style="margin-top:16px">
+          <label>Max concurrency / host<input type="number" bind:value={cfg.max_concurrency_per_host} min="1" /></label>
+          <label>Throttle (ms)<input type="number" bind:value={cfg.throttle_ms} min="0" /></label>
+          <label class="check"><input type="checkbox" bind:checked={cfg.follow_redirects_on_audit} /> Follow redirects on audit</label>
+        </div>
+
+        <div class="card-title" style="margin-top:18px">Active checks ({available.active.length})</div>
+        <div class="check-grid">
+          {#each available.active as c}
+            <label class="check-item"><input type="checkbox" checked={checkOn(c.id)} on:change={() => toggleCheck(c.id)} /> {c.name}</label>
+          {/each}
+        </div>
+
+        <div class="card-title" style="margin-top:18px">Passive checks ({available.passive.length})</div>
+        <div class="check-grid">
+          {#each available.passive as c}
+            <label class="check-item"><input type="checkbox" checked={checkOn(c.id)} on:change={() => toggleCheck(c.id)} /> {c.name}</label>
+          {/each}
+        </div>
+
+        <div style="margin-top:18px">
+          <button class="btn-orange" on:click={saveConfig}>Save configuration</button>
+          {#if cfgSaved}<span class="dim" style="margin-left:10px;color:#1b8c1b">✓ Saved — applies to subsequent scans</span>{/if}
+        </div>
+      </div>
     {:else}
       {#if queue.length === 0}
         <div class="empty-state">
@@ -228,4 +289,12 @@
     align-items: center; justify-content: center;
     gap: 10px; padding: 60px; text-align: center;
   }
+
+  .preset-sel { padding: 5px 8px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 13px; min-width: 200px; }
+  .cfg-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+  .cfg-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; }
+  .cfg-row label.check { flex-direction: row; align-items: center; gap: 5px; }
+  .cfg-row input[type="number"] { width: 100px; padding: 4px 6px; border: 1px solid #c8c8c8; border-radius: 3px; }
+  .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 14px; }
+  .check-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #444; }
 </style>
