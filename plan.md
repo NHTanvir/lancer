@@ -49,7 +49,7 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 26 | Live collab | ✅ | `lancer-collab` event stream + presence. **batch-20:** in-process `CollabHub` + `/v1/collab/*` + **Collab** GUI tab — peer presence, per-peer current-view, shared chat; multiple browsers on one Lancer API see each other live |
 | 27 | AI beyond Burp | 🟡 | BYO-LLM backend ✅. No NL scan config, no AI exploit-chain UI, no AI report writer |
 | 28 | New vulnerability classes | ✅ | Web LLM, cloud metadata, prototype pollution, host-header injection all present in `lancer-scanner/active`. WAF fingerprint in `lancer-scanner/waf`. WebAuthn / HTTP/3 desync not visible |
-| 29 | eBPF capture (Linux) | ⏳ | `lancer-ebpf` + `lancer-ebpf-probe` compile only with the linux feature. No GUI, no orchestration |
+| 29 | eBPF capture (Linux) | 🟡 | `lancer-ebpf` + `lancer-ebpf-probe`. **batch-24:** the `ebpf` module's `start()` now really **spawns `lancer-ebpf-probe`** via pkexec/sudo on Linux (toggle in the Modules tab) and SIGTERMs it on stop; non-Linux fails gracefully. The BPF object itself is still a Linux build-time artifact |
 | 30 | Container / Cloud / IaC | ✅ | batch-12: new IaC GUI tab + `POST /v1/iac/parse` (Dockerfile/compose/k8s/Terraform → attack surface) |
 | 31 | Plugin system | 🟡 | All hosts exist (see §20). No marketplace, no signed-plugin verification, no install-from-URL |
 | 32 | Better reports | ✅ | 6 formats + 4 issue trackers wired in backend |

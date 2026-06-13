@@ -327,9 +327,44 @@ impl LancerModule for EbpfModule {
     fn platform_supported(&self) -> bool { cfg!(target_os = "linux") }
     fn requires_elevation(&self) -> bool { true }
     async fn start(&self) -> anyhow::Result<ModuleHandle> {
-        anyhow::bail!("eBPF module is a stub — would spawn `lancer-ebpf-probe` with elevation");
+        if !cfg!(target_os = "linux") {
+            anyhow::bail!("eBPF capture is Linux-only");
+        }
+        // Spawn the privileged probe next to this binary (pkexec → sudo fallback).
+        // The probe loads the BPF programs and streams captured flows.
+        let probe = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("lancer-ebpf-probe")))
+            .unwrap_or_else(|| std::path::PathBuf::from("lancer-ebpf-probe"));
+        let child = std::process::Command::new("pkexec")
+            .arg(&probe)
+            .spawn()
+            .or_else(|_| std::process::Command::new("sudo").arg(&probe).spawn())
+            .map_err(|e| {
+                anyhow::anyhow!("failed to spawn eBPF probe (needs pkexec/sudo + lancer-ebpf-probe present): {e}")
+            })?;
+        let pid = child.id();
+        // std::process::Child detaches (does not kill) on drop; we track the pid.
+        Ok(ModuleHandle {
+            started_at: Instant::now(),
+            join: None,
+            cancel: None,
+            pid: Some(pid),
+        })
     }
-    async fn stop(&self, _handle: ModuleHandle) -> anyhow::Result<()> { Ok(()) }
+    async fn stop(&self, handle: ModuleHandle) -> anyhow::Result<()> {
+        if let Some(pid) = handle.pid {
+            let _ = std::process::Command::new("pkexec")
+                .args(["kill", "-TERM", &pid.to_string()])
+                .status()
+                .or_else(|_| {
+                    std::process::Command::new("kill")
+                        .args(["-TERM", &pid.to_string()])
+                        .status()
+                });
+        }
+        Ok(())
+    }
 }
 
 // ── modules.toml persistence ──────────────────────────────────────────────────
