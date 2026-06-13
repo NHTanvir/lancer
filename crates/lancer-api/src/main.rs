@@ -224,7 +224,7 @@ async fn main() -> Result<()> {
         let (events_sink, events_rx) = lancer_proxy::ProxyEventSink::new(256);
         passive_events_rx = events_rx;
         let session_for_proxy = session_engine.clone();
-        let proxy = Arc::new(ProxyListener::new(
+        let mut listener = ProxyListener::new(
             proxy_settings,
             ca.clone(),
             intercept_engine.clone(),
@@ -235,7 +235,12 @@ async fn main() -> Result<()> {
             Some(intercept_queue.clone()),
         ).with_session_apply(Arc::new(move |req| {
             session_for_proxy.apply_request_sync(ToolScope::Proxy, req);
-        })));
+        }));
+        // §1.3 WebSocket frame capture → WsStore (when a project is open).
+        if let Some(s) = storage.as_ref() {
+            listener = listener.with_ws_store(s.websockets());
+        }
+        let proxy = Arc::new(listener);
         tokio::spawn(async move {
             if let Err(e) = proxy.run().await {
                 warn!("proxy exited: {e:#}");

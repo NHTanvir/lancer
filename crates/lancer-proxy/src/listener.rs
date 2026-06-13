@@ -61,6 +61,8 @@ pub struct ProxyListener {
     pub intercept_pause: Option<Arc<InterceptPauseQueue>>,
     /// §17 in-flight session-handling rule application (optional).
     pub session_apply: Option<Arc<dyn Fn(&mut HttpRequest) + Send + Sync>>,
+    /// §1.3 WebSocket frame capture store (optional).
+    pub ws_store: Option<lancer_storage::websocket::WsStore>,
 }
 
 impl ProxyListener {
@@ -91,6 +93,7 @@ impl ProxyListener {
             dns,
             intercept_pause,
             session_apply: None,
+            ws_store: None,
         }
     }
 
@@ -101,6 +104,12 @@ impl ProxyListener {
         f: Arc<dyn Fn(&mut HttpRequest) + Send + Sync>,
     ) -> Self {
         self.session_apply = Some(f);
+        self
+    }
+
+    /// Attach a §1.3 WebSocket frame store; decoded frames are persisted to it.
+    pub fn with_ws_store(mut self, store: lancer_storage::websocket::WsStore) -> Self {
+        self.ws_store = Some(store);
         self
     }
 
@@ -236,6 +245,7 @@ impl ProxyListener {
             events: self.events.clone(),
             intercept_pause: self.intercept_pause.clone(),
             session_apply: self.session_apply.clone(),
+            ws_store: self.ws_store.clone(),
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();
@@ -267,7 +277,7 @@ impl ProxyListener {
         });
 
         if let Err(e) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-            .serve_connection(conn_io, svc)
+            .serve_connection_with_upgrades(conn_io, svc)
             .await
         {
             debug!("hyper server end: {e}");
@@ -284,6 +294,7 @@ impl ProxyListener {
             events: self.events.clone(),
             intercept_pause: self.intercept_pause.clone(),
             session_apply: self.session_apply.clone(),
+            ws_store: self.ws_store.clone(),
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();
@@ -322,10 +333,26 @@ async fn handle_mitm_request(
     settings: Arc<ProxySettings>,
     dns: Arc<crate::dns::DnsTable>,
 ) -> Result<Response<Full<Bytes>>, anyhow::Error> {
+    // §1.3 WebSocket upgrade → tunnel with frame capture (additive: only fires
+    // when the client requests an Upgrade: websocket; all other traffic is HTTP).
+    if is_websocket_upgrade(req.headers()) {
+        return crate::websocket::handle_websocket_upgrade(
+            req, scheme, default_host, default_port, pipeline, tls_client_config, settings, dns,
+        )
+        .await;
+    }
     let (parts, body) = req.into_parts();
     let owned =
         hyper_request_to_owned(parts, body, scheme, &default_host, default_port).await?;
     dispatch(owned, pipeline, scope, tls_client_config, settings, dns).await
+}
+
+fn is_websocket_upgrade(headers: &hyper::HeaderMap) -> bool {
+    headers
+        .get(hyper::header::UPGRADE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("websocket"))
+        .unwrap_or(false)
 }
 
 async fn handle_forward_request(
@@ -356,6 +383,14 @@ async fn handle_forward_request(
         })
         .unwrap_or_default();
     let default_port = parts.uri.port_u16().unwrap_or(80);
+    let req = Request::from_parts(parts, body);
+    if is_websocket_upgrade(req.headers()) {
+        return crate::websocket::handle_websocket_upgrade(
+            req, &scheme, default_host, default_port, pipeline, tls_client_config, settings, dns,
+        )
+        .await;
+    }
+    let (parts, body) = req.into_parts();
     let owned =
         hyper_request_to_owned(parts, body, &scheme, &default_host, default_port).await?;
     dispatch(owned, pipeline, scope, tls_client_config, settings, dns).await

@@ -703,7 +703,7 @@ Worked through the remaining implementable gap list (each `cargo check --workspa
 
 ## Genuinely remaining (blocked here — honest)
 - **§13 embedded Chromium / §7 live DOM Invader / §5.1.1 deep-JS crawler** — `chromiumoxide` is not a dependency and these need a Chrome/Chromium binary at runtime; can't be completed in this environment.
-- **§17 live in-flight rule application** — ✅ DONE in batch-22 (conservative, additive: a no-op closure until the user defines rules, structurally identical to the existing match-replace step). **§1.3 WebSocket frame capture, §1.1 inbound HTTP/3** — still touch the proxy data path in ways that can't be runtime-verified here.
+- **§17 live in-flight rule application** — ✅ DONE in batch-22. **§1.3 WebSocket frame capture** — ✅ DONE in batch-23: the MITM/forward paths now detect `Upgrade: websocket`, run a transparent bidirectional **tunnel** (`websocket::handle_websocket_upgrade`) that forwards raw bytes while decoding every frame via `drain_frame` and persisting it to `WsStore` (host/url/direction/opcode/payload) — surfaced by the existing `/v1/ws-history` + Proxy→WebSockets tab. Additive: only fires on the Upgrade header; HTTP path untouched. **§1.1 inbound HTTP/3** — quinn/h3 server still pending.
 - **§29 eBPF** — surfaced as a toggle in the Modules tab; the BPF object is a Linux build-time artifact requiring root.
 - **§6 RSA-encrypted callbacks**, **public hosted Collaborator**, **real ysoserial/exploit-db/SecLists datasets** — niche polish / large third-party data feeds.
 

@@ -44,6 +44,8 @@ pub struct PipelineHandles {
     pub intercept_pause: Option<std::sync::Arc<InterceptPauseQueue>>,
     /// §17 in-flight session-handling rule application (set headers/cookies).
     pub session_apply: Option<std::sync::Arc<dyn Fn(&mut HttpRequest) + Send + Sync>>,
+    /// §1.3 WebSocket frame capture store (decoded frames persisted here).
+    pub ws_store: Option<lancer_storage::websocket::WsStore>,
 }
 
 impl PipelineHandles {
