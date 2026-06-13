@@ -53,7 +53,7 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 30 | Container / Cloud / IaC | ✅ | batch-12: new IaC GUI tab + `POST /v1/iac/parse` (Dockerfile/compose/k8s/Terraform → attack surface) |
 | 31 | Plugin system | 🟡 | All hosts exist (see §20). No marketplace, no signed-plugin verification, no install-from-URL |
 | 32 | Better reports | ✅ | 6 formats + 4 issue trackers wired in backend |
-| 33 | Quality of life | ❌ | No vim/emacs keybindings, no per-project hotkey overrides, no workspace presets, no auto-snapshot, no crash recovery, no payload encyclopedia browser |
+| 33 | Quality of life | 🟡 | **batch-13:** **Payload encyclopedia** now surfaced — new **Payloads** GUI tab over `GET /v1/payloads` (`lancer_tools::payload_library::bundled`), searchable/filterable by category+tag with copy / send-to-Repeater / send-to-Intruder. Still: vim/emacs keybindings, per-project hotkey overrides, workspace presets, auto-snapshot/crash-recovery (Tauri-bound) |
 | 38 | Upload Scanner | ✅ | batch-11 — `lancer-scanner/src/active/upload.rs` with extension bypass, MIME spoof, magic bytes, SVG XSS, traversal, log4shell-style filenames |
 | 39 | API Route Discovery | ✅ | batch-11 — `lancer-api-routes` crate with 200+ route lib + OpenAPI auto-detect; `/v1/api-routes` |
 | 40 | Deser. Payload Gen | ✅ | batch-11 — `lancer-deser` crate with 35 Java + .NET chains, 5 encodings; `/v1/deser/{chains,generate}` |

@@ -35,6 +35,7 @@
   import Collaborator from "./views/Collaborator.svelte";
   import SessionHandling from "./views/SessionHandling.svelte";
   import MassFuzz from "./views/MassFuzz.svelte";
+  import Payloads from "./views/Payloads.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -74,6 +75,7 @@
     { id: "sequencer", label: "Sequencer" },
     { id: "decoder",   label: "Decoder" },
     { id: "comparer",  label: "Comparer" },
+    { id: "payloads",  label: "Payloads" },
     { id: "scanner",   label: "Scanner" },
     { id: "collaborator", label: "Collaborator" },
     { id: "logger",    label: "Logger" },
@@ -229,6 +231,7 @@
     {#if active === "sequencer"}<Sequencer />{/if}
     {#if active === "decoder"}<Decoder />{/if}
     {#if active === "comparer"}<Comparer />{/if}
+    {#if active === "payloads"}<Payloads />{/if}
     {#if active === "logger"}<Logger />{/if}
     {#if active === "scanner"}<Scanner />{/if}
     {#if active === "collaborator"}<Collaborator />{/if}

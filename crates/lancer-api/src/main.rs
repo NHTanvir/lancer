@@ -1811,6 +1811,11 @@ async fn dynamic_route(
         }));
     }
 
+    // ── §33 Payload encyclopedia ─────────────────────────────────────────────
+    if method == Method::GET && path == "/v1/payloads" {
+        return json(&lancer_tools::payload_library::bundled());
+    }
+
     // ── §4.6 Mass Fuzz ───────────────────────────────────────────────────────
     if method == Method::GET && path == "/v1/massfuzz/wordlist" {
         return json(&lancer_tools::mass_fuzz::COMMON_WORDLIST);
