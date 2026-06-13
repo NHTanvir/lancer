@@ -59,6 +59,8 @@ pub struct ProxyListener {
     pub tls_client_config: Arc<ClientConfig>,
     pub dns: Arc<crate::dns::DnsTable>,
     pub intercept_pause: Option<Arc<InterceptPauseQueue>>,
+    /// §17 in-flight session-handling rule application (optional).
+    pub session_apply: Option<Arc<dyn Fn(&mut HttpRequest) + Send + Sync>>,
 }
 
 impl ProxyListener {
@@ -88,7 +90,18 @@ impl ProxyListener {
             tls_client_config,
             dns,
             intercept_pause,
+            session_apply: None,
         }
+    }
+
+    /// Attach a §17 session-handling rule applicator run on every in-flight
+    /// request (sets auth headers / cookies). No-op until rules are configured.
+    pub fn with_session_apply(
+        mut self,
+        f: Arc<dyn Fn(&mut HttpRequest) + Send + Sync>,
+    ) -> Self {
+        self.session_apply = Some(f);
+        self
     }
 
     /// Start serving on every configured listener and run until shut down.
@@ -222,6 +235,7 @@ impl ProxyListener {
             history: self.history.clone(),
             events: self.events.clone(),
             intercept_pause: self.intercept_pause.clone(),
+            session_apply: self.session_apply.clone(),
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();
@@ -269,6 +283,7 @@ impl ProxyListener {
             history: self.history.clone(),
             events: self.events.clone(),
             intercept_pause: self.intercept_pause.clone(),
+            session_apply: self.session_apply.clone(),
         };
         let scope = self.scope.clone();
         let tls_client_config = self.tls_client_config.clone();

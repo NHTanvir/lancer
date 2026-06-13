@@ -46,7 +46,8 @@ use lancer_scanner::config::ScanConfig;
 use lancer_scanner::ScanEngine;
 use lancer_storage::Storage;
 use lancer_storage::organizer::OrganizerEntry;
-use lancer_session::{Cookie, CookieJar, Macro, MacroRunner, SessionRule};
+use lancer_session::{Cookie, CookieJar, Macro, MacroRunner, SessionRule, SessionEngine};
+use lancer_session::rules::ToolScope;
 use lancer_plugin::registry::PluginRegistry;
 use lancer_tools::{
     intruder::{AttackKind, IntruderConfig, PayloadSet},
@@ -132,7 +133,7 @@ struct AppState {
     // §6 Collaborator / OAST
     oast:          Arc<OastServer>,
     // §17 Session handling
-    session_rules: Arc<RwLock<Vec<SessionRule>>>,
+    session_engine: SessionEngine,
     macros:        Arc<RwLock<Vec<Macro>>>,
     // §5.4 Scan config library (live, applied to subsequent scans)
     scan_config:   Arc<RwLock<ScanConfig>>,
@@ -210,6 +211,11 @@ async fn main() -> Result<()> {
         ..Default::default()
     };
 
+    // Shared cookie jar + session engine (§17): the proxy applies in-flight
+    // session-handling rules; the GUI edits the same engine via /v1/sessions/rules.
+    let cookie_jar = CookieJar::new();
+    let session_engine = SessionEngine::new(cookie_jar.clone_handle());
+
     // Start proxy in background
     let passive_events_rx;
     {
@@ -217,6 +223,7 @@ async fn main() -> Result<()> {
         let history_store = storage.as_ref().map(|s| s.history());
         let (events_sink, events_rx) = lancer_proxy::ProxyEventSink::new(256);
         passive_events_rx = events_rx;
+        let session_for_proxy = session_engine.clone();
         let proxy = Arc::new(ProxyListener::new(
             proxy_settings,
             ca.clone(),
@@ -226,7 +233,9 @@ async fn main() -> Result<()> {
             history_store,
             events_sink,
             Some(intercept_queue.clone()),
-        ));
+        ).with_session_apply(Arc::new(move |req| {
+            session_for_proxy.apply_request_sync(ToolScope::Proxy, req);
+        })));
         tokio::spawn(async move {
             if let Err(e) = proxy.run().await {
                 warn!("proxy exited: {e:#}");
@@ -243,7 +252,6 @@ async fn main() -> Result<()> {
         let p = std::path::PathBuf::from(local).join("Lancer").join("plugins");
         let _ = plugins.load_directory(&p);
     }
-    let cookie_jar = CookieJar::new();
 
     // Batch 9: bug bounty extensions
     let templates = Arc::new(TemplateLibrary::new());
@@ -321,7 +329,7 @@ async fn main() -> Result<()> {
         modules,
         module_presets,
         oast: OastServer::with_defaults(),
-        session_rules: Arc::new(RwLock::new(Vec::new())),
+        session_engine: session_engine.clone(),
         macros: Arc::new(RwLock::new(Vec::new())),
         scan_config: Arc::new(RwLock::new(ScanConfig::default())),
         collab: lancer_collab::CollabHub::new(),
@@ -1762,16 +1770,18 @@ async fn dynamic_route(
         }
     }
 
-    // ── §17 Session handling: rules ──────────────────────────────────────────
+    // ── §17 Session handling: rules (backed by the live SessionEngine the proxy uses) ──
     if method == Method::GET && path == "/v1/sessions/rules" {
-        return json(&*state.session_rules.read());
+        return json(&*state.session_engine.rules());
     }
     if method == Method::POST && path == "/v1/sessions/rules" {
         let mut rule: SessionRule = match serde_json::from_slice(body) {
             Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
         };
         if rule.id.is_nil() { rule.id = uuid::Uuid::new_v4(); }
-        state.session_rules.write().push(rule.clone());
+        let mut v = (*state.session_engine.rules()).clone();
+        v.push(rule.clone());
+        state.session_engine.replace(v);
         return json(&rule);
     }
     if let Some(id_str) = path.strip_prefix("/v1/sessions/rules/") {
@@ -1782,15 +1792,18 @@ async fn dynamic_route(
             let r: SessionRule = match serde_json::from_slice(body) {
                 Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
             };
-            let mut store = state.session_rules.write();
-            if let Some(slot) = store.iter_mut().find(|x| x.id == id) {
+            let mut v = (*state.session_engine.rules()).clone();
+            if let Some(slot) = v.iter_mut().find(|x| x.id == id) {
                 *slot = SessionRule { id, ..r };
+                state.session_engine.replace(v);
                 return json(&serde_json::json!({ "ok": true }));
             }
             return text(StatusCode::NOT_FOUND, "no rule");
         }
         if method == Method::DELETE {
-            state.session_rules.write().retain(|r| r.id != id);
+            let mut v = (*state.session_engine.rules()).clone();
+            v.retain(|r| r.id != id);
+            state.session_engine.replace(v);
             return json(&serde_json::json!({ "ok": true }));
         }
     }

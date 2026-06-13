@@ -35,13 +35,15 @@ pub struct PipelineContext {
     pub in_scope: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PipelineHandles {
     pub intercept: InterceptEngine,
     pub match_replace: MatchReplaceEngine,
     pub history: Option<HistoryStore>,
     pub events: ProxyEventSink,
     pub intercept_pause: Option<std::sync::Arc<InterceptPauseQueue>>,
+    /// §17 in-flight session-handling rule application (set headers/cookies).
+    pub session_apply: Option<std::sync::Arc<dyn Fn(&mut HttpRequest) + Send + Sync>>,
 }
 
 impl PipelineHandles {
@@ -65,6 +67,11 @@ impl PipelineHandles {
         let hits = self.match_replace.apply_request(&mut req, ctx.in_scope);
         if hits > 0 {
             tracing::debug!(hits, "applied request match/replace");
+        }
+
+        // 2.5 session-handling rules (set auth headers / cookies in-flight)
+        if let Some(apply) = &self.session_apply {
+            apply(&mut req);
         }
 
         // 3. intercept

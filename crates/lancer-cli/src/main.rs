@@ -113,6 +113,8 @@ enum Cmd {
     Bench(commands::bench::BenchArgs),
     /// §58 MCP server — expose Lancer to AI agents over stdio (Model Context Protocol).
     Mcp(commands::mcp::McpArgs),
+    /// §57 Infiltrator — emit a Frida sink-taint-tracking script for the target runtime.
+    Infiltrator(commands::infiltrator::InfiltratorArgs),
 }
 
 fn main() -> Result<()> {
@@ -169,6 +171,7 @@ fn main() -> Result<()> {
             Cmd::Fuzz(a) => commands::fuzz::run_cmd(a).await,
             Cmd::Bench(a) => commands::bench::run(a).await,
             Cmd::Mcp(a) => commands::mcp::run(a).await,
+            Cmd::Infiltrator(a) => commands::infiltrator::run(a).await,
         }
     })
 }

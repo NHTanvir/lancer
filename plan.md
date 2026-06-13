@@ -642,7 +642,7 @@ A full audit (plan §1–§52 + granular Burp inventory) against the *actual* `c
 These need substantial new systems, not wiring, and remain open:
 - **§6 Collaborator / OOB server** — ✅ DONE in batch-13 (`lancer-oast` crate: DNS/HTTP/SMTP listeners + correlation engine + GUI tab). Remaining polish: auto-correlate scanner-emitted payloads, RSA-encrypted callbacks, hosted public tier.
 - **§4.6 Mass Fuzz** — ✅ DONE in batch-13 (`lancer-tools/mass_fuzz` + GUI). Remaining: standalone `lancer-fuzz` CLI binary, recursive discovery, SecLists bundle.
-- **§17 Session Rules/Macros GUI** — ✅ DONE in batch-13 (Sessions tab: rules editor + action builder + macros). Remaining: in-flight rule application in the proxy pipeline, macro step-recording from Repeater.
+- **§17 Session Rules/Macros** — ✅ DONE: rules editor + action builder + macros GUI (batch-13), macro **record-from-Repeater** (batch-18), and **in-flight rule application** wired into the proxy pipeline (batch-22 — the proxy runs the live `SessionEngine` the GUI edits, setting auth headers/cookies on every matching request; no-op until rules exist).
 - **§13 Embedded Chromium browser** + **§7 DOM Invader runtime** + **§5.1.1 deep JS-render crawler** — BLOCKED: require a bundled headless Chromium binary / browser extension. "Open Browser" still shells out to system Chrome.
 - **§1.3 WebSocket frame capture** — DEFERRED: the proxy serves buffered `Full<Bytes>` responses and has no WS upgrade-tunnel path; full frame capture needs delicate proxy-core rework (dual `hyper::upgrade::on` + frame-decoding bidirectional copy) that cannot be runtime-verified safely here without risking the working HTTP proxy.
 - **§23 NTLM/Negotiate** platform auth — BLOCKED on system Kerberos/SSPI libs; **§25** 100k-req/s benchmark, **§26** live-collab cursor sync, **§29** eBPF BPF object, **§1.1** inbound HTTP/3, and the **public hosted Collaborator** remain net-new infra.
@@ -665,9 +665,14 @@ catching vulns masked by input transformation/filtering with no in-band signal.
   bytecode weaving) and a **.NET profiler** which, on a matched §6 OAST payload reaching a
   sink, do a DNS pingback `<sink-id>.<payload>.<domain>` — correlated by the existing OAST
   server (so Lancer reports "input reached `Runtime.exec` server-side").
-- **Status: agent-gated** (parallel to §29 eBPF) — the JVM agent / .NET profiler are
-  separate build-time artifacts requiring the target's runtime; the OAST correlation side
-  is already implemented (batch-13/17).
+- ✅ **Implemented (batch-22):** `lancer infiltrator --domain <oast> --lang java|node|native`
+  emits a **Frida sink-taint-tracking script** (no recompile, consistent with §22 mobile
+  Frida tooling) that hooks dangerous sinks — `Runtime.exec` / `ProcessBuilder` / file I/O /
+  `Statement.execute` / URL-open (Java); `child_process`/`fs` (Node); `system`/`popen`/`exec*`
+  (native) — and, when an injected §6 OAST payload reaches a sink, DNS-pingbacks
+  `<sink>.<payload-host>` so the OAST correlation engine reports the **server-side** hit.
+  (A full ASM bytecode-weaving JVM agent / .NET profiler remains an optional separate
+  build-time artifact, like the §29 eBPF probe.)
 
 ## §58 Lancer MCP Server `[N]` — expose Lancer to AI agents
 Burp ships an **MCP server** (SSE `127.0.0.1:9876` + stdio proxy) so AI clients (Claude
@@ -698,7 +703,7 @@ Worked through the remaining implementable gap list (each `cargo check --workspa
 
 ## Genuinely remaining (blocked here — honest)
 - **§13 embedded Chromium / §7 live DOM Invader / §5.1.1 deep-JS crawler** — `chromiumoxide` is not a dependency and these need a Chrome/Chromium binary at runtime; can't be completed in this environment.
-- **§1.3 WebSocket frame capture, §1.1 inbound HTTP/3, §17 live in-flight rule application** — all require changes to the **working proxy data path** that cannot be runtime-verified in this sandbox; shipping them blind risks regressing the core proxy. Backends/GUI for §17 rules exist; only the live proxy hook is deferred.
+- **§17 live in-flight rule application** — ✅ DONE in batch-22 (conservative, additive: a no-op closure until the user defines rules, structurally identical to the existing match-replace step). **§1.3 WebSocket frame capture, §1.1 inbound HTTP/3** — still touch the proxy data path in ways that can't be runtime-verified here.
 - **§29 eBPF** — surfaced as a toggle in the Modules tab; the BPF object is a Linux build-time artifact requiring root.
 - **§6 RSA-encrypted callbacks**, **public hosted Collaborator**, **real ysoserial/exploit-db/SecLists datasets** — niche polish / large third-party data feeds.
 
