@@ -4,8 +4,35 @@
   let issues = [];
   let filter = "All";
   let expanded = {};
+  let hideFp = true;
+  let showAdd = false;
+  let newIssue = { host: "", url: "", name: "", severity: "Medium", confidence: "Firm", description: "", remediation: "" };
 
   const severities = ["All", "Critical", "High", "Medium", "Low", "Info"];
+  const SEV_OPTS = ["Critical", "High", "Medium", "Low", "Info"];
+  const CONF_OPTS = ["Certain", "Firm", "Tentative"];
+
+  async function reload() {
+    try { const r = await fetch("/api/v1/issues"); if (r.ok) issues = await r.json(); }
+    catch { issues = []; }
+  }
+
+  async function addIssue() {
+    if (!newIssue.name || !newIssue.host) return;
+    try {
+      const r = await fetch("/api/v1/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(newIssue) });
+      if (r.ok) { showAdd = false; newIssue = { host: "", url: "", name: "", severity: "Medium", confidence: "Firm", description: "", remediation: "" }; await reload(); }
+      else alert("Add failed — is a project open? " + (await r.text()));
+    } catch {}
+  }
+
+  async function patchIssue(issue, body) {
+    try { await fetch(`/api/v1/issues/${issue.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); await reload(); }
+    catch {}
+  }
+  const markFp = (issue) => patchIssue(issue, { false_positive: !issue.false_positive });
+  const setSeverity = (issue, severity) => patchIssue(issue, { severity });
+  const setConfidence = (issue, confidence) => patchIssue(issue, { confidence });
 
   const severityColor = {
     Critical: "#f38ba8",
@@ -15,21 +42,15 @@
     Info:     "#89b4fa",
   };
 
-  onMount(async () => {
-    try {
-      const r = await fetch("/api/v1/issues");
-      if (r.ok) issues = await r.json();
-    } catch {
-      issues = [];
-    }
-  });
+  onMount(reload);
 
+  $: visible = issues.filter(i => !(hideFp && i.false_positive));
   $: counts = severities.reduce((acc, s) => {
-    acc[s] = s === "All" ? issues.length : issues.filter(i => i.severity === s).length;
+    acc[s] = s === "All" ? visible.length : visible.filter(i => i.severity === s).length;
     return acc;
   }, {});
 
-  $: filtered = filter === "All" ? issues : issues.filter(i => i.severity === filter);
+  $: filtered = filter === "All" ? visible : visible.filter(i => i.severity === filter);
 
   function toggle(id) {
     expanded[id] = !expanded[id];
@@ -56,8 +77,23 @@
         {/if}
       </button>
     {/each}
-    <span class="dim" style="margin-left:auto;font-size:11px">{filtered.length} issue{filtered.length !== 1 ? "s" : ""}</span>
+    <label class="fp-toggle dim" style="margin-left:auto"><input type="checkbox" bind:checked={hideFp} /> Hide false positives</label>
+    <button class="filter-btn" on:click={() => (showAdd = !showAdd)}>+ Add issue</button>
+    <span class="dim" style="font-size:11px">{filtered.length} issue{filtered.length !== 1 ? "s" : ""}</span>
   </div>
+
+  {#if showAdd}
+    <div class="add-form">
+      <input placeholder="Name *" bind:value={newIssue.name} />
+      <input placeholder="Host *" bind:value={newIssue.host} />
+      <input placeholder="URL" bind:value={newIssue.url} />
+      <select bind:value={newIssue.severity}>{#each SEV_OPTS as s}<option>{s}</option>{/each}</select>
+      <select bind:value={newIssue.confidence}>{#each CONF_OPTS as c}<option>{c}</option>{/each}</select>
+      <input class="grow" placeholder="Description" bind:value={newIssue.description} />
+      <button class="filter-btn primary" on:click={addIssue}>Create</button>
+      <button class="filter-btn" on:click={() => (showAdd = false)}>Cancel</button>
+    </div>
+  {/if}
 
   <div class="panel">
     {#if filtered.length === 0}
@@ -73,10 +109,11 @@
     {:else}
       <div class="issue-list">
         {#each filtered as issue, i}
-          <div class="issue-item" style="border-left-color:{borderColor(issue.severity)}">
+          <div class="issue-item" class:is-fp={issue.false_positive} style="border-left-color:{borderColor(issue.severity)}">
             <div class="issue-header" on:click={() => toggle(i)} role="button" tabindex="0" on:keydown={e => e.key === "Enter" && toggle(i)}>
               <span class="badge {('badge-' + issue.severity)}">{issue.severity}</span>
               <span class="issue-name">{issue.name}</span>
+              {#if issue.false_positive}<span class="fp-badge">FALSE POSITIVE</span>{/if}
               <span class="issue-meta dim">{issue.host}</span>
               {#if issue.confidence}
                 <span class="confidence dim">· {issue.confidence}</span>
@@ -86,6 +123,15 @@
 
             {#if expanded[i]}
               <div class="issue-body">
+                <div class="override-bar">
+                  <label class="ov dim">Severity
+                    <select value={issue.severity} on:change={e => setSeverity(issue, e.target.value)}>{#each SEV_OPTS as s}<option>{s}</option>{/each}</select>
+                  </label>
+                  <label class="ov dim">Confidence
+                    <select value={issue.confidence} on:change={e => setConfidence(issue, e.target.value)}>{#each CONF_OPTS as c}<option>{c}</option>{/each}</select>
+                  </label>
+                  <button class="fp-btn" on:click={() => markFp(issue)}>{issue.false_positive ? "Unmark false positive" : "Mark as false positive"}</button>
+                </div>
                 {#if issue.description}
                   <div class="issue-section">
                     <div class="section-label">Description</div>
@@ -167,6 +213,18 @@
   }
   .section-text { font-size: 12px; color: #a6adc8; line-height: 1.5; }
   .remediation { color: #a6e3a1; }
+  .fp-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+  .filter-btn.primary { background: #e03a00; color: #fff; border-color: #e03a00; }
+  .add-form { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; background: #1e1e2e; border-bottom: 1px solid #313244; align-items: center; }
+  .add-form input, .add-form select { background: #11111b; border: 1px solid #313244; color: #cdd6f4; border-radius: 3px; padding: 4px 7px; font-size: 12px; }
+  .add-form input.grow { flex: 1; min-width: 160px; }
+  .is-fp { opacity: 0.6; }
+  .fp-badge { font-size: 9px; font-weight: 700; background: #45475a; color: #f38ba8; padding: 1px 6px; border-radius: 3px; letter-spacing: 0.04em; }
+  .override-bar { display: flex; align-items: flex-end; gap: 14px; padding-bottom: 4px; border-bottom: 1px solid #313244; }
+  .ov { display: flex; flex-direction: column; gap: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ov select { background: #11111b; border: 1px solid #313244; color: #cdd6f4; border-radius: 3px; padding: 3px 6px; font-size: 12px; }
+  .fp-btn { background: #313244; color: #f38ba8; border: 1px solid #45475a; border-radius: 3px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .fp-btn:hover { background: #45475a; }
   .evidence {
     background: #11111b; border: 1px solid #313244;
     border-radius: 4px; padding: 8px;

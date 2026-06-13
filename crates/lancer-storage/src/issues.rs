@@ -191,4 +191,28 @@ impl IssueStore {
             .await?;
         Ok(())
     }
+
+    /// Manual analyst override of severity and/or confidence on an issue.
+    pub async fn update_severity_confidence(
+        &self,
+        id: Uuid,
+        severity: Option<Severity>,
+        confidence: Option<Confidence>,
+    ) -> anyhow::Result<()> {
+        if let Some(s) = severity {
+            sqlx::query("UPDATE issues SET severity = ? WHERE id = ?")
+                .bind(s.as_str())
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await?;
+        }
+        if let Some(c) = confidence {
+            sqlx::query("UPDATE issues SET confidence = ? WHERE id = ?")
+                .bind(c.as_str())
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await?;
+        }
+        Ok(())
+    }
 }

@@ -1643,6 +1643,47 @@ async fn dynamic_route(
         return json(&p);
     }
 
+    // ── §2.3 Issues: manual create + analyst override ────────────────────────
+    if method == Method::POST && path == "/v1/issues" {
+        use lancer_storage::issues::{Confidence, Severity};
+        #[derive(serde::Deserialize)]
+        struct NewIssue { host: String, url: Option<String>, name: String, severity: Option<String>, confidence: Option<String>, description: Option<String>, remediation: Option<String> }
+        let Ok(n) = serde_json::from_slice::<NewIssue>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let storage = state.project.read().clone();
+        let Some(s) = storage else { return text(StatusCode::BAD_REQUEST, "no project open") };
+        let mut issue = lancer_storage::Issue::new(
+            n.host.clone(),
+            n.url.unwrap_or_else(|| n.host.clone()),
+            n.name,
+            n.severity.as_deref().and_then(Severity::parse).unwrap_or(Severity::Info),
+            n.confidence.as_deref().and_then(Confidence::parse).unwrap_or(Confidence::Tentative),
+            n.description.unwrap_or_default(),
+        );
+        issue.remediation = n.remediation;
+        issue.check_id = Some("manual".into());
+        return match s.issues().insert(&issue).await {
+            Ok(_) => json(&issue),
+            Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        };
+    }
+    if method == Method::PATCH {
+        if let Some(id_str) = path.strip_prefix("/v1/issues/") {
+            use lancer_storage::issues::{Confidence, Severity};
+            let Ok(id) = uuid::Uuid::parse_str(id_str) else { return text(StatusCode::BAD_REQUEST, "bad id") };
+            #[derive(serde::Deserialize)]
+            struct Patch { false_positive: Option<bool>, severity: Option<String>, confidence: Option<String> }
+            let Ok(p) = serde_json::from_slice::<Patch>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+            let storage = state.project.read().clone();
+            let Some(s) = storage else { return text(StatusCode::BAD_REQUEST, "no project open") };
+            let issues = s.issues();
+            if let Some(fp) = p.false_positive { let _ = issues.mark_false_positive(id, fp).await; }
+            let sev = p.severity.as_deref().and_then(Severity::parse);
+            let conf = p.confidence.as_deref().and_then(Confidence::parse);
+            if sev.is_some() || conf.is_some() { let _ = issues.update_severity_confidence(id, sev, conf).await; }
+            return json(&serde_json::json!({ "ok": true }));
+        }
+    }
+
     // ── §17 Session handling: per-cookie delete ──────────────────────────────
     if method == Method::DELETE {
         if let Some(key) = path.strip_prefix("/v1/cookies/") {
