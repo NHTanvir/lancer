@@ -49,6 +49,14 @@
     navigator.clipboard.writeText(c.value || "").catch(() => {});
   }
 
+  async function delCookie(c) {
+    const key = encodeURIComponent(`${c.domain}|${c.path}|${c.name}`);
+    try {
+      await fetch(`/api/v1/cookies/${key}`, { method: "DELETE" });
+      await load();
+    } catch {}
+  }
+
   onMount(() => {
     load();
     pollTimer = setInterval(load, 4000);
@@ -91,8 +99,9 @@
               <td class="dim">{c.secure ? "yes" : ""}</td>
               <td class="dim">{c.http_only ? "yes" : ""}</td>
               <td class="dim">{c.same_site || ""}</td>
-              <td>
+              <td style="white-space:nowrap">
                 <button class="sm-btn" on:click={() => copyValue(c)} title="Copy value">⎘</button>
+                <button class="sm-btn danger" on:click={() => delCookie(c)} title="Delete cookie">✕</button>
               </td>
             </tr>
           {/each}
@@ -148,6 +157,8 @@
   code { font-family: ui-monospace, Consolas, monospace; }
   .sm-btn { font-size: 12px; padding: 2px 8px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; }
   .sm-btn:hover { background: #e4e4e4; }
+  .sm-btn.danger { color: #d42c2c; border-color: #f0c4c4; margin-left: 3px; }
+  .sm-btn.danger:hover { background: #fde8e8; }
 
   .add-pane { padding: 12px 14px; background: #fafafa; border-top: 2px solid #dedede; flex-shrink: 0; }
   .pane-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #767676; margin-bottom: 10px; }

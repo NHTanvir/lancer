@@ -46,7 +46,7 @@ use lancer_scanner::config::ScanConfig;
 use lancer_scanner::ScanEngine;
 use lancer_storage::Storage;
 use lancer_storage::organizer::OrganizerEntry;
-use lancer_session::{Cookie, CookieJar};
+use lancer_session::{Cookie, CookieJar, Macro, MacroRunner, SessionRule};
 use lancer_plugin::registry::PluginRegistry;
 use lancer_tools::{
     intruder::{AttackKind, IntruderConfig, PayloadSet},
@@ -130,6 +130,9 @@ struct AppState {
     module_presets: PresetStore,
     // §6 Collaborator / OAST
     oast:          Arc<OastServer>,
+    // §17 Session handling
+    session_rules: Arc<RwLock<Vec<SessionRule>>>,
+    macros:        Arc<RwLock<Vec<Macro>>>,
 }
 
 #[tokio::main]
@@ -313,6 +316,8 @@ async fn main() -> Result<()> {
         modules,
         module_presets,
         oast: OastServer::with_defaults(),
+        session_rules: Arc::new(RwLock::new(Vec::new())),
+        macros: Arc::new(RwLock::new(Vec::new())),
     });
 
     // Passive analysis consumer (§34 JS Mining + §35 Secret Scanner): runs the
@@ -1617,6 +1622,99 @@ async fn dynamic_route(
         };
         state.module_presets.save(p.clone());
         return json(&p);
+    }
+
+    // ── §17 Session handling: per-cookie delete ──────────────────────────────
+    if method == Method::DELETE {
+        if let Some(key) = path.strip_prefix("/v1/cookies/") {
+            let key = key.replace("%7C", "|").replace("%2F", "/");
+            state.cookie_jar.remove(&key);
+            return json(&serde_json::json!({ "ok": true, "removed": key }));
+        }
+    }
+
+    // ── §17 Session handling: macros ─────────────────────────────────────────
+    if method == Method::GET && path == "/v1/macros" {
+        return json(&*state.macros.read());
+    }
+    if method == Method::POST && path == "/v1/macros" {
+        let mut m: Macro = match serde_json::from_slice(body) {
+            Ok(m) => m, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        if m.id.is_nil() { m.id = uuid::Uuid::new_v4(); }
+        state.macros.write().push(m.clone());
+        return json(&m);
+    }
+    if let Some(rest) = path.strip_prefix("/v1/macros/") {
+        let (id_str, run) = match rest.strip_suffix("/run") {
+            Some(id) => (id, true),
+            None => (rest, false),
+        };
+        let Ok(id) = uuid::Uuid::parse_str(id_str) else {
+            return text(StatusCode::BAD_REQUEST, "bad macro id");
+        };
+        if run && method == Method::POST {
+            let macro_opt = state.macros.read().iter().find(|m| m.id == id).cloned();
+            let Some(m) = macro_opt else { return text(StatusCode::NOT_FOUND, "no macro") };
+            let runner = MacroRunner::new(state.client.clone());
+            return match runner.run(&m).await {
+                Ok(resps) => json(&serde_json::json!({
+                    "ok": true,
+                    "steps": resps.iter().map(|r| serde_json::json!({
+                        "status": r.status, "length": r.body_text().map(|b| b.len()).unwrap_or(0),
+                    })).collect::<Vec<_>>(),
+                })),
+                Err(e) => text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+            };
+        }
+        if method == Method::PUT {
+            let m: Macro = match serde_json::from_slice(body) {
+                Ok(m) => m, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+            };
+            let mut store = state.macros.write();
+            if let Some(slot) = store.iter_mut().find(|x| x.id == id) {
+                *slot = Macro { id, ..m };
+                return json(&serde_json::json!({ "ok": true }));
+            }
+            return text(StatusCode::NOT_FOUND, "no macro");
+        }
+        if method == Method::DELETE {
+            state.macros.write().retain(|m| m.id != id);
+            return json(&serde_json::json!({ "ok": true }));
+        }
+    }
+
+    // ── §17 Session handling: rules ──────────────────────────────────────────
+    if method == Method::GET && path == "/v1/sessions/rules" {
+        return json(&*state.session_rules.read());
+    }
+    if method == Method::POST && path == "/v1/sessions/rules" {
+        let mut rule: SessionRule = match serde_json::from_slice(body) {
+            Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        };
+        if rule.id.is_nil() { rule.id = uuid::Uuid::new_v4(); }
+        state.session_rules.write().push(rule.clone());
+        return json(&rule);
+    }
+    if let Some(id_str) = path.strip_prefix("/v1/sessions/rules/") {
+        let Ok(id) = uuid::Uuid::parse_str(id_str) else {
+            return text(StatusCode::BAD_REQUEST, "bad rule id");
+        };
+        if method == Method::PUT {
+            let r: SessionRule = match serde_json::from_slice(body) {
+                Ok(r) => r, Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+            };
+            let mut store = state.session_rules.write();
+            if let Some(slot) = store.iter_mut().find(|x| x.id == id) {
+                *slot = SessionRule { id, ..r };
+                return json(&serde_json::json!({ "ok": true }));
+            }
+            return text(StatusCode::NOT_FOUND, "no rule");
+        }
+        if method == Method::DELETE {
+            state.session_rules.write().retain(|r| r.id != id);
+            return json(&serde_json::json!({ "ok": true }));
+        }
     }
 
     // ── §6 Collaborator / OAST ───────────────────────────────────────────────

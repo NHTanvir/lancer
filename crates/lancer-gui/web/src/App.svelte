@@ -33,6 +33,7 @@
   import Mobile from "./views/Mobile.svelte";
   import Iac from "./views/Iac.svelte";
   import Collaborator from "./views/Collaborator.svelte";
+  import SessionHandling from "./views/SessionHandling.svelte";
   import PaletteModal from "./lib/PaletteModal.svelte";
 
   let active = "dashboard";
@@ -93,6 +94,7 @@
     { id: "iac",        label: "IaC" },
     { id: "modules",    label: "Modules" },
     { id: "cookies",   label: "Cookies" },
+    { id: "sessions",  label: "Sessions" },
     { id: "plugins",   label: "Plugins" },
     { id: "reports",   label: "Reports" },
     { id: "settings",  label: "Settings" },
@@ -246,6 +248,7 @@
     {#if active === "iac"}<Iac />{/if}
     {#if active === "modules"}<Modules />{/if}
     {#if active === "cookies"}<Cookies />{/if}
+    {#if active === "sessions"}<SessionHandling />{/if}
     {#if active === "plugins"}<Plugins />{/if}
     {#if active === "reports"}<Reports />{/if}
     {#if active === "settings"}<Settings />{/if}
