@@ -1777,6 +1777,40 @@ async fn dynamic_route(
         }
     }
 
+    // ── §8 Sequencer live capture (real tokens, not fabricated) ──────────────
+    if method == Method::POST && path == "/v1/sequencer/capture" {
+        #[derive(serde::Deserialize)]
+        struct Cap { request: String, scheme: Option<String>, host: Option<String>, port: Option<u16>,
+            location: String, param: String, count: Option<usize> }
+        let Ok(c) = serde_json::from_slice::<Cap>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        let Ok(base) = HttpRequest::parse_wire(c.request.as_bytes()) else { return text(StatusCode::BAD_REQUEST, "bad request") };
+        let count = c.count.unwrap_or(100).clamp(1, 300);
+        let mut tokens: Vec<String> = Vec::with_capacity(count);
+        for _ in 0..count {
+            let mut req = base.clone();
+            req.meta.scheme = c.scheme.clone().unwrap_or_else(|| "https".into());
+            if let Some(h) = &c.host { if !h.is_empty() { req.meta.host = h.clone(); } }
+            if let Some(p) = c.port { if p > 0 { req.meta.port = p; } }
+            let Ok(resp) = state.client.send(&req).await else { continue };
+            if let Some(tok) = extract_token(&resp, &c.location, &c.param) {
+                tokens.push(tok);
+            }
+        }
+        let n = tokens.len();
+        let token_bytes: Vec<Vec<u8>> = tokens.iter().map(|t| t.as_bytes().to_vec()).collect();
+        let report = lancer_tools::sequencer::Sequencer::analyze(&token_bytes);
+        return json(&serde_json::json!({
+            "tokens": n,
+            "samples": tokens,
+            "bit_entropy": (report.effective_entropy_bits * 10.0).round() / 10.0,
+            "monobit_p_value": report.monobit_p_value,
+            "poker_p_value": report.poker_p_value,
+            "runs_p_value": report.runs_p_value,
+            "char_position_entropy": report.char_position_entropy,
+            "fips_pass": report.pass,
+        }));
+    }
+
     // ── §4.6 Mass Fuzz ───────────────────────────────────────────────────────
     if method == Method::GET && path == "/v1/massfuzz/wordlist" {
         return json(&lancer_tools::mass_fuzz::COMMON_WORDLIST);
@@ -2255,6 +2289,47 @@ fn parse_query(query: &str, key: &str) -> Option<String> {
 }
 
 fn default_true() -> bool { true }
+
+/// Extract a session-token value from a response for the Sequencer (§8).
+/// `location` ∈ cookie | header | body; `param` names the cookie/header/field.
+fn extract_token(resp: &lancer_core::HttpResponse, location: &str, param: &str) -> Option<String> {
+    match location {
+        "cookie" => {
+            for h in &resp.headers {
+                if h.name.eq_ignore_ascii_case("set-cookie") {
+                    for kv in h.value.split(';') {
+                        if let Some((k, v)) = kv.split_once('=') {
+                            if k.trim().eq_ignore_ascii_case(param) {
+                                return Some(v.trim().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        }
+        "header" => resp.headers.iter()
+            .find(|h| h.name.eq_ignore_ascii_case(param))
+            .map(|h| h.value.clone()),
+        _ => {
+            // body: try JSON field, then a `param=value` / `"param":"value"` match.
+            let body = resp.body_text()?;
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+                if let Some(s) = v.get(param).and_then(|x| x.as_str()) {
+                    return Some(s.to_string());
+                }
+            }
+            let needle = format!("{param}=");
+            if let Some(idx) = body.find(&needle) {
+                let rest = &body[idx + needle.len()..];
+                let end = rest.find(['&', '"', '\n', ' ', ',', '}']).unwrap_or(rest.len());
+                let tok = rest[..end].trim();
+                if !tok.is_empty() { return Some(tok.to_string()); }
+            }
+            None
+        }
+    }
+}
 
 /// Escape regex metacharacters in a literal so it can be embedded in a pattern.
 fn regex_escape(s: &str) -> String {

@@ -12,6 +12,32 @@
   let tokens = [];
   let manualTokens = "";
   let captureInterval = null;
+  // Real FIPS stats returned by the backend.
+  let fips = null; // { monobit_p_value, poker_p_value, runs_p_value, fips_pass }
+  let busy = false;
+
+  async function analyseTokens(tokenArr) {
+    if (!tokenArr.length) return;
+    busy = true;
+    try {
+      const r = await fetch("/api/v1/sequencer/analyse", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tokens: tokenArr }),
+      });
+      if (r.ok) applyStats(await r.json());
+    } catch {} finally { busy = false; }
+  }
+
+  function applyStats(d) {
+    tokenCount = d.tokens || 0;
+    bitEntropy = d.bit_entropy ?? d.effective_entropy_bits ?? 0;
+    charEntropy = tokenCount ? +(bitEntropy / Math.max(1, (tokens[0] || "x").length)).toFixed(2) : 0;
+    effectiveKeyspace = Math.round(Math.pow(2, Math.min(bitEntropy, 53)));
+    fips = {
+      monobit: d.monobit_p_value, poker: d.poker_p_value, runs: d.runs_p_value,
+      pass: d.fips_pass, charPos: d.char_position_entropy,
+    };
+  }
 
   // ── Live capture request selection ────────────────────────────────────────
   let captureRequest = null;   // selected proxy history row
@@ -31,19 +57,28 @@
     showRequestPicker = false;
   }
 
-  function startCapture() {
-    if (!captureRequest) return;
-    capturing = true;
-    tokenCount = 0;
-    captureInterval = setInterval(() => {
-      if (!capturing) { clearInterval(captureInterval); return; }
-      const tok = btoa(Math.random().toString(36).slice(2, 14)).replace(/=/g,"").slice(0, 16);
-      tokens = [...tokens, tok].slice(0, 500);
-      tokenCount = tokens.length;
-      charEntropy = +(3.8 + Math.random() * 0.4).toFixed(2);
-      bitEntropy  = +(charEntropy * 6).toFixed(1);
-      effectiveKeyspace = Math.round(Math.pow(2, bitEntropy));
-    }, 800);
+  let captureCount = 100;
+  async function startCapture() {
+    if (!captureRequest || !tokenParam) return;
+    capturing = true; busy = true; tokenCount = 0;
+    // Real capture: backend re-issues the request N times and extracts the token.
+    const row = captureRequest;
+    const raw = row.raw_request || `${row.method || "GET"} ${row.path || "/"} HTTP/1.1\r\nHost: ${row.host || ""}\r\n\r\n`;
+    try {
+      const r = await fetch("/api/v1/sequencer/capture", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request: raw, scheme: row.scheme || (row.port === 80 ? "http" : "https"),
+          host: row.host, port: row.port || (row.scheme === "http" ? 80 : 443),
+          location: tokenLocation, param: tokenParam, count: +captureCount,
+        }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        tokens = d.samples || [];
+        applyStats(d);
+      }
+    } catch {} finally { capturing = false; busy = false; }
   }
 
   function stopCapture() {
@@ -54,17 +89,14 @@
   function clearAll() {
     tokens = []; tokenCount = 0;
     charEntropy = 0; bitEntropy = 0; effectiveKeyspace = 0;
-    manualTokens = "";
+    manualTokens = ""; fips = null;
     capturing = false;
     if (captureInterval) clearInterval(captureInterval);
   }
 
   function analyseManual() {
     tokens = manualTokens.split("\n").map(t => t.trim()).filter(Boolean);
-    tokenCount = tokens.length;
-    charEntropy = +(3.5 + Math.random() * 0.8).toFixed(2);
-    bitEntropy  = +(charEntropy * 6).toFixed(1);
-    effectiveKeyspace = Math.round(Math.pow(2, bitEntropy));
+    analyseTokens(tokens);
   }
 
   function methodClass(m) {
@@ -172,20 +204,21 @@
             placeholder={tokenLocation === "cookie" ? "e.g. session" : tokenLocation === "header" ? "e.g. Set-Cookie" : "e.g. token"}
             style="width:220px" />
         </div>
+        <div class="field-row" style="margin-top:12px">
+          <label class="field-label" for="cap-count">Samples to capture</label>
+          <input id="cap-count" type="number" min="16" max="300" bind:value={captureCount} style="width:90px" />
+        </div>
         <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
           {#if !capturing}
-            <button class="btn-orange" on:click={startCapture} disabled={!captureRequest}>Start live capture</button>
+            <button class="btn-orange" on:click={startCapture} disabled={!captureRequest || !tokenParam}>Start live capture</button>
             {#if !captureRequest}
               <span class="dim" style="font-size:12px">Select a request first</span>
+            {:else if !tokenParam}
+              <span class="dim" style="font-size:12px">Enter the token's {tokenLocation} name</span>
             {/if}
           {:else}
-            <button class="btn-stop" on:click={stopCapture}>Stop capture</button>
             <div class="capture-progress">
-              <span class="capturing-pulse">● Capturing</span>
-              <span class="dim" style="font-size:12px">— {tokenCount} / 500 tokens</span>
-              <div class="progress-bar-wrap">
-                <div class="progress-bar-fill" style="width:{Math.min(tokenCount/500*100,100)}%"></div>
-              </div>
+              <span class="capturing-pulse">● Re-issuing request &amp; collecting tokens…</span>
             </div>
           {/if}
         </div>
@@ -233,6 +266,12 @@
                 <td class="mono">2<sup>{bitEntropy}</sup></td>
                 <td class="dim">—</td>
               </tr>
+              {#if fips}
+                <tr><td>FIPS 140-2 Monobit</td><td class="mono">p = {(fips.monobit ?? 0).toFixed(4)}</td><td class={fips.monobit >= 0.01 ? "status-2" : "status-5"}>{fips.monobit >= 0.01 ? "Pass" : "Fail"}</td></tr>
+                <tr class="row-even"><td>FIPS Poker</td><td class="mono">p = {(fips.poker ?? 0).toFixed(4)}</td><td class={fips.poker >= 0.01 ? "status-2" : "status-5"}>{fips.poker >= 0.01 ? "Pass" : "Fail"}</td></tr>
+                <tr><td>FIPS Runs</td><td class="mono">p = {(fips.runs ?? 0).toFixed(4)}</td><td class={fips.runs >= 0.01 ? "status-2" : "status-5"}>{fips.runs >= 0.01 ? "Pass" : "Fail"}</td></tr>
+                <tr class="row-even"><td>Overall FIPS battery</td><td class="mono">{fips.pass ? "PASS" : "FAIL"}</td><td class={fips.pass ? "status-2" : "status-5"}>{fips.pass ? "Random" : "Predictable"}</td></tr>
+              {/if}
             </tbody>
           </table>
           <div style="margin-top:10px">
