@@ -1811,6 +1811,25 @@ async fn dynamic_route(
         }));
     }
 
+    // ── §5.5 API spec import (OpenAPI / Postman / GraphQL, auto-detected) ─────
+    if method == Method::POST && path == "/v1/scan/import-spec" {
+        #[derive(serde::Deserialize)]
+        struct R { spec: String, base: Option<String> }
+        let Ok(r) = serde_json::from_slice::<R>(body) else { return text(StatusCode::BAD_REQUEST, "bad json") };
+        match lancer_tools::api_spec::import_spec(&r.spec, r.base.as_deref()) {
+            Ok(reqs) => {
+                let out: Vec<_> = reqs.iter().map(|ir| serde_json::json!({
+                    "name": ir.name,
+                    "tags": ir.tags,
+                    "method": ir.request.method.to_string(),
+                    "url": ir.request.url(),
+                })).collect();
+                return json(&serde_json::json!({ "count": out.len(), "requests": out }));
+            }
+            Err(e) => return text(StatusCode::BAD_REQUEST, &e.to_string()),
+        }
+    }
+
     // ── §33 Payload encyclopedia ─────────────────────────────────────────────
     if method == Method::GET && path == "/v1/payloads" {
         return json(&lancer_tools::payload_library::bundled());

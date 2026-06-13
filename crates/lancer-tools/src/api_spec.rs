@@ -165,6 +165,67 @@ fn walk_postman(
     out.push(ImportedRequest { name, request: http_req, tags });
 }
 
+/// Parse a GraphQL introspection result (`{data:{__schema:{...}}}`) into one
+/// request per top-level Query/Mutation field, POSTed to `base` (default
+/// `/graphql`). Each request carries a minimal `{ field }` / mutation body.
+pub fn parse_graphql(body: &str, base: Option<&str>) -> Result<Vec<ImportedRequest>> {
+    let doc: serde_json::Value = serde_json::from_str(body)?;
+    let schema = doc
+        .get("data")
+        .and_then(|d| d.get("__schema"))
+        .or_else(|| doc.get("__schema"))
+        .ok_or_else(|| anyhow!("not a GraphQL introspection result (no __schema)"))?;
+
+    let endpoint = base.unwrap_or("http://localhost/graphql");
+    let type_name = |key: &str| schema.get(key).and_then(|t| t.get("name")).and_then(|n| n.as_str()).map(|s| s.to_string());
+    let query_type = type_name("queryType");
+    let mutation_type = type_name("mutationType");
+
+    let mut out = Vec::new();
+    if let Some(types) = schema.get("types").and_then(|t| t.as_array()) {
+        for t in types {
+            let tname = t.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let kind = if Some(tname.to_string()) == query_type { "query" }
+                else if Some(tname.to_string()) == mutation_type { "mutation" }
+                else { continue };
+            let Some(fields) = t.get("fields").and_then(|f| f.as_array()) else { continue };
+            for f in fields {
+                let Some(fname) = f.get("name").and_then(|n| n.as_str()) else { continue };
+                let gql = format!("{kind} {{ {fname} }}");
+                let payload = serde_json::json!({ "query": gql }).to_string();
+                let Ok(mut req) = HttpRequest::builder("POST", endpoint) else { continue };
+                req.set_header("content-type", "application/json");
+                req.body = Bytes::from(payload);
+                out.push(ImportedRequest {
+                    name: format!("{kind}.{fname}"),
+                    request: req,
+                    tags: vec!["graphql".into(), kind.into()],
+                });
+            }
+        }
+    }
+    if out.is_empty() {
+        return Err(anyhow!("no Query/Mutation fields found in introspection result"));
+    }
+    Ok(out)
+}
+
+/// Auto-detect the spec format (OpenAPI / Postman / GraphQL introspection) and
+/// parse accordingly.
+pub fn import_spec(body: &str, base: Option<&str>) -> Result<Vec<ImportedRequest>> {
+    let trimmed = body.trim_start();
+    // GraphQL introspection → has __schema.
+    if trimmed.starts_with('{') && body.contains("__schema") {
+        if let Ok(v) = parse_graphql(body, base) { return Ok(v); }
+    }
+    // Postman collection → has an "info" + "item" array.
+    if body.contains("\"item\"") && (body.contains("schema.getpostman.com") || body.contains("\"_postman_id\"") || body.contains("\"info\"")) {
+        if let Ok(v) = parse_postman(body) { if !v.is_empty() { return Ok(v); } }
+    }
+    // Default: OpenAPI/Swagger (JSON or YAML).
+    parse_openapi(body, base)
+}
+
 fn substitute_env(s: &str, env: &HashMap<String, String>) -> String {
     let mut out = s.to_string();
     for (k, v) in env {

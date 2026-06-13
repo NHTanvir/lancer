@@ -25,6 +25,33 @@
     if (dis.has(id)) dis.delete(id); else dis.add(id);
     cfg.disabled_checks = [...dis];
   }
+  // §5.5 API spec import (OpenAPI / Postman / GraphQL introspection)
+  let showImport = false;
+  let importSpec = "";
+  let importBase = "";
+  let importResults = [];
+  let importError = "";
+  let importing = false;
+
+  async function doImport() {
+    importError = ""; importResults = []; importing = true;
+    try {
+      const r = await fetch("/api/v1/scan/import-spec", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spec: importSpec, base: importBase || null }),
+      });
+      if (r.ok) { const d = await r.json(); importResults = d.requests || []; }
+      else importError = `Import failed: ${await r.text()}`;
+    } catch (e) { importError = `Could not reach API (${e})`; }
+    finally { importing = false; }
+  }
+  async function scanImported() {
+    for (const req of importResults) {
+      try { await fetch("/api/v1/scan/full", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: req.url }) }); } catch {}
+    }
+    alert(`Queued ${importResults.length} imported request(s) for scanning.`);
+  }
+
   async function saveConfig() {
     try {
       await fetch("/api/v1/scan/config", {
@@ -140,8 +167,29 @@
           <button class="btn-orange" on:click={startScan} disabled={scanning || !url}>
             {scanning ? "Starting..." : "New scan"}
           </button>
+          <button class="btn-import" on:click={() => (showImport = !showImport)}>{showImport ? "Hide import" : "Import API spec ▾"}</button>
         </div>
       </div>
+
+      {#if showImport}
+        <div class="card" style="margin-top:12px;max-width:820px">
+          <div class="card-title">Import API spec — OpenAPI / Postman / GraphQL introspection (auto-detected)</div>
+          <textarea class="spec-area" bind:value={importSpec} placeholder="Paste an OpenAPI 3.x doc (JSON/YAML), a Postman v2.1 collection, or a GraphQL introspection result…"></textarea>
+          <div class="import-row">
+            <input bind:value={importBase} placeholder="Base URL (optional, e.g. https://api.example.com)" style="flex:1" />
+            <button class="btn-orange" on:click={doImport} disabled={importing || !importSpec.trim()}>{importing ? "Importing…" : "Import"}</button>
+            {#if importResults.length}<button class="btn-import" on:click={scanImported}>Scan all {importResults.length}</button>{/if}
+          </div>
+          {#if importError}<div class="imp-err">{importError}</div>{/if}
+          {#if importResults.length}
+            <div class="imp-results">
+              {#each importResults as req}
+                <div class="imp-req"><span class="imp-method">{req.method}</span><code class="imp-url">{req.url}</code><span class="imp-tags dim">{(req.tags || []).join(", ")}</span></div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
 
     {:else if subtab === "config"}
       <div class="card" style="max-width:820px">
@@ -297,4 +345,15 @@
   .cfg-row input[type="number"] { width: 100px; padding: 4px 6px; border: 1px solid #c8c8c8; border-radius: 3px; }
   .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 14px; }
   .check-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #444; }
+  .btn-import { background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; padding: 5px 14px; font-size: 13px; cursor: pointer; margin-left: 8px; }
+  .btn-import:hover { background: #e4e4e4; }
+  .spec-area { width: 100%; box-sizing: border-box; min-height: 120px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid #c8c8c8; border-radius: 3px; resize: vertical; }
+  .import-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .import-row input { padding: 5px 9px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 13px; }
+  .imp-err { color: #d42c2c; font-size: 12px; margin-top: 6px; }
+  .imp-results { margin-top: 10px; max-height: 240px; overflow: auto; border: 1px solid #eee; border-radius: 4px; }
+  .imp-req { display: flex; gap: 8px; align-items: center; padding: 3px 8px; border-bottom: 1px solid #f2f2f2; font-size: 12px; }
+  .imp-method { font-weight: 700; color: #2e6fae; min-width: 52px; }
+  .imp-url { font-family: ui-monospace, Consolas, monospace; color: #333; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-tags { font-size: 11px; }
 </style>

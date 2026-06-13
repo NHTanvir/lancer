@@ -663,6 +663,7 @@ Wired the remaining already-built backends to the GUI (each verified with `cargo
 - **§18 Project** — topbar **File menu**: New (temp) / Open… / current project / Recent list.
 - **§4 Intruder** — `startAttack` now sends typed **`payload_specs`** (Numbers/Dates/BruteForce/Null/UsernameGen/CaseMod) and best-effort **`processors`** from the GUI config (backend support added in batch-13).
 - **§19 / §32 Reporting** — **Jira / Linear / GitHub / DefectDojo / Faraday-CSV** exporters wired into `/v1/report?format=…` + format buttons in the Reports tab.
+- **§5.5 API spec import** — added `parse_graphql` (introspection → requests) + an auto-detecting `import_spec` (OpenAPI / Postman / GraphQL) behind `POST /v1/scan/import-spec`, plus an **Import API spec** panel in Scanner (paste spec → list discovered requests → "Scan all").
 
 ---
 
