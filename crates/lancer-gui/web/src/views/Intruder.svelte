@@ -92,6 +92,37 @@
   let attackError="";
   // GUI label → API attack-kind token (the API also accepts these case/separator-insensitively).
   const KIND_MAP={"Sniper":"Sniper","Battering Ram":"BatteringRam","Pitchfork":"Pitchfork","Cluster Bomb":"ClusterBomb"};
+  // Map the selected payload type + its config to a backend payload_spec.
+  // Returns null for "Simple list" (falls back to the literal payload list).
+  function buildPayloadSpec() {
+    switch (payloadType) {
+      case "Numbers": return { type:"numbers", from:numFrom, to:numTo, step:parseInt(numStep,10)||1 };
+      case "Dates": return { type:"dates", from:dateFrom, to:dateTo };
+      case "Brute forcer": return { type:"bruteforce", charset:bruteCharSet, min_len:parseInt(bruteMinLen,10)||1, max_len:parseInt(bruteMaxLen,10)||3 };
+      case "Null payloads": return { type:"null", count:parseInt(nullCount,10)||10 };
+      case "Username generator": {
+        const parts=userGenBase.trim().split(/\s+/);
+        return { type:"usernamegenerator", firsts:[parts[0]||""], lasts:[parts.slice(1).join(" ")||""], sep:"." };
+      }
+      case "Case modification": return { type:"casemodification", base:charSubBase||"" };
+      default: return null;
+    }
+  }
+
+  // Map the freeform processing-rule rows to backend processors (best-effort).
+  function buildProcessors() {
+    return processingRules.filter(r=>r.enabled).map(r=>{
+      const s=(r.rule||"").toLowerCase();
+      if (s.includes("base64")) return "Base64Encode";
+      if (s.includes("url")) return "UrlEncode";
+      if (s.includes("upper")) return "ToUpper";
+      if (s.includes("lower")) return "ToLower";
+      if (s.startsWith("prefix:")) return { Prefix: r.rule.slice(7) };
+      if (s.startsWith("suffix:")) return { Suffix: r.rule.slice(7) };
+      return "UrlEncode";
+    });
+  }
+
   async function startAttack() {
     requestLoaded=true; running=true; results=[]; selectedResult=null; attackError="";
     attackNum+=1; showResults=true; filterStatus=""; filterPayload="";
@@ -106,8 +137,14 @@
       reflect_payload: grepPayloadsEnabled,
     };
     activeGrepCols={ matches: grep.match_strings.slice(), extracts: grep.extracts.map(e=>e.label) };
+    // Typed payload set drives the backend generator for non-list types.
+    const spec = buildPayloadSpec();
+    const procs = buildProcessors();
+    const reqBody = {host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",grep,max_concurrency:parseInt(sThreads,10)||10,throttle_ms:parseInt(sThrottle,10)||0,max_retries:parseInt(sRetries,10)||0};
+    if (spec) reqBody.payload_specs=[spec]; else reqBody.payloads=sets;
+    if (procs.length) reqBody.processors=procs;
     try {
-      const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",payloads:sets,grep,max_concurrency:parseInt(sThreads,10)||10,throttle_ms:parseInt(sThrottle,10)||0,max_retries:parseInt(sRetries,10)||0})});
+      const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(reqBody)});
       if (r.ok) { results=await r.json(); }
       else { attackError=`Attack failed (${r.status}): ${(await r.text())||"see server log"}`; results=[]; }
     } catch (e) {

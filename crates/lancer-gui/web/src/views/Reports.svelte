@@ -10,6 +10,11 @@
     { value: "markdown", label: "Markdown" },
     { value: "sarif",    label: "SARIF" },
     { value: "xml",      label: "XML" },
+    { value: "jira",     label: "Jira" },
+    { value: "linear",   label: "Linear" },
+    { value: "github",   label: "GitHub" },
+    { value: "defectdojo", label: "DefectDojo" },
+    { value: "faraday",  label: "Faraday CSV" },
   ];
 
   async function render() {
@@ -29,8 +34,8 @@
 
   function download() {
     if (!preview) return;
-    const ext = { html: "html", json: "json", markdown: "md", sarif: "json", xml: "xml" }[format] || "txt";
-    const mime = format === "html" ? "text/html" : format === "json" || format === "sarif" ? "application/json" : "text/plain";
+    const ext = { html: "html", json: "json", markdown: "md", sarif: "json", xml: "xml", jira: "json", linear: "json", github: "json", defectdojo: "json", faraday: "csv" }[format] || "txt";
+    const mime = format === "html" ? "text/html" : format === "faraday" ? "text/csv" : ["json","sarif","jira","linear","github","defectdojo"].includes(format) ? "application/json" : "text/plain";
     const blob = new Blob([preview], { type: mime });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

@@ -104,6 +104,35 @@
     { id: "settings",  label: "Settings" },
   ];
 
+  // ── §18 File menu ──────────────────────────────────────────────────────────
+  let fileMenuOpen = false;
+  let projectInfo = { open: false, kind: "temporary", path: null };
+  let recentProjects = [];
+
+  async function loadProjectInfo() {
+    try { const r = await fetch("/api/v1/project"); if (r.ok) projectInfo = await r.json(); } catch {}
+    try { recentProjects = JSON.parse(localStorage.getItem("lancer.recentProjects") || "[]"); } catch { recentProjects = []; }
+  }
+  function pushRecent(path) {
+    if (!path) return;
+    recentProjects = [path, ...recentProjects.filter(p => p !== path)].slice(0, 10);
+    try { localStorage.setItem("lancer.recentProjects", JSON.stringify(recentProjects)); } catch {}
+  }
+  async function newProject() {
+    fileMenuOpen = false;
+    try { await fetch("/api/v1/project/new-temporary", { method: "POST" }); await loadProjectInfo(); await refreshStatus(); } catch {}
+  }
+  async function openProject(path) {
+    fileMenuOpen = false;
+    const p = path || prompt("Open project — path to .lancer file on the server:");
+    if (!p) return;
+    try {
+      const r = await fetch("/api/v1/project/open", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: p }) });
+      if (r.ok) { pushRecent(p); await loadProjectInfo(); await refreshStatus(); }
+      else alert("Open failed: " + (await r.text()));
+    } catch {}
+  }
+
   async function refreshStatus() {
     try {
       const r = await fetch("/api/v1/status");
@@ -142,6 +171,9 @@
     }
     window.addEventListener("keydown", onKey);
 
+    function onWinClick() { fileMenuOpen = false; }
+    window.addEventListener("click", onWinClick);
+
     // Cross-tab navigation (e.g. "Send to Repeater" from Target)
     function onLancerNavigate(e) {
       const tab = tabs.find(t => t.id === e.detail);
@@ -151,6 +183,7 @@
 
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("click", onWinClick);
       window.removeEventListener("lancer:navigate", onLancerNavigate);
       clearInterval(statusTimer);
     };
@@ -172,6 +205,24 @@
         <polygon points="11,2 4,11 9,11 9,18 16,9 11,9" fill="#e03a00"/>
       </svg>
       <span class="brand-name">Lancer</span>
+      <div class="file-menu-wrap">
+        <button class="file-menu-btn" on:click|stopPropagation={() => { fileMenuOpen = !fileMenuOpen; if (fileMenuOpen) loadProjectInfo(); }}>File ▾</button>
+        {#if fileMenuOpen}
+          <div class="file-menu" on:click|stopPropagation>
+            <div class="fm-item" on:click={newProject}>New project (temporary)</div>
+            <div class="fm-item" on:click={() => openProject()}>Open project…</div>
+            <div class="fm-sep"></div>
+            <div class="fm-label">Current: {projectInfo.path || projectInfo.kind}</div>
+            {#if recentProjects.length}
+              <div class="fm-sep"></div>
+              <div class="fm-label">Recent</div>
+              {#each recentProjects as p}
+                <div class="fm-item fm-recent" on:click={() => openProject(p)} title={p}>{p.split(/[\\/]/).pop()}</div>
+              {/each}
+            {/if}
+          </div>
+        {/if}
+      </div>
     </div>
 
     <nav class="tabs">
@@ -489,6 +540,18 @@
     color: #212121;
     letter-spacing: 0.01em;
   }
+  .file-menu-wrap { position: relative; }
+  .file-menu-btn { background: transparent; border: 1px solid transparent; padding: 2px 8px; font-size: 12px; cursor: pointer; color: #555; border-radius: 3px; }
+  .file-menu-btn:hover { background: #ededed; }
+  .file-menu { position: absolute; top: 100%; left: 0; margin-top: 2px; background: #fff; border: 1px solid #c8c8c8; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); z-index: 300; min-width: 220px; padding: 4px 0; }
+  .fm-item { padding: 6px 14px; font-size: 12px; cursor: pointer; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-item:hover { background: #f0f7ff; }
+  .fm-recent { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #2e6fae; }
+  .fm-sep { height: 1px; background: #ededed; margin: 4px 0; }
+  .fm-label { padding: 3px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #999; }
+  :global([data-theme="dark"] .file-menu) { background: #2a2b2f; border-color: #3a3b3f; }
+  :global([data-theme="dark"] .fm-item) { color: #ddd; }
+  :global([data-theme="dark"] .fm-item:hover) { background: #34353a; }
 
   .tabs {
     display: flex; align-items: stretch;

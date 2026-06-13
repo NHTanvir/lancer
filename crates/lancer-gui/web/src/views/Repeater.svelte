@@ -274,6 +274,27 @@
     }
   }
 
+  function renameTab(id) {
+    const t = tabs.find(x => x.id === id);
+    if (!t) return;
+    const name = prompt("Rename tab:", t.label);
+    if (name == null) return;
+    tabs = tabs.map(x => x.id === id ? { ...x, label: name || x.label } : x);
+  }
+
+  function duplicateTab(id) {
+    const src = tabStates[id];
+    if (!src) return;
+    const nid = nextId++;
+    const srcLabel = tabs.find(t => t.id === id)?.label || String(id);
+    tabs = [...tabs, { id: nid, label: srcLabel + " copy" }];
+    tabStates[nid] = JSON.parse(JSON.stringify(src));
+    activeTab = nid;
+  }
+
+  // F2 renames the active tab (Burp parity).
+  function onTabKey(e) { if (e.key === "F2") { e.preventDefault(); renameTab(activeTab); } }
+
   // ── State setters ──────────────────────────────────────────────────────────────
   function setScheme(v) {
     tabStates[activeTab].scheme = v;
@@ -284,6 +305,34 @@
   function setHost(v) { tabStates[activeTab].host = v; tabStates = tabStates; }
   function setPort(v) { tabStates[activeTab].port = v; tabStates = tabStates; }
   function setRequest(v) { tabStates[activeTab].request = v; tabStates = tabStates; }
+
+  // ── §14 Inspector editing: rebuild the raw request from edited fields ───────
+  function rebuildRequest(d) {
+    let path = (d.fullPath || "/").split("?")[0];
+    if (d.queryParams.length) {
+      path += "?" + d.queryParams.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join("&");
+    }
+    let raw = `${d.method || "GET"} ${path} ${d.version || "HTTP/1.1"}\r\n`;
+    const headers = d.headers.map(h => ({ ...h }));
+    if (d.cookies.length) {
+      const cookieStr = d.cookies.map(c => `${c.name}=${c.value}`).join("; ");
+      const ci = headers.findIndex(h => h.name.toLowerCase() === "cookie");
+      if (ci >= 0) headers[ci].value = cookieStr; else headers.push({ name: "Cookie", value: cookieStr });
+    }
+    for (const h of headers) if (h.name) raw += `${h.name}: ${h.value}\r\n`;
+    raw += "\r\n";
+    let body = d.body;
+    if (d.bodyParams.length && headers.some(h => h.name.toLowerCase() === "content-type" && h.value.includes("urlencoded"))) {
+      body = d.bodyParams.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join("&");
+    }
+    if (body) raw += body;
+    return raw;
+  }
+  function inspEdit(mutate) {
+    const d = JSON.parse(JSON.stringify(inspectorData));
+    mutate(d);
+    setRequest(rebuildRequest(d));
+  }
   function setLayout(v) { tabStates[activeTab].layout = v; tabStates = tabStates; }
 
   // ── History navigation ─────────────────────────────────────────────────────────
@@ -520,6 +569,7 @@
 </script>
 
 <!-- ═══════════════════════════ MARKUP ═══════════════════════════ -->
+<svelte:window on:keydown={onTabKey} />
 <div class="view">
 
   <!-- 1. Session tab bar -->
@@ -529,6 +579,9 @@
         class="rep-tab"
         class:rep-tab-active={activeTab === t.id}
         on:click={() => (activeTab = t.id)}
+        on:dblclick={() => renameTab(t.id)}
+        on:contextmenu|preventDefault={() => duplicateTab(t.id)}
+        title="Double-click to rename · right-click to duplicate · F2 to rename active"
       >
         <span class="tab-label">{t.label}</span>
         <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -540,6 +593,7 @@
       </button>
     {/each}
     <button class="rep-tab-add" on:click={addTab} title="Open new tab">+</button>
+    <button class="rep-tab-add" on:click={() => duplicateTab(activeTab)} title="Duplicate active tab">⎘</button>
   </div>
 
   {#if tabStates[activeTab]}
@@ -880,7 +934,24 @@
               {/if}
             </div>
 
-            <!-- Request headers -->
+            <!-- Query parameters (editable) -->
+            {#if inspectorData.queryParams.length > 0 || inspectorData.fullPath.includes("?")}
+              <div class="isec">
+                <div class="isec-hdr"><span style="margin-left:14px">Query parameters</span><span class="isec-badge">{inspectorData.queryParams.length}</span></div>
+                <div class="isec-rows">
+                  {#each inspectorData.queryParams as p, idx}
+                    <div class="irow irow-edit">
+                      <input class="ikey-in mono" value={p.name} on:change={e => inspEdit(d => d.queryParams[idx].name = e.target.value)} />
+                      <input class="ival-in mono" value={p.value} on:change={e => inspEdit(d => d.queryParams[idx].value = e.target.value)} />
+                      <button class="irow-del" on:click={() => inspEdit(d => d.queryParams.splice(idx, 1))} title="Remove">×</button>
+                    </div>
+                  {/each}
+                  <button class="irow-add" on:click={() => inspEdit(d => d.queryParams.push({ name: "param", value: "" }))}>+ Add query param</button>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Request headers (editable) -->
             <div class="isec">
               <!-- svelte-ignore a11y-click-events-have-key-events -->
               <div class="isec-hdr" on:click={() => (sectionsCollapsed.reqHeaders = !sectionsCollapsed.reqHeaders)}>
@@ -891,17 +962,17 @@
                 <span>Request headers</span>
                 <span class="isec-badge">{inspectorData.headers.length}</span>
               </div>
-              {#if !sectionsCollapsed.reqHeaders && inspectorData.headers.length > 0}
+              {#if !sectionsCollapsed.reqHeaders}
                 <div class="isec-rows">
-                  {#each inspectorData.headers as h}
-                    <div class="irow">
-                      <span class="ikey mono orange" title={h.name}>{h.name}</span>
-                      <span class="ival mono" title={h.value}>{h.value}</span>
+                  {#each inspectorData.headers as h, idx}
+                    <div class="irow irow-edit">
+                      <input class="ikey-in mono orange" value={h.name} on:change={e => inspEdit(d => d.headers[idx].name = e.target.value)} />
+                      <input class="ival-in mono" value={h.value} on:change={e => inspEdit(d => d.headers[idx].value = e.target.value)} />
+                      <button class="irow-del" on:click={() => inspEdit(d => d.headers.splice(idx, 1))} title="Remove">×</button>
                     </div>
                   {/each}
+                  <button class="irow-add" on:click={() => inspEdit(d => d.headers.push({ name: "X-New-Header", value: "" }))}>+ Add header</button>
                 </div>
-              {:else if !sectionsCollapsed.reqHeaders}
-                <div class="isec-empty">No headers</div>
               {/if}
             </div>
 
@@ -919,12 +990,14 @@
               {#if !sectionsCollapsed.reqBody}
                 {#if inspectorData.bodyParams.length > 0}
                   <div class="isec-rows">
-                    {#each inspectorData.bodyParams as p}
-                      <div class="irow">
-                        <span class="ikey mono orange" title={p.name}>{p.name}</span>
-                        <span class="ival mono" title={p.value}>{p.value}</span>
+                    {#each inspectorData.bodyParams as p, idx}
+                      <div class="irow irow-edit">
+                        <input class="ikey-in mono orange" value={p.name} on:change={e => inspEdit(d => d.bodyParams[idx].name = e.target.value)} />
+                        <input class="ival-in mono" value={p.value} on:change={e => inspEdit(d => d.bodyParams[idx].value = e.target.value)} />
+                        <button class="irow-del" on:click={() => inspEdit(d => d.bodyParams.splice(idx, 1))} title="Remove">×</button>
                       </div>
                     {/each}
+                    <button class="irow-add" on:click={() => inspEdit(d => d.bodyParams.push({ name: "param", value: "" }))}>+ Add body param</button>
                   </div>
                 {:else if inspectorData.body}
                   <div class="isec-body-preview">{inspectorData.body.slice(0, 200)}{inspectorData.body.length > 200 ? "…" : ""}</div>
@@ -1699,6 +1772,17 @@
   }
 
   .isec-rows { padding: 2px 0 4px; }
+
+  .irow-edit { align-items: center; gap: 4px; }
+  .ikey-in, .ival-in { box-sizing: border-box; padding: 2px 5px; border: 1px solid #e0e0e0; border-radius: 3px; font-size: 11px; background: #fff; }
+  .ikey-in { flex: 0 0 38%; }
+  .ival-in { flex: 1; min-width: 0; }
+  .ikey-in.orange { color: #c73400; }
+  .ikey-in:focus, .ival-in:focus { outline: none; border-color: #e03a00; }
+  .irow-del { flex: 0 0 auto; background: transparent; border: none; color: #bbb; cursor: pointer; font-size: 13px; padding: 0 4px; }
+  .irow-del:hover { color: #d42c2c; }
+  .irow-add { margin: 4px 8px; font-size: 11px; padding: 2px 8px; background: #f0f0f0; border: 1px solid #d8d8d8; border-radius: 3px; cursor: pointer; color: #555; }
+  .irow-add:hover { background: #e8e8e8; }
 
   .irow {
     display: flex;

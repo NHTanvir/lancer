@@ -7,6 +7,34 @@
   let interceptOn = false;
   let interceptQueue = [];  // paused requests from the API
   let selectedPaused = null;
+  let actionMenuOpen = false;
+
+  function pausedWire() { return editedWire || selectedPaused?.wire || selectedPaused?.raw_request || ""; }
+  function actionSend(tab) {
+    const raw = pausedWire();
+    if (tab === "comparer") {
+      const existing = JSON.parse(localStorage.getItem("lancer.send.comparer") || "{}");
+      if (!existing.item1) existing.item1 = raw; else existing.item2 = raw;
+      localStorage.setItem("lancer.send.comparer", JSON.stringify(existing));
+    } else {
+      localStorage.setItem(`lancer.send.${tab}`, JSON.stringify({ raw }));
+    }
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: tab }));
+    actionMenuOpen = false;
+  }
+  function actionCopy(fmt) {
+    const raw = pausedWire();
+    const line = raw.split("\r\n")[0] || raw.split("\n")[0] || "";
+    const [method = "GET", path = "/"] = line.split(" ");
+    const host = (raw.match(/host:\s*(.+)/i) || [])[1]?.trim() || selectedPaused?.host || "target";
+    const url = `https://${host}${path}`;
+    let out;
+    if (fmt === "curl") out = `curl -X ${method} '${url}'`;
+    else if (fmt === "powershell") out = `Invoke-WebRequest -Method ${method} -Uri '${url}'`;
+    else out = `fetch('${url}', { method: '${method}' })`;
+    navigator.clipboard.writeText(out).catch(() => {});
+    actionMenuOpen = false;
+  }
   let editedWire = "";
   let listenAddr = "127.0.0.1:8080";
   let proxyStatus = null;
@@ -93,7 +121,7 @@
     selected = row;
     ctxMenu = { x: event.clientX, y: event.clientY, row };
   }
-  function closeCtxMenu() { ctxMenu = null; }
+  function closeCtxMenu() { ctxMenu = null; actionMenuOpen = false; }
 
   function payloadFromRow(row) {
     return {
@@ -306,6 +334,8 @@
     await saveRules();
   }
 
+  const MR_TARGETS = ["RequestHeader", "RequestBody", "RequestFirstLine", "ResponseHeader", "ResponseBody", "ResponseFirstLine"];
+
   function addRule() {
     rules = [...rules, { name: "New rule", enabled: true, target: "RequestHeader", pattern: "", replacement: "", is_regex: false, only_in_scope: false }];
     saveRules();
@@ -314,6 +344,37 @@
   function removeRule(i) {
     rules = rules.filter((_, idx) => idx !== i);
     saveRules();
+  }
+
+  function moveRule(i, dir) {
+    const t = i + dir;
+    if (t < 0 || t >= rules.length) return;
+    const a = [...rules];
+    [a[i], a[t]] = [a[t], a[i]];
+    rules = a;
+    saveRules();
+  }
+
+  function exportRules() {
+    const blob = new Blob([JSON.stringify(rules, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "lancer-match-replace.json";
+    a.click();
+  }
+
+  function importRules() {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "application/json";
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      try {
+        const imported = JSON.parse(await file.text());
+        if (Array.isArray(imported)) { rules = imported; await saveRules(); }
+      } catch {}
+    };
+    input.click();
   }
 
   async function downloadCert(fmt) {
@@ -388,7 +449,19 @@
       <button class="toolbar-btn" disabled={interceptQueue.length === 0} on:click={forwardAll}>
         Forward all
       </button>
-      <button class="toolbar-btn" disabled={!selectedPaused}>Action ▼</button>
+      <div class="action-wrap">
+        <button class="toolbar-btn" disabled={!selectedPaused} on:click|stopPropagation={() => actionMenuOpen = !actionMenuOpen}>Action ▼</button>
+        {#if actionMenuOpen && selectedPaused}
+          <div class="action-menu" on:click|stopPropagation>
+            <div class="ctx-item" on:click={() => actionSend("repeater")}>Send to Repeater</div>
+            <div class="ctx-item" on:click={() => actionSend("intruder")}>Send to Intruder</div>
+            <div class="ctx-item" on:click={() => actionSend("comparer")}>Send to Comparer</div>
+            <div class="ctx-item" on:click={() => actionCopy("curl")}>Copy as curl</div>
+            <div class="ctx-item" on:click={() => actionCopy("powershell")}>Copy as PowerShell</div>
+            <div class="ctx-item" on:click={() => actionCopy("fetch")}>Copy as fetch</div>
+          </div>
+        {/if}
+      </div>
       <button class="toolbar-btn" on:click={async () => { try { await fetch("/api/browser/open", {method:"POST"}); } catch {} }}>Open browser</button>
       {#if interceptQueue.length > 0}
         <span class="queue-badge">{interceptQueue.length} paused</span>
@@ -597,6 +670,8 @@
   {#if subtab === "matchreplace"}
     <div class="toolbar">
       <button class="btn-orange" on:click={addRule}>Add</button>
+      <button class="toolbar-btn" on:click={exportRules}>Export</button>
+      <button class="toolbar-btn" on:click={importRules}>Import</button>
       <span class="dim" style="font-size:12px;margin-left:4px">{rules.length} rules</span>
     </div>
     <div class="table-wrap" style="flex:1;overflow-y:auto">
@@ -606,24 +681,35 @@
             <th style="width:36px">On</th>
             <th>Name</th>
             <th>Target</th>
-            <th>Match</th>
+            <th>Match (regex/literal)</th>
             <th>Replace</th>
-            <th style="width:40px"></th>
+            <th style="width:48px">Regex</th>
+            <th style="width:70px">Order</th>
+            <th style="width:36px"></th>
           </tr>
         </thead>
         <tbody>
           {#each rules as rule, i}
             <tr class:row-even={i % 2 === 0}>
-              <td><input type="checkbox" checked={rule.enabled} on:change={() => toggleRule(i)} /></td>
-              <td>{rule.name}</td>
-              <td>{rule.target}</td>
-              <td class="mono-cell">{rule.pattern}</td>
-              <td class="mono-cell">{rule.replacement}</td>
+              <td><input type="checkbox" bind:checked={rule.enabled} on:change={saveRules} /></td>
+              <td><input class="mr-in" bind:value={rule.name} on:change={saveRules} /></td>
+              <td>
+                <select class="mr-sel" bind:value={rule.target} on:change={saveRules}>
+                  {#each MR_TARGETS as t}<option value={t}>{t}</option>{/each}
+                </select>
+              </td>
+              <td><input class="mr-in mono" bind:value={rule.pattern} on:change={saveRules} /></td>
+              <td><input class="mr-in mono" bind:value={rule.replacement} on:change={saveRules} /></td>
+              <td style="text-align:center"><input type="checkbox" bind:checked={rule.is_regex} on:change={saveRules} /></td>
+              <td style="white-space:nowrap">
+                <button class="ord-btn" on:click={() => moveRule(i, -1)} disabled={i === 0}>▲</button>
+                <button class="ord-btn" on:click={() => moveRule(i, 1)} disabled={i === rules.length - 1}>▼</button>
+              </td>
               <td><button class="del-btn dim" on:click={() => removeRule(i)}>×</button></td>
             </tr>
           {/each}
           {#if rules.length === 0}
-            <tr><td colspan="6" class="empty-cell">No match/replace rules. Click Add to create one.</td></tr>
+            <tr><td colspan="8" class="empty-cell">No match/replace rules. Click Add to create one.</td></tr>
           {/if}
         </tbody>
       </table>
@@ -835,6 +921,15 @@
   .mono-cell { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
   .del-btn { padding: 1px 6px; font-size: 13px; background: transparent; border: none; cursor: pointer; color: #767676; }
   .del-btn:hover { color: #d42c2c; }
+  .mr-in { width: 100%; box-sizing: border-box; padding: 3px 6px; border: 1px solid #d8d8d8; border-radius: 3px; font-size: 12px; }
+  .mr-in.mono { font-family: ui-monospace, Consolas, monospace; }
+  .mr-sel { padding: 3px 4px; border: 1px solid #d8d8d8; border-radius: 3px; font-size: 11px; }
+  .ord-btn { padding: 0 4px; font-size: 10px; background: #f0f0f0; border: 1px solid #c8c8c8; border-radius: 2px; cursor: pointer; }
+  .ord-btn:disabled { opacity: 0.35; cursor: default; }
+  .action-wrap { position: relative; display: inline-block; }
+  .action-menu { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #c8c8c8; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); z-index: 50; min-width: 200px; padding: 4px 0; }
+  .action-menu .ctx-item { padding: 5px 14px; font-size: 12px; cursor: pointer; }
+  .action-menu .ctx-item:hover { background: #f0f7ff; }
 
   .detail-pane { height: 260px; flex-shrink: 0; border-top: 2px solid #dedede; }
   .pane-header { display: flex !important; align-items: center !important; justify-content: space-between !important; }

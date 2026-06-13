@@ -273,6 +273,81 @@
     closeCtx();
   }
 
+  // ── §2.4 Engagement tools ──────────────────────────────────────────────────
+  let engResult = null; // { title, kind, data }
+  async function eng(title, run) {
+    closeCtx();
+    engResult = { title, kind: "loading", data: null };
+    try { engResult = { title, ...(await run()) }; }
+    catch (err) { engResult = { title, kind: "error", data: String(err) }; }
+  }
+  function engEntry() { return ctxMenu ? ctxMenu.entry : selectedEntry; }
+  function engUrl(e) { return e.url || `${e.scheme || "http"}://${e.host || ""}${e.path || "/"}`; }
+
+  function ctxFindComments() {
+    const e = engEntry(); if (!e) return;
+    const body = bytesToText(e.body || e.response_body), url = engUrl(e);
+    eng("HTML/JS comments", async () => {
+      const r = await fetch("/api/v1/engagement/find-comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, body }) });
+      return { kind: "list", data: await r.json() };
+    });
+  }
+  function ctxFindScripts() {
+    const e = engEntry(); if (!e) return;
+    const body = bytesToText(e.body || e.response_body), base_url = engUrl(e);
+    eng("Referenced scripts", async () => {
+      const r = await fetch("/api/v1/engagement/find-scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ base_url, body }) });
+      return { kind: "list", data: await r.json() };
+    });
+  }
+  function ctxFindReferences() {
+    const e = engEntry(); if (!e) return;
+    const url = engUrl(e);
+    eng("Find references", async () => {
+      const r = await fetch("/api/v1/engagement/find-references", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
+      return { kind: "list", data: await r.json() };
+    });
+  }
+  function ctxCsrfPoc() {
+    const e = engEntry(); if (!e) return;
+    const request = formatRequest(e);
+    eng("CSRF PoC", async () => {
+      const r = await fetch("/api/v1/engagement/csrf-poc", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request }) });
+      const d = await r.json();
+      return { kind: "html", data: typeof d === "string" ? d : (d.html || JSON.stringify(d)) };
+    });
+  }
+  function ctxClickBandit() {
+    const e = engEntry(); if (!e) return;
+    const url = engUrl(e);
+    eng("ClickBandit (clickjacking PoC)", async () => {
+      const r = await fetch("/api/v1/engagement/clickbandit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
+      const d = await r.json();
+      return { kind: "html", data: typeof d === "string" ? d : (d.html || JSON.stringify(d)) };
+    });
+  }
+  function ctxAnalyzeTarget() {
+    eng("Target analysis", async () => {
+      const r = await fetch("/api/v1/engagement/analyze-target");
+      return { kind: "json", data: await r.json() };
+    });
+  }
+  function ctxSearchAcross() {
+    const needle = prompt("Search across all captured responses for:");
+    if (!needle) { closeCtx(); return; }
+    eng(`Search: "${needle}"`, async () => {
+      const r = await fetch("/api/v1/engagement/search", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ needle }) });
+      return { kind: "list", data: await r.json() };
+    });
+  }
+  function engItemText(it) { return typeof it === "string" ? it : (it.snippet || it.url || it.path || JSON.stringify(it)); }
+  function copyEng() {
+    if (!engResult) return;
+    const t = engResult.kind === "list" ? (engResult.data || []).map(engItemText).join("\n")
+      : typeof engResult.data === "string" ? engResult.data : JSON.stringify(engResult.data, null, 2);
+    navigator.clipboard.writeText(t).catch(() => {});
+  }
+
   function formatRequest(e) {
     if (e.raw_request) return e.raw_request;
     const method = e.method || "GET";
@@ -860,10 +935,55 @@
     <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
     <div class="ctx-item" on:click={ctxSendToScanner}>Send to Scanner</div>
     <div class="ctx-sep"></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item ctx-eng" on:click={ctxFindComments}>Find comments</div>
+    <div class="ctx-item ctx-eng" on:click={ctxFindScripts}>Find scripts</div>
+    <div class="ctx-item ctx-eng" on:click={ctxFindReferences}>Find references</div>
+    <div class="ctx-item ctx-eng" on:click={ctxCsrfPoc}>Generate CSRF PoC</div>
+    <div class="ctx-item ctx-eng" on:click={ctxClickBandit}>ClickBandit PoC</div>
+    <div class="ctx-item ctx-eng" on:click={ctxAnalyzeTarget}>Analyze target</div>
+    <div class="ctx-item ctx-eng" on:click={ctxSearchAcross}>Search across responses…</div>
+    <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
     <div class="ctx-item" on:click={ctxCopyAsCurl}>Copy as curl</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item ctx-danger" on:click={ctxDelete}>Delete item</div>
+  </div>
+{/if}
+
+{#if engResult}
+  <div class="eng-overlay" on:click={() => (engResult = null)}>
+    <div class="eng-modal" on:click|stopPropagation>
+      <div class="eng-head">
+        <span class="eng-title">{engResult.title}</span>
+        <div class="eng-head-actions">
+          <button class="sm-btn" on:click={copyEng}>Copy</button>
+          <button class="sm-btn" on:click={() => (engResult = null)}>×</button>
+        </div>
+      </div>
+      <div class="eng-body">
+        {#if engResult.kind === "loading"}
+          <div class="dim">Running…</div>
+        {:else if engResult.kind === "error"}
+          <div class="eng-err">{engResult.data}</div>
+        {:else if engResult.kind === "list"}
+          {#if (engResult.data || []).length === 0}
+            <div class="dim">No results.</div>
+          {:else}
+            <ul class="eng-list">
+              {#each engResult.data as it}<li><code>{engItemText(it)}</code></li>{/each}
+            </ul>
+          {/if}
+        {:else if engResult.kind === "html"}
+          <div class="eng-html-tabs">
+            <iframe class="eng-iframe" title="PoC preview" sandbox="" srcdoc={engResult.data}></iframe>
+          </div>
+          <pre class="eng-pre">{engResult.data}</pre>
+        {:else}
+          <pre class="eng-pre">{JSON.stringify(engResult.data, null, 2)}</pre>
+        {/if}
+      </div>
+    </div>
   </div>
 {/if}
 
@@ -1172,6 +1292,19 @@
   .ctx-item.ctx-disabled:hover { background: none; }
   .ctx-item.ctx-danger { color: #d42c2c; }
   .ctx-item.ctx-danger:hover { background: #fde8e8; }
+  .ctx-item.ctx-eng { color: #2e6fae; }
+
+  .eng-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .eng-modal { width: 720px; max-width: 92vw; max-height: 80vh; background: #fff; border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; }
+  .eng-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f5f5f5; border-bottom: 1px solid #dedede; }
+  .eng-title { font-weight: 600; font-size: 13px; }
+  .eng-head-actions { display: flex; gap: 6px; }
+  .eng-body { padding: 12px 14px; overflow: auto; }
+  .eng-list { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.7; }
+  .eng-list code { font-family: ui-monospace, Consolas, monospace; color: #333; word-break: break-all; }
+  .eng-pre { background: #11111b; color: #cdd6f4; padding: 10px; border-radius: 4px; font-size: 11px; overflow: auto; max-height: 300px; white-space: pre-wrap; word-break: break-all; }
+  .eng-iframe { width: 100%; height: 200px; border: 1px solid #dedede; border-radius: 4px; background: #fff; margin-bottom: 8px; }
+  .eng-err { color: #d42c2c; font-size: 12px; }
   .ctx-shortcut { float: right; color: #888; font-size: 11px; padding-left: 14px; }
   .ctx-sep { height: 1px; background: #e8e8e8; margin: 3px 0; }
 </style>

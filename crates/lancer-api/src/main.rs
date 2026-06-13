@@ -2037,6 +2037,28 @@ async fn report(state: &AppState, query: &str) -> Response<Full<Bytes>> {
                 Err(e) => return text(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
             }
         }
+        // §19 / §32 issue-tracker exporters
+        "jira" => {
+            let kept: Vec<_> = issues.iter().filter(|i| f.keep(i)).cloned().collect();
+            let project = parse_query(query, "project").unwrap_or_else(|| "SEC".into());
+            ("application/json", serde_json::to_vec_pretty(&lancer_report::exporters::jira(&project, &kept)).unwrap_or_default())
+        }
+        "linear" => {
+            let kept: Vec<_> = issues.iter().filter(|i| f.keep(i)).cloned().collect();
+            ("application/json", serde_json::to_vec_pretty(&lancer_report::exporters::linear(&kept)).unwrap_or_default())
+        }
+        "github" => {
+            let kept: Vec<_> = issues.iter().filter(|i| f.keep(i)).cloned().collect();
+            ("application/json", serde_json::to_vec_pretty(&lancer_report::exporters::github(&kept)).unwrap_or_default())
+        }
+        "defectdojo" => {
+            let kept: Vec<_> = issues.iter().filter(|i| f.keep(i)).cloned().collect();
+            ("application/json", serde_json::to_vec_pretty(&lancer_report::exporters::defectdojo(&kept)).unwrap_or_default())
+        }
+        "faraday" => {
+            let kept: Vec<_> = issues.iter().filter(|i| f.keep(i)).cloned().collect();
+            ("text/csv", lancer_report::exporters::faraday_csv(&kept).into_bytes())
+        }
         _          => ("application/json", render_json(&meta, &issues, &f).into_bytes()),
     };
     Response::builder()

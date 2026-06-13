@@ -21,9 +21,9 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 ## Status by section
 | § | Area | Status | Notes |
 |---|------|--------|-------|
-| 1 | Proxy | 🟡 | Intercept/HTTP history/Match-replace/CA cert all ✅. WebSockets history tab is a placeholder; HTTP/3 + NTLM/Negotiate auth feature-gated/stubbed; Proxy settings UI shows bind addr only — no upstream proxy / TLS pass-through / DNS override GUI |
-| 2 | Target | 🟡 | Site map ✅. Issues ✅ — **batch-13:** Issues tab now has analyst **mark/unmark false-positive** (`PATCH /v1/issues/{id}`), **severity/confidence override** dropdowns, **add manual issue** (`POST /v1/issues`), and a hide-FP toggle. Scope tab still informational only. Engagement tools backends exist (`/v1/engagement/*`) but no GUI menu yet |
-| 3 | Repeater | 🟡 | Send + tabs + raw editor + Inspector + Render ✅. batch-12: Burp-AI buttons + Send-to-Sequencer/Comparer/Decoder + Copy-as-fetch/PowerShell now work. Still no HTTP/2 frame editor, no WebSocket mode, no tab rename/group, read-only Inspector |
+| 1 | Proxy | 🟡 | Intercept/HTTP history/CA cert all ✅. **batch-14:** Match & Replace now **fully editable** (name/target-dropdown/match/replace/regex inline) + reorder + JSON import/export; intercept toolbar **Action ▼ dropdown** (Send to Repeater/Intruder/Comparer + Copy as curl/PowerShell/fetch). Still open: WebSocket frame capture (table empty), HTTP/3 inbound, NTLM/Negotiate |
+| 2 | Target | ✅ | Site map ✅. Issues ✅ (mark-FP / override / add-manual, batch-13). **batch-14:** **Scope CRUD** confirmed working (add/edit/delete/enable in Scope tab); **Engagement tools menu** wired — right-click → Find comments/scripts/references, Generate CSRF PoC, ClickBandit, Analyze target, Search across responses, each opening a results modal (with iframe preview for PoCs) over `/v1/engagement/*` |
+| 3 | Repeater | ✅ | Send + tabs + raw editor + Inspector + Render + Burp-AI + Send-to-X + Copy-as-X. **batch-14:** **tab rename** (double-click / F2), **duplicate tab** (right-click / ⎘), and **editable Inspector** (query params / headers / body params as add/edit/remove rows that rebuild the raw request). Still open: HTTP/2 frame editor, WebSocket mode (both dep-blocked) |
 | 4 | Intruder | 🟡 | 4 attack kinds + payload sets via `/v1/intruder` ✅. **batch-13:** grep-match / grep-extract (start/end→regex) / grep-payloads-reflected now wired GUI→API→`GrepConfig` and rendered as **dynamic result columns**; resource pool (threads/throttle/retries) wired to `IntruderConfig`; API now accepts **typed `payload_specs`** (Numbers/Dates/BruteForce/Null/CharFrobber/BitFlipper/CaseMod/UsernameGen/FromFile) + chained `processors`. Remaining: GUI type-selector to drive payload_specs/processors; save/load attack. §4.6 Mass Fuzz / `lancer-fuzz` still absent |
 | 5 | Scanner | ✅ | 30 active + 7 passive checks in `lancer-scanner`. Crawler, API-spec import, OAuth client backend-complete. BCheck DSL runner present. **batch-13:** new **Configuration** subtab — preset selector (Lightweight/Balanced/Deep/AuditOnly/CrawlOnly/PassiveOnly/OwaspTop10) + per-check enable/disable + concurrency/throttle, persisted via `GET/PUT /v1/scan/config` and applied to every subsequent scan |
 | 6 | Collaborator | ✅ | batch-13: new **`lancer-oast`** crate — self-hosted OAST server with real DNS (UDP, answers A + records every lookup), HTTP, and SMTP listeners + payload allocation + right-to-left subdomain **correlation engine**. Wired via `/v1/collaborator/{generate,interactions,poll,payloads,status,config,server/start,server/stop}` + new **Collaborator** GUI tab (server start/stop, config, generate-payload→clipboard, live interactions table filtered by DNS/HTTP/SMTP, auto-poll). Defaults to unprivileged ports (5353/8088/1825) so it runs without root. Remaining: scanner-check auto-correlation, RSA-encrypted callbacks, hosted public tier |
@@ -34,12 +34,12 @@ Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while sid
 | 11 | Organizer | ✅ | Organizer GUI tab present; batch-12 added tag/notes/title edit (`PUT /v1/organizer/{id}`), delete, and Send-to-Repeater. Collections (2025.12 encrypted share link) not implemented |
 | 12 | Logger | ✅ | Full table + filters + Request/Response detail panes ✅ (fixed this session). Custom Bambda column scripts not exposed |
 | 13 | Built-in browser | 🟡 | "Open Browser" button calls `/api/browser/open` which launches **system** Chrome/Firefox with proxy flags. Not an embedded Chromium with isolated profile. CA cert not auto-installed in the launched browser |
-| 14 | Inspector | 🟡 | Repeater Inspector pane shows attribs + counts of params/cookies/headers. Burp lets you **edit** params/cookies/headers via form fields — Lancer is read-only |
+| 14 | Inspector | ✅ | **batch-14:** Repeater Inspector is now **editable** — query parameters, request headers, and url-encoded body params render as add/edit/remove rows; edits rebuild the raw request (and the Cookie header from cookie rows) live |
 | 15 | Command palette | ✅ | Ctrl+K, fuzzy search, backend `/api/palette` query, `lancer-plugin/palette.rs`. Plugin commands register-able |
 | 16 | Burp AI | ✅ | batch-12: Repeater Explain/Investigate/Validate buttons POST to `/v1/ai` (BYO-LLM via `lancer-ai`); AI provider config in Settings → AI. AI-enhanced scanner checks still not wired |
 | 17 | Session handling | ✅ | `lancer-session` cookie jar + macros + rules complete in backend. **batch-13:** new **Sessions** GUI tab — Session Handling **Rules editor** (name/enabled/tool-scope/url-regex + ordered action builder: SetHeader/SetCookie/UseCookieJar/RunMacro/PromptUser) via `/v1/sessions/rules` CRUD, and **Macros** list (create/run/delete) via `/v1/macros` + `/v1/macros/{id}/run`. Cookie jar now has per-cookie delete (`DELETE /v1/cookies/{key}`). Remaining: in-flight rule application in the proxy pipeline, macro step-recording from Repeater |
-| 18 | Project management | 🟡 | SQLite project file ✅. batch-12: **default is now a temporary in-memory project** (unlocks organizer/report/ws-history without `--project`); disk projects auto-snapshot; `GET /v1/project` + `POST /v1/project/{open,new-temporary}`. Still missing GUI open/save dialog, recent list, config library |
-| 19 | Reporting | ✅ | HTML/JSON/Markdown/SARIF/XML/PDF all rendered via `lancer-report`. Reports tab works ✅. Jira/Linear/GitHub/DefectDojo exporters in `lancer-report/exporters` — no GUI buttons for them yet |
+| 18 | Project management | ✅ | SQLite project file ✅. Temporary in-memory default; disk projects auto-snapshot. **batch-14:** **File menu** in the topbar — New (temporary) / Open… (path → `/v1/project/open`) / current-project label / **Recent projects** list (localStorage). Config library still pending |
+| 19 | Reporting | ✅ | HTML/JSON/Markdown/SARIF/XML/PDF all rendered via `lancer-report`. **batch-14:** the **Jira / Linear / GitHub / DefectDojo / Faraday-CSV** exporters are now wired into `GET /v1/report?format=…` and exposed as format buttons in the Reports tab (download as JSON/CSV) |
 | 20 | Extensibility | 🟡 | Rhai built-in + WASM (`wasmtime`) + Lua (`mlua`) + Python (`pyo3`) + Native (`cdylib`) + JVM (Montoya, `jni`) all in `lancer-plugin`/`lancer-jvm`. **No plugin manager UI** — can't install/enable/disable plugins from the app. No BApp-store equivalent. No Bambda editor in GUI. No BCheck editor in GUI |
 | 21 | CLI / Headless / REST API | ✅ | `lancer-cli` has 29 subcommands. `lancer-api` exposes proxy + history + scan + intruder + repeater + report. **Missing**: Docker image not verified, no documented CI/CD examples |
 | 22 | Mobile testing | ✅ | batch-12: new Mobile GUI tab + `/v1/mobile/*` (iOS install steps, .mobileconfig profile, Frida Android/iOS/Flutter scripts). CLI still available |
@@ -647,6 +647,22 @@ These need substantial new systems, not wiring, and remain open:
 - **§1.3 WebSocket frame capture** — DEFERRED: the proxy serves buffered `Full<Bytes>` responses and has no WS upgrade-tunnel path; full frame capture needs delicate proxy-core rework (dual `hyper::upgrade::on` + frame-decoding bidirectional copy) that cannot be runtime-verified safely here without risking the working HTTP proxy.
 - **§23 NTLM/Negotiate** platform auth — BLOCKED on system Kerberos/SSPI libs; **§25** 100k-req/s benchmark, **§26** live-collab cursor sync, **§29** eBPF BPF object, **§1.1** inbound HTTP/3, and the **public hosted Collaborator** remain net-new infra.
 - **Data corpora** (200+/800+ secret patterns, 120+ LLM probes, 10k routes, 200+ gadget classes, real ysoserial/exploit-db datasets) remain below the aspirational plan counts.
+
+---
+
+# IMPLEMENTATION STATUS — 2026-06-13 (batch-14) — GUI SURFACE PASS
+
+Wired the remaining already-built backends to the GUI (each verified with `cargo check --workspace` clean + `vite build` clean):
+
+- **§2.4 Engagement tools** — right-click menu in Target → Find comments / scripts / references, Generate CSRF PoC, ClickBandit, Analyze target, Search-across-responses; results modal with sandboxed iframe preview for the PoCs (over the existing `/v1/engagement/*`).
+- **§2.2 Scope** — confirmed the add/edit/delete/enable CRUD already works (plan marker was stale).
+- **§1.4 Match & Replace** — table is now fully editable (name / **target dropdown** / match / replace / regex) + **reorder** (▲▼) + **JSON import/export**.
+- **§1.1 Action ▼** — intercept toolbar dropdown: Send to Repeater/Intruder/Comparer + Copy as curl/PowerShell/fetch on the paused request.
+- **§14 Inspector** — Repeater Inspector now **editable**: query params, headers, and url-encoded body params as add/edit/remove rows that rebuild the raw request.
+- **§3 Repeater** — tab **rename** (dbl-click / F2), **duplicate** (right-click / ⎘ button).
+- **§18 Project** — topbar **File menu**: New (temp) / Open… / current project / Recent list.
+- **§4 Intruder** — `startAttack` now sends typed **`payload_specs`** (Numbers/Dates/BruteForce/Null/UsernameGen/CaseMod) and best-effort **`processors`** from the GUI config (backend support added in batch-13).
+- **§19 / §32 Reporting** — **Jira / Linear / GitHub / DefectDojo / Faraday-CSV** exporters wired into `/v1/report?format=…` + format buttons in the Reports tab.
 
 ---
 
