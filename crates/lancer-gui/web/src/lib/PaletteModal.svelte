@@ -7,25 +7,35 @@
   let filtered = [];
   let selected = 0;
 
+  // Every nav target, so Ctrl+K can jump to any tab. IDs must match App.svelte's
+  // `tabs[].id`. The optional `/api/palette` endpoint (plugin-registered commands)
+  // is merged on top when present; until then this list is the source of truth —
+  // previously the palette listed only 11 of the 42 tabs and 404'd the rest.
+  const NAV = [
+    ["dashboard","Dashboard"],["target","Target"],["proxy","Proxy"],["intruder","Intruder"],
+    ["massfuzz","Mass Fuzz"],["repeater","Repeater"],["sequencer","Sequencer"],["decoder","Decoder"],
+    ["comparer","Comparer"],["payloads","Payloads"],["scanner","Scanner"],["collaborator","Collaborator"],
+    ["dualsession","Dual-Session"],["idmutator","ID Fuzzer"],["respdiff","Resp Differ"],["flowgraph","Flow Graph"],
+    ["logger","Logger"],["organizer","Organizer"],["findings","Findings"],["jsmining","JS Miner"],
+    ["secrets","Secrets"],["authbypass","Auth Bypass"],["bulkprobe","Bulk Probe"],["apiroutes","API Routes"],
+    ["deser","Deser Payloads"],["llmscan","LLM Scan"],["redteam","LLM Red-Team"],["mcp","MCP Scan"],
+    ["shodan","Shodan"],["fuzz","Stateful Fuzz"],["cms","CMS Scan"],["exploits","Exploit DB"],
+    ["mobile","Mobile"],["iac","IaC"],["modules","Modules"],["cookies","Cookies"],
+    ["sessions","Sessions"],["scripts","Scripts"],["collab","Collab"],["plugins","Plugins"],
+    ["reports","Reports"],["settings","Settings"],
+  ].map(([id, label]) => ({ id, label: "Go to " + label, hotkey: null, kind: "nav" }));
+
   async function load() {
+    commands = NAV; // always have the full nav set, even if the endpoint is absent
     try {
       const r = await fetch("/api/palette");
-      commands = await r.json();
-    } catch {
-      commands = [
-        { id: "dashboard", label: "Go to Dashboard",  hotkey: null, kind: "nav" },
-        { id: "proxy",     label: "Go to Proxy",      hotkey: null, kind: "nav" },
-        { id: "target",    label: "Go to Target",     hotkey: null, kind: "nav" },
-        { id: "repeater",  label: "Go to Repeater",   hotkey: null, kind: "nav" },
-        { id: "intruder",  label: "Go to Intruder",   hotkey: null, kind: "nav" },
-        { id: "sequencer", label: "Go to Sequencer",  hotkey: null, kind: "nav" },
-        { id: "decoder",   label: "Go to Decoder",    hotkey: null, kind: "nav" },
-        { id: "comparer",  label: "Go to Comparer",   hotkey: null, kind: "nav" },
-        { id: "logger",    label: "Go to Logger",     hotkey: null, kind: "nav" },
-        { id: "reports",   label: "Go to Reports",    hotkey: null, kind: "nav" },
-        { id: "settings",  label: "Go to Settings",   hotkey: null, kind: "nav" },
-      ];
-    }
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data) && data.length) {
+          commands = [...NAV, ...data.filter((c) => c && c.kind !== "nav")];
+        }
+      }
+    } catch {}
   }
 
   $: {

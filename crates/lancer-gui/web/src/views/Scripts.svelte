@@ -28,7 +28,11 @@
   }
 
   // ── BCheck ──
-  let yaml = `metadata:\n  name: "Example exposure check"\n  description: "Detects an exposed debug endpoint"\n  severity: medium\n  confidence: firm\n\nrun for each:\n  potential_path = "/debug", "/.env"\n\ngiven path then\n  send request:\n    method: GET\n    path: {potential_path}\n  if {response.status_code} is "200" then\n    report issue\n  end if`;
+  // Lancer's BCheck is a small declarative YAML format (id/name/severity/
+  // confidence/when/probes) parsed by lancer-scanner's serde_yaml runner — not
+  // Burp's imperative `given … then` DSL. Ship a sample in the real format so
+  // "Validate & parse" succeeds out of the box.
+  let yaml = `id: lancer.bcheck.debug-exposure\nname: Exposed debug endpoint\nseverity: medium\nconfidence: firm\nwhen:\n  url_contains: /\nprobes:\n  - method: GET\n    path_suffix: /debug\n    expect_status: [200]\n    expect_body_contains: "DEBUG"`;
   let cResult = null, cErr = "";
   async function validateBCheck() {
     cResult = null; cErr = "";
