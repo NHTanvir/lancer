@@ -10,7 +10,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:9191",
+      // lancer-api serves /v1/* (no /api prefix); strip /api when proxying so
+      // the GUI's /api/v1/* calls reach /v1/* on the backend.
+      "/api": {
+        target: "http://127.0.0.1:9191",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ""),
+      },
     },
   },
 });

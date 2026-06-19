@@ -39,3 +39,11 @@ pub use intercept_queue::{InterceptPauseQueue, InterceptResolution, PausedReques
 pub use listener::ProxyListener;
 pub use match_replace::{MatchReplaceEngine, MatchReplaceRule, MatchReplaceConfig, MatchTarget};
 pub use settings::ProxySettings;
+
+/// Install the process-level rustls `CryptoProvider`. rustls 0.23 panics on
+/// first TLS use when both the `ring` and `aws-lc-rs` backends are present in
+/// the dependency tree (which happens once the HTTP/3 / quinn deps are pulled
+/// in) because it can't auto-select. Call this once at the start of `main`.
+pub fn install_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}

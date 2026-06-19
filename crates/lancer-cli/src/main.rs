@@ -118,6 +118,7 @@ enum Cmd {
 }
 
 fn main() -> Result<()> {
+    lancer_proxy::install_crypto_provider();
     let cli = Cli::parse();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_new(&cli.log).unwrap_or_else(|_| EnvFilter::new("info")))

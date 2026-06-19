@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
 
   let status = { running: false, domain: "", dns: null, http: null, smtp: null, interaction_count: 0, payload_count: 0 };
-  let config = { domain: "oast.lancer.local", bind_ip: "0.0.0.0", dns_port: 5353, http_port: 8088, smtp_port: 1825, answer_ip: "127.0.0.1", enable_dns: true, enable_http: true, enable_smtp: false };
+  let config = { domain: "oast.lancer.local", bind_ip: "0.0.0.0", dns_port: 15353, http_port: 8088, smtp_port: 1825, answer_ip: "127.0.0.1", enable_dns: true, enable_http: true, enable_smtp: false };
   let interactions = [];
   let payloads = [];
   let lastPayload = null;

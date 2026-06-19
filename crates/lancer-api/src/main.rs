@@ -143,6 +143,9 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // rustls 0.23 needs an explicit process-level CryptoProvider when more than
+    // one backend feature ('ring' + 'aws-lc-rs') is in the dependency tree.
+    lancer_proxy::install_crypto_provider();
     let args = Args::parse();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))

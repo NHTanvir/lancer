@@ -403,7 +403,7 @@
       Reusable payload/POC templates organised by vulnerability class. Click any template to copy or send to Repeater/Intruder.
     </div>
     {#each [
-      { cls:"XSS", items: ["<script>alert(1)<\/script>", '"><img src=x onerror=alert(1)>', "javascript:alert(1)", "';alert`1`//"] },
+      { cls:"XSS", items: ["<scr"+"ipt>alert(1)</scr"+"ipt>", '"><img src=x onerror=alert(1)>', "javascript:alert(1)", "';alert`1`//"] },
       { cls:"SQLi", items: ["' OR '1'='1", "' UNION SELECT NULL--", "1' AND SLEEP(5)--", "' OR 1=1#"] },
       { cls:"SSRF", items: ["http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:80/", "file:///etc/passwd"] },
       { cls:"Path Traversal", items: ["../../etc/passwd", "..%2F..%2Fetc%2Fpasswd", "%252e%252e%252fetc%252fpasswd"] },
@@ -476,7 +476,7 @@
       </div>
       <div class="form-row">
         <label>Raw Request (optional)</label>
-        <textarea bind:value={nfRequest} rows="4" placeholder="GET /search?q=<script>alert(1)</script> HTTP/1.1&#10;Host: target.com" class="mono-ta"></textarea>
+        <textarea bind:value={nfRequest} rows="4" placeholder="GET /search?q=test HTTP/1.1&#10;Host: target.com" class="mono-ta"></textarea>
       </div>
     </div>
     <div class="dialog-footer">

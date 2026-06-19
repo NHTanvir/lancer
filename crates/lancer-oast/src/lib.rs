@@ -87,7 +87,8 @@ impl Default for OastConfig {
         Self {
             domain: "oast.lancer.local".into(),
             bind_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            dns_port: 5353,
+            // 5353 is mDNS (in use on most desktops); use a high free port instead.
+            dns_port: 15353,
             http_port: 8088,
             smtp_port: 1825,
             answer_ip: Ipv4Addr::new(127, 0, 0, 1),
@@ -251,52 +252,69 @@ impl OastServer {
 
     /// Start every enabled listener. Idempotent — a no-op while already running.
     ///
-    /// Binds all sockets before taking the handle lock so no non-`Send` guard is
-    /// held across an `.await` (which would make the future un-spawnable).
+    /// Resilient: each listener binds independently, so a port conflict on one
+    /// (e.g. mDNS already on the DNS port) doesn't prevent the others. Succeeds
+    /// if at least one enabled listener bound; errors only if every one failed.
     pub async fn start(self: &Arc<Self>) -> Result<()> {
         if self.is_running() {
             return Ok(());
         }
         let cfg = self.config.read().clone();
         let mut new_handles: Vec<JoinHandle<()>> = Vec::new();
+        let mut enabled = 0usize;
+        let mut errors: Vec<String> = Vec::new();
 
-        let bind: Result<()> = async {
-            if cfg.enable_dns {
-                let sock = UdpSocket::bind(SocketAddr::new(cfg.bind_ip, cfg.dns_port)).await?;
-                let server = self.clone();
-                let answer = cfg.answer_ip;
-                new_handles.push(tokio::spawn(async move { dns_loop(server, sock, answer).await }));
-                tracing::info!("oast: DNS listener on {}:{}", cfg.bind_ip, cfg.dns_port);
-            }
-            if cfg.enable_http {
-                let listener = TcpListener::bind(SocketAddr::new(cfg.bind_ip, cfg.http_port)).await?;
-                let server = self.clone();
-                new_handles.push(tokio::spawn(async move { http_loop(server, listener).await }));
-                tracing::info!("oast: HTTP listener on {}:{}", cfg.bind_ip, cfg.http_port);
-            }
-            if cfg.enable_smtp {
-                let listener = TcpListener::bind(SocketAddr::new(cfg.bind_ip, cfg.smtp_port)).await?;
-                let server = self.clone();
-                new_handles.push(tokio::spawn(async move { smtp_loop(server, listener).await }));
-                tracing::info!("oast: SMTP listener on {}:{}", cfg.bind_ip, cfg.smtp_port);
-            }
-            Ok(())
-        }
-        .await;
-
-        match bind {
-            Ok(()) => {
-                self.handles.lock().extend(new_handles);
-                self.running.store(true, Ordering::SeqCst);
-                Ok(())
-            }
-            Err(e) => {
-                for h in new_handles {
-                    h.abort();
+        if cfg.enable_dns {
+            enabled += 1;
+            match UdpSocket::bind(SocketAddr::new(cfg.bind_ip, cfg.dns_port)).await {
+                Ok(sock) => {
+                    let server = self.clone();
+                    let answer = cfg.answer_ip;
+                    new_handles.push(tokio::spawn(async move { dns_loop(server, sock, answer).await }));
+                    tracing::info!("oast: DNS listener on {}:{}", cfg.bind_ip, cfg.dns_port);
                 }
-                Err(e)
+                Err(e) => {
+                    tracing::warn!("oast: DNS listener bind {}:{} failed: {e}", cfg.bind_ip, cfg.dns_port);
+                    errors.push(format!("DNS :{} ({e})", cfg.dns_port));
+                }
             }
         }
+        if cfg.enable_http {
+            enabled += 1;
+            match TcpListener::bind(SocketAddr::new(cfg.bind_ip, cfg.http_port)).await {
+                Ok(listener) => {
+                    let server = self.clone();
+                    new_handles.push(tokio::spawn(async move { http_loop(server, listener).await }));
+                    tracing::info!("oast: HTTP listener on {}:{}", cfg.bind_ip, cfg.http_port);
+                }
+                Err(e) => {
+                    tracing::warn!("oast: HTTP listener bind {}:{} failed: {e}", cfg.bind_ip, cfg.http_port);
+                    errors.push(format!("HTTP :{} ({e})", cfg.http_port));
+                }
+            }
+        }
+        if cfg.enable_smtp {
+            enabled += 1;
+            match TcpListener::bind(SocketAddr::new(cfg.bind_ip, cfg.smtp_port)).await {
+                Ok(listener) => {
+                    let server = self.clone();
+                    new_handles.push(tokio::spawn(async move { smtp_loop(server, listener).await }));
+                    tracing::info!("oast: SMTP listener on {}:{}", cfg.bind_ip, cfg.smtp_port);
+                }
+                Err(e) => {
+                    tracing::warn!("oast: SMTP listener bind {}:{} failed: {e}", cfg.bind_ip, cfg.smtp_port);
+                    errors.push(format!("SMTP :{} ({e})", cfg.smtp_port));
+                }
+            }
+        }
+
+        // Fail only if every enabled listener failed to bind.
+        if enabled > 0 && new_handles.is_empty() {
+            anyhow::bail!("no OAST listener could bind: {}", errors.join("; "));
+        }
+        self.handles.lock().extend(new_handles);
+        self.running.store(true, Ordering::SeqCst);
+        Ok(())
     }
 
     /// Stop all listeners. Allocated payloads + recorded interactions survive.
