@@ -134,6 +134,7 @@ impl PipelineHandles {
         }
         self.events
             .emit(ProxyEvent::ResponseCaptured {
+                request_id,
                 id: resp.meta.id,
                 response: resp.clone(),
             })

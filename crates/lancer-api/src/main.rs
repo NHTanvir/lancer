@@ -369,8 +369,8 @@ async fn main() -> Result<()> {
                         if url_map.len() > 8192 { url_map.clear(); }
                         url_map.insert(id, request.url());
                     }
-                    lancer_proxy::ProxyEvent::ResponseCaptured { id, response } => {
-                        let url = url_map.remove(&id).unwrap_or_default();
+                    lancer_proxy::ProxyEvent::ResponseCaptured { request_id, response, .. } => {
+                        let url = url_map.remove(&request_id).unwrap_or_default();
                         let Some(body) = response.body_text() else { continue };
                         if body.is_empty() { continue; }
                         // Secret scan on every response (dedup by url+raw_value).

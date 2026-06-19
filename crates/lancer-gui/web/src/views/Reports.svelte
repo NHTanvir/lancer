@@ -1,11 +1,13 @@
 <script>
   let format = "html";
   let preview = "";
+  let pdfUrl = "";        // object URL for the binary PDF preview/download
   let loading = false;
   let error = "";
 
   const formats = [
     { value: "html",     label: "HTML" },
+    { value: "pdf",      label: "PDF" },
     { value: "json",     label: "JSON" },
     { value: "markdown", label: "Markdown" },
     { value: "sarif",    label: "SARIF" },
@@ -17,14 +19,24 @@
     { value: "faraday",  label: "Faraday CSV" },
   ];
 
+  function clearPdf() { if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = ""; } }
+
   async function render() {
     loading = true;
     error = "";
     preview = "";
+    clearPdf();
     try {
       const r = await fetch(`/api/v1/report?format=${format}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      preview = await r.text();
+      if (format === "pdf") {
+        // PDF is binary — read as a blob and preview it via an object URL.
+        const blob = await r.blob();
+        pdfUrl = URL.createObjectURL(blob);
+        preview = "(pdf)";
+      } else {
+        preview = await r.text();
+      }
     } catch (e) {
       error = `Failed to render report: ${e.message || e}`;
     } finally {
@@ -33,6 +45,14 @@
   }
 
   function download() {
+    if (format === "pdf") {
+      if (!pdfUrl) return;
+      const a = document.createElement("a");
+      a.href = pdfUrl;
+      a.download = "lancer-report.pdf";
+      a.click();
+      return;
+    }
     if (!preview) return;
     const ext = { html: "html", json: "json", markdown: "md", sarif: "json", xml: "xml", jira: "json", linear: "json", github: "json", defectdojo: "json", faraday: "csv" }[format] || "txt";
     const mime = format === "html" ? "text/html" : format === "faraday" ? "text/csv" : ["json","sarif","jira","linear","github","defectdojo"].includes(format) ? "application/json" : "text/plain";
@@ -53,14 +73,14 @@
         <button
           class="fmt-btn"
           class:fmt-active={format === f.value}
-          on:click={() => { format = f.value; preview = ""; error = ""; }}
+          on:click={() => { format = f.value; preview = ""; error = ""; clearPdf(); }}
         >{f.label}</button>
       {/each}
     </div>
     <button class="btn-orange" on:click={render} disabled={loading}>
       {loading ? "Rendering..." : "Render report"}
     </button>
-    <button class="btn-secondary" on:click={download} disabled={!preview}>
+    <button class="btn-secondary" on:click={download} disabled={!preview && !pdfUrl}>
       Download
     </button>
   </div>
@@ -80,6 +100,8 @@
         <div class="spinner"></div>
         <span>Generating report...</span>
       </div>
+    {:else if format === "pdf" && pdfUrl}
+      <iframe title="Report preview" src={pdfUrl} class="html-frame"></iframe>
     {:else if preview && format === "html"}
       <iframe title="Report preview" srcdoc={preview} class="html-frame" sandbox="allow-same-origin"></iframe>
     {:else if preview}

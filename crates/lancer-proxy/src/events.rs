@@ -13,6 +13,10 @@ pub enum ProxyEvent {
         in_scope: bool,
     },
     ResponseCaptured {
+        /// The id of the request this response answers — consumers correlate the
+        /// response to its request (e.g. for the source URL) via this, since
+        /// `id` below is the response's own (different) message id.
+        request_id: MessageId,
         id: MessageId,
         response: HttpResponse,
     },
