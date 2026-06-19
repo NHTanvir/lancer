@@ -67,8 +67,16 @@ impl Storage {
         let opts = SqliteConnectOptions::new()
             .in_memory(true)
             .create_if_missing(true);
+        // Each SQLite `:memory:` *connection* is a separate database, so the
+        // pool must hold exactly one connection and never recycle it — if the
+        // single connection were closed (idle timeout / max lifetime) and
+        // reopened, we'd get a fresh, empty DB and every table (and the applied
+        // migrations) would vanish, surfacing as "no such table: history".
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
+            .min_connections(1)
+            .idle_timeout(None)
+            .max_lifetime(None)
             .connect_with(opts)
             .await?;
         let store = Self { pool };

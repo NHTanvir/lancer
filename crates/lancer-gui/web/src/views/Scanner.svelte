@@ -123,7 +123,7 @@
   onMount(async () => {
     try {
       const r = await fetch("/api/v1/scan/queue");
-      if (r.ok) queue = await r.json();
+      if (r.ok) { const d = await r.json(); queue = Array.isArray(d) ? d : (d.queue || []); }
     } catch {}
   });
 </script>

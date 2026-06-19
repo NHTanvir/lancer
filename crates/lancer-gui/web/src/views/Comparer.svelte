@@ -28,7 +28,7 @@
 
   async function loadHistory() {
     try {
-      const r = await fetch("/api/v1/proxy/history?limit=200");
+      const r = await fetch("/api/v1/history?limit=200");
       if (r.ok) historyRows = await r.json();
     } catch {}
   }
