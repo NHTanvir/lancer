@@ -247,9 +247,11 @@
   async function apply(i, op, mode) {
     const r = rows[i];
     try {
-      const out = op.async || op.fn.constructor.name === "AsyncFunction"
-        ? await op.fn(r.input)
-        : op.fn(r.input);
+      // Always await: sync ops return the value unchanged, while hash/GZIP ops
+      // (and the backend-routed MD2/SHA-3 family) return Promises. Awaiting both
+      // uniformly avoids stuffing an unresolved Promise into the output, which
+      // previously rendered every hash result as "[object Promise]".
+      const out = await op.fn(r.input);
       r.output = out;
     } catch (e) {
       r.output = "(error: " + e.message + ")";

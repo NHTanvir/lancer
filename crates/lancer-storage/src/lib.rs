@@ -62,26 +62,34 @@ impl Storage {
         Ok(store)
     }
 
-    /// Open an ephemeral in-memory project (`ProjectKind::Temporary`).
+    /// Open an ephemeral temporary project (`ProjectKind::Temporary`).
+    ///
+    /// Backed by a throwaway file in the OS temp dir rather than a private
+    /// SQLite `:memory:` database. A `:memory:` DB is bound to its single
+    /// connection: if the pool ever recycles that connection (idle reap, health
+    /// check, or error) the database — tables *and* applied migrations — is
+    /// silently recreated empty, surfacing later as "no such table: history"
+    /// and 500ing every read once the app has sat idle. A temp file survives
+    /// connection recycling, so the data persists for the whole process while
+    /// still being ephemeral (a fresh unique file per run, never reopened).
     pub async fn in_memory() -> anyhow::Result<Self> {
-        let opts = SqliteConnectOptions::new()
-            .in_memory(true)
-            .create_if_missing(true);
-        // Each SQLite `:memory:` *connection* is a separate database, so the
-        // pool must hold exactly one connection and never recycle it — if the
-        // single connection were closed (idle timeout / max lifetime) and
-        // reopened, we'd get a fresh, empty DB and every table (and the applied
-        // migrations) would vanish, surfacing as "no such table: history".
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .min_connections(1)
-            .idle_timeout(None)
-            .max_lifetime(None)
-            .connect_with(opts)
-            .await?;
-        let store = Self { pool };
-        migrations::apply(&store).await?;
-        Ok(store)
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join("lancer-temp");
+        tokio::fs::create_dir_all(&dir).await.ok();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+        let path = dir.join(format!(
+            "temp-{}-{}-{}.lancer",
+            std::process::id(),
+            nanos,
+            seq
+        ));
+        // `open` creates the file, enables WAL, and runs migrations.
+        Self::open(&path).await
     }
 
     pub fn pool(&self) -> &SqlitePool {

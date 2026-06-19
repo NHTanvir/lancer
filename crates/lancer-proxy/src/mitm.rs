@@ -249,7 +249,12 @@ pub fn owned_request_to_hyper(req: &HttpRequest) -> Result<http::Request<Full<By
             _ => http::Version::HTTP_11,
         });
     for h in &req.headers {
-        if h.name.eq_ignore_ascii_case("proxy-connection") {
+        // Skip hop-by-hop proxy framing and any empty/whitespace header name —
+        // an empty name (which can slip in from edited intercept wire text, e.g.
+        // a stray "`: `" line) makes `http`'s builder reject the whole request,
+        // and a returned Err here closes the client connection with no response
+        // (an "empty reply from server"). Drop the bad header instead.
+        if h.name.trim().is_empty() || h.name.eq_ignore_ascii_case("proxy-connection") {
             continue;
         }
         builder = builder.header(h.name.as_str(), h.value.as_str());
