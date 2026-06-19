@@ -91,7 +91,9 @@
 
   let attackError="";
   // GUI label → API attack-kind token (the API also accepts these case/separator-insensitively).
-  const KIND_MAP={"Sniper":"Sniper","Battering Ram":"BatteringRam","Pitchfork":"Pitchfork","Cluster Bomb":"ClusterBomb"};
+  // Keys MUST match the <option> label casing ("Battering ram"/"Cluster bomb"),
+  // else the lookup misses and silently falls back to Sniper.
+  const KIND_MAP={"Sniper":"Sniper","Battering ram":"BatteringRam","Pitchfork":"Pitchfork","Cluster bomb":"ClusterBomb"};
   // Map the selected payload type + its config to a backend payload_spec.
   // Returns null for "Simple list" (falls back to the literal payload list).
   function buildPayloadSpec() {
@@ -127,8 +129,12 @@
     requestLoaded=true; running=true; results=[]; selectedResult=null; attackError="";
     attackNum+=1; showResults=true; filterStatus=""; filterPayload="";
     // The request template carries the §…§ markers; payloadList is one payload set.
-    // Cluster Bomb/Pitchfork with multiple positions reuse this set per position.
-    const sets=[payloadList];
+    // Pitchfork/Cluster Bomb need one payload set PER position (the backend
+    // rejects a mismatch with 500 "needs one payload set per position"), and the
+    // UI exposes a single set — so replicate it across positions for those modes.
+    const setCount = (attackType === "Pitchfork" || attackType === "Cluster bomb")
+      ? Math.max(1, positionCount) : 1;
+    const sets = Array.from({ length: setCount }, () => payloadList);
     // Grep config the results table renders as dynamic columns (start/end
     // boundaries compile to a regex server-side).
     const grep={
@@ -141,7 +147,7 @@
     const spec = buildPayloadSpec();
     const procs = buildProcessors();
     const reqBody = {host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",grep,max_concurrency:parseInt(sThreads,10)||10,throttle_ms:parseInt(sThrottle,10)||0,max_retries:parseInt(sRetries,10)||0};
-    if (spec) reqBody.payload_specs=[spec]; else reqBody.payloads=sets;
+    if (spec) reqBody.payload_specs=Array.from({ length: setCount }, () => spec); else reqBody.payloads=sets;
     if (procs.length) reqBody.processors=procs;
     try {
       const r = await fetch("/api/v1/intruder",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(reqBody)});

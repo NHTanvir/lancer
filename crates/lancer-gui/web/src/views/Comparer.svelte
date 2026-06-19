@@ -33,21 +33,42 @@
     } catch {}
   }
 
+  // /v1/history serializes version as an enum ("Http11"), headers as an array
+  // of {name,value}, and bodies as byte arrays — normalize all three so a
+  // request/response selected from history renders as real wire text instead of
+  // "Http11" / "0: [object Object]" / "[60,33,...]".
+  function wireVersion(v) {
+    return ({ Http10: "HTTP/1.0", Http11: "HTTP/1.1", Http2: "HTTP/2", Http3: "HTTP/3" })[v] || v || "HTTP/1.1";
+  }
+  function bodyText(body) {
+    if (body == null) return "";
+    if (typeof body === "string") return body;
+    if (Array.isArray(body)) { try { return new TextDecoder().decode(new Uint8Array(body)); } catch { return ""; } }
+    return JSON.stringify(body);
+  }
+  function headerLines(headers, skipHost) {
+    if (!headers) return "";
+    const list = Array.isArray(headers)
+      ? headers.map((h) => [h.name ?? h.Name ?? "", h.value ?? h.Value ?? ""])
+      : Object.entries(headers);
+    let s = "";
+    for (const [k, v] of list) {
+      if (skipHost && String(k).toLowerCase() === "host") continue;
+      s += `${k}: ${v}\r\n`;
+    }
+    return s;
+  }
+
   function fmtRequest(row) {
     if (!row) return "";
     const req = row.request || row;
     const method = req.method || row.method || "GET";
     const path   = req.path   || row.path   || "/";
     const host   = req.meta?.host || row.host || "";
-    const version = req.version || "HTTP/1.1";
-    let s = `${method} ${path} ${version}\r\nHost: ${host}\r\n`;
-    if (req.headers) {
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (k.toLowerCase() !== "host") s += `${k}: ${v}\r\n`;
-      }
-    }
+    let s = `${method} ${path} ${wireVersion(req.version)}\r\nHost: ${host}\r\n`;
+    s += headerLines(req.headers, true);
     s += "\r\n";
-    if (req.body) s += typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    s += bodyText(req.body);
     return s;
   }
 
@@ -55,12 +76,10 @@
     if (!row) return "";
     const resp = row.response || row;
     if (!resp || !resp.status) return "(no response captured)";
-    let s = `HTTP/1.1 ${resp.status} ${resp.status_text || ""}\r\n`;
-    if (resp.headers) {
-      for (const [k, v] of Object.entries(resp.headers)) s += `${k}: ${v}\r\n`;
-    }
+    let s = `${wireVersion(resp.version)} ${resp.status} ${resp.reason || resp.status_text || ""}\r\n`;
+    s += headerLines(resp.headers, false);
     s += "\r\n";
-    if (resp.body) s += typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
+    s += bodyText(resp.body);
     return s;
   }
 

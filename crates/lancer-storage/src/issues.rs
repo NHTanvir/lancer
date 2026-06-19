@@ -26,7 +26,10 @@ impl Severity {
     }
 
     pub fn parse(s: &str) -> Option<Self> {
-        Some(match s {
+        // Case-insensitive: the GUI uses the serialized (capitalized) form
+        // "Info"/"Low"/"Medium"/"High"/"Critical", so a lowercase-only match
+        // silently dropped every user-set severity back to the Info default.
+        Some(match s.to_ascii_lowercase().as_str() {
             "info" => Severity::Info,
             "low" => Severity::Low,
             "medium" => Severity::Medium,
@@ -54,7 +57,9 @@ impl Confidence {
     }
 
     pub fn parse(s: &str) -> Option<Self> {
-        Some(match s {
+        // Case-insensitive — see Severity::parse. The GUI sends "Tentative"/
+        // "Firm"/"Certain", which a lowercase-only match would reject.
+        Some(match s.to_ascii_lowercase().as_str() {
             "tentative" => Confidence::Tentative,
             "firm" => Confidence::Firm,
             "certain" => Confidence::Certain,
