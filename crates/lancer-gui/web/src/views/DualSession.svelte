@@ -96,21 +96,21 @@
   .hdr { display: flex; align-items: center; gap: 10px; }
   .hdr .dim { font-size: 12px; }
   .cols { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
-  .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #767676; margin-bottom: 5px; }
-  .req { width: 100%; box-sizing: border-box; min-height: 150px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid #c8c8c8; border-radius: 4px; resize: vertical; }
+  .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px; }
+  .req { width: 100%; box-sizing: border-box; min-height: 150px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 4px; resize: vertical; }
   .meta { display: flex; gap: 6px; margin-top: 6px; }
-  .meta select, .meta input { padding: 4px 6px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 12px; }
+  .meta select, .meta input { padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 12px; }
   .meta input:nth-child(2) { flex: 1; }
-  .sess-col { background: #fafafa; border: 1px solid #e3e3e3; border-radius: 6px; padding: 10px; }
-  .sess-name { width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid #c8c8c8; border-radius: 3px; font-weight: 600; margin-bottom: 8px; }
-  .f { display: block; font-size: 11px; color: #767676; margin-bottom: 8px; }
+  .sess-col { background: var(--surface-1); border: 1px solid #e3e3e3; border-radius: 6px; padding: 10px; }
+  .sess-name { width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 3px; font-weight: 600; margin-bottom: 8px; }
+  .f { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
   .f input { width: 100%; box-sizing: border-box; padding: 4px 7px; border: 1px solid #d0d0d0; border-radius: 3px; font-size: 12px; margin-top: 3px; }
   .hrow { display: flex; gap: 4px; margin-top: 4px; }
   .hrow input { flex: 1; }
   .x { background: none; border: none; color: #c44; cursor: pointer; }
-  .add { font-size: 11px; margin-top: 5px; padding: 2px 8px; background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 3px; cursor: pointer; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
-  .btn-primary:hover { background: #c73400; }
+  .add { font-size: 11px; margin-top: 5px; padding: 2px 8px; background: var(--surface-2); border: 1px solid #d0d0d0; border-radius: 3px; cursor: pointer; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
+  .btn-primary:hover { background: var(--accent-hover); }
   .btn-primary:disabled { opacity: 0.5; }
   .err { color: #d42c2c; font-size: 12px; }
   .verdict { padding: 10px 14px; background: #eef6ff; border: 1px solid #cfe2f7; border-radius: 5px; font-size: 13px; }
@@ -118,10 +118,10 @@
   .verdict .sim { margin-left: 10px; color: #777; font-size: 12px; }
   .resp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .resp { border: 1px solid #e3e3e3; border-radius: 6px; overflow: hidden; }
-  .resp-hd { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #f5f5f5; border-bottom: 1px solid #e3e3e3; }
+  .resp-hd { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid #e3e3e3; }
   .resp-body { margin: 0; padding: 10px; font-size: 11px; font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow: auto; background: #fff; }
   .badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 3px; }
   .s2 { background: #e9f7ec; color: #2e7d3a; } .s3 { background: #fff6e0; color: #a06800; }
   .s4 { background: #fdeaea; color: #c0392b; } .s5 { background: #f3e6f7; color: #8e44ad; }
-  .dim { color: #888; font-size: 12px; }
+  .dim { color: var(--text-muted); font-size: 12px; }
 </style>

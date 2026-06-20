@@ -163,7 +163,7 @@
   {#if oobOpen}
     <div class="config-pane">
       <div class="pane-title">OOB / SSRF scan — injects a correlated payload into every query param + SSRF header of a request, then reports which sink called back</div>
-      <textarea bind:value={oobRequest} style="width:100%;box-sizing:border-box;min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:8px;border:1px solid #c8c8c8;border-radius:4px"></textarea>
+      <textarea bind:value={oobRequest} style="width:100%;box-sizing:border-box;min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:8px;border:1px solid #d5dae1;border-radius:4px"></textarea>
       <div class="cfg-grid" style="margin-top:6px">
         <label>Scheme<input bind:value={oobScheme} /></label>
         <label>Host<input bind:value={oobHost} /></label>
@@ -263,11 +263,11 @@
 </div>
 
 <style>
-  .toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #dedede; flex-shrink: 0; }
-  .toolbar-btn { padding: 4px 10px; font-size: 13px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; }
-  .toolbar-btn:hover { background: #e4e4e4; }
-  .toolbar-btn.primary { background: #e03a00; color: #fff; border-color: #e03a00; }
-  .toolbar-btn.primary:hover { background: #c73400; }
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .toolbar-btn { padding: 4px 10px; font-size: 13px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; }
+  .toolbar-btn:hover { background: var(--surface-3); }
+  .toolbar-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolbar-btn.primary:hover { background: var(--accent-hover); }
   .toolbar-btn.danger { color: #d42c2c; border-color: #f5b8b8; }
   .toolbar-btn.danger:hover { background: #fde8e8; }
   .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
@@ -275,39 +275,39 @@
   .dot.off { background: #b8b8b8; }
   .listeners { font-size: 12px; }
 
-  .config-pane { padding: 12px 14px; background: #fafafa; border-bottom: 2px solid #dedede; }
-  .pane-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #767676; margin-bottom: 10px; }
+  .config-pane { padding: 12px 14px; background: var(--surface-1); border-bottom: 2px solid var(--border); }
+  .pane-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px; }
   .cfg-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-  .cfg-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; min-width: 140px; }
+  .cfg-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); min-width: 140px; }
   .cfg-grid label.check { flex-direction: row; align-items: center; gap: 5px; min-width: auto; }
   .cfg-actions { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
   .hint { font-size: 11px; }
 
   .payload-banner { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #fff8f0; border-bottom: 1px solid #f0d9c0; flex-wrap: wrap; }
   .pb-label { font-size: 11px; font-weight: 600; color: #a05000; }
-  .pb-host { font-size: 13px; font-weight: 700; color: #c73400; }
+  .pb-host { font-size: 13px; font-weight: 700; color: var(--accent-hover); }
 
   .filter-bar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #fbfbfb; border-bottom: 1px solid #ededed; }
-  .chip { font-size: 11px; padding: 3px 10px; border: 1px solid #d0d0d0; border-radius: 12px; background: #fff; color: #555; cursor: pointer; }
-  .chip.active { background: #e03a00; color: #fff; border-color: #e03a00; }
-  .check-inline { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #555; margin-left: 8px; }
+  .chip { font-size: 11px; padding: 3px 10px; border: 1px solid #d0d0d0; border-radius: 12px; background: #fff; color: var(--text-2); cursor: pointer; }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .check-inline { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); margin-left: 8px; }
 
   .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #e8e8e8; white-space: nowrap; }
-  .data-table thead th { background: #f5f5f5; color: #767676; font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 1; }
-  .row-even { background: #fafafa; }
+  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data-table thead th { background: var(--surface-2); color: var(--text-muted); font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+  .row-even { background: var(--surface-1); }
   .value-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; }
-  .empty-cell { text-align: center; padding: 30px; color: #767676; }
+  .empty-cell { text-align: center; padding: 30px; color: var(--text-muted); }
   code { font-family: ui-monospace, Consolas, monospace; }
   .corr { color: #2e6fae; }
   .kind { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
   .kind-dns { background: #e6f0fb; color: #2e6fae; }
   .kind-http { background: #e9f7ec; color: #2e9e3f; }
   .kind-smtp { background: #f3ecfb; color: #7a4fb0; }
-  .sm-btn { font-size: 12px; padding: 2px 8px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; }
-  .sm-btn:hover { background: #e4e4e4; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 5px 14px; font-size: 13px; cursor: pointer; }
-  .btn-primary:hover { background: #c73400; }
+  .sm-btn { font-size: 12px; padding: 2px 8px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; }
+  .sm-btn:hover { background: var(--surface-3); }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 5px 14px; font-size: 13px; cursor: pointer; }
+  .btn-primary:hover { background: var(--accent-hover); }
   .view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 </style>

@@ -122,21 +122,21 @@
   .num-row{display:flex;gap:8px}
   .num-row label{flex:1;font-size:11px;display:flex;flex-direction:column;gap:2px}
   .num-row input{width:100%}
-  .run{background:#e03a00;color:white;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;width:100%;margin-bottom:5px}
+  .run{background:var(--accent);color:white;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;width:100%;margin-bottom:5px}
   .btn-danger{background:#fde8e8;color:#c0392b;border:1px solid #e74c3c;padding:4px 10px;border-radius:4px;cursor:pointer;width:100%}
   .rt-results{flex:1;display:flex;overflow:hidden}
   .sessions-list{width:300px;border-right:1px solid var(--border);padding:8px;overflow-y:auto}
   .sessions-list h4{margin:0 0 6px;font-size:12px;color:var(--text-muted)}
   .session-row{padding:6px;border:1px solid var(--border);border-radius:4px;margin-bottom:4px;cursor:pointer;display:flex;flex-direction:column;gap:2px;font-size:11px}
   .session-row.selected{background:#e8f0fe;border-color:#1976d2}
-  .strat{font-weight:600;color:#e03a00}
+  .strat{font-weight:600;color:var(--accent)}
   .score{font-weight:700;color:#c0392b}
   .score.success{color:#27ae60}
   .dim{color:var(--text-muted);font-size:10px}
   .conversation{flex:1;padding:10px;overflow-y:auto}
   .conversation h4{margin:0 0 8px;font-size:12px;color:var(--text-muted)}
   .turn{margin-bottom:10px;padding:6px;border-radius:4px;border-left:3px solid var(--border)}
-  .role-attacker{background:#fff0e6;border-left-color:#e03a00}
+  .role-attacker{background:#fff0e6;border-left-color:var(--accent)}
   .role-target{background:#e6f4ff;border-left-color:#1976d2}
   .role-badge{display:inline-block;background:rgba(0,0,0,0.05);padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-right:6px}
   .score-badge{display:inline-block;background:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#c0392b}

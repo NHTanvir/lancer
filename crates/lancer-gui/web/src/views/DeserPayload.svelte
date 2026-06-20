@@ -126,7 +126,7 @@
   .row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .row label{width:90px;font-size:11px;font-weight:600;color:var(--text-muted)}
   .row input,.row select{flex:1;padding:4px 8px}
-  .run{background:#e03a00;color:white;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-weight:600}
+  .run{background:var(--accent);color:white;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-weight:600}
   .dp-result{padding:10px;border:1px solid var(--border);border-radius:6px}
   .info{margin-bottom:6px;display:flex;gap:8px;align-items:center}
   .badge{padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;background:#fef0e6;color:#d35400}
@@ -138,5 +138,5 @@
   .btn-danger{background:#fde8e8;color:#c0392b;border:1px solid #e74c3c;padding:3px 10px;border-radius:4px;cursor:pointer}
   table{width:100%;border-collapse:collapse;font-size:12px}
   th{background:var(--bg-hover);padding:5px;border-bottom:1px solid var(--border);text-align:left;font-size:11px}
-  td{padding:4px 5px;border-bottom:1px solid var(--border-light, #eee)}
+  td{padding:4px 5px;border-bottom:1px solid var(--border-light, var(--border))}
 </style>

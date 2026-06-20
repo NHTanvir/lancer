@@ -67,8 +67,8 @@
   <div class="palette-panel" on:click|stopPropagation>
     <div class="search-wrap">
       <svg class="search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <circle cx="6" cy="6" r="4.5" stroke="#767676" stroke-width="1.5"/>
-        <path d="M9.5 9.5 L13 13" stroke="#767676" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="6" cy="6" r="4.5" stroke="#69707b" stroke-width="1.5"/>
+        <path d="M9.5 9.5 L13 13" stroke="#69707b" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <!-- svelte-ignore a11y-autofocus -->
       <input
@@ -116,7 +116,7 @@
   }
   .palette-panel {
     background: #ffffff;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
     border-radius: 6px;
     width: 540px;
     max-height: 420px;
@@ -127,20 +127,20 @@
   .search-wrap {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 14px;
-    border-bottom: 1px solid #dedede;
-    background: #f5f5f5;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
   }
   .search-icon { flex-shrink: 0; }
   .search-input {
     flex: 1; border: none; background: transparent;
-    color: #212121; font-size: 14px; padding: 0;
+    color: var(--text); font-size: 14px; padding: 0;
     font-family: inherit;
     outline: none;
   }
   .esc-key {
-    font-size: 10px; color: #767676;
-    background: #f0f0f0;
-    border: 1px solid #c8c8c8;
+    font-size: 10px; color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     padding: 2px 6px;
     flex-shrink: 0;
@@ -155,26 +155,26 @@
     padding: 8px 12px;
     border-radius: 4px;
     cursor: pointer;
-    color: #444;
+    color: var(--text-2);
     transition: background 0.06s, color 0.06s;
     font-size: 13px;
   }
   .cmd-item:hover, .cmd-active {
-    background: #f0f7ff;
-    color: #212121;
+    background: var(--row-hover);
+    color: var(--text);
   }
-  .cmd-active { background: #daeeff !important; }
+  .cmd-active { background: var(--row-active) !important; }
   .cmd-label { font-size: 13px; }
   .cmd-hotkey {
-    font-size: 11px; color: #767676;
-    background: #f0f0f0;
-    border: 1px solid #c8c8c8;
+    font-size: 11px; color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     padding: 1px 6px;
     font-family: inherit;
   }
   .cmd-empty {
     padding: 20px; text-align: center;
-    color: #767676; font-size: 13px;
+    color: var(--text-muted); font-size: 13px;
   }
 </style>

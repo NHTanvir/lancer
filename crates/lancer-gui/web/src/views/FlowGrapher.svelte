@@ -71,7 +71,7 @@
           {#if pos[n.id]}
             <g class="node" class:dim-node={!connected(n.id)} on:click={() => (selected = selected === n.id ? null : n.id)} role="button" tabindex="0">
               <circle cx={pos[n.id].x} cy={pos[n.id].y} r={Math.min(5 + n.count, 16)}
-                fill={n.id === selected ? "#e03a00" : "#4a78b5"} stroke="#fff" stroke-width="1.5" />
+                fill={n.id === selected ? "#e5481d" : "#4a78b5"} stroke="#fff" stroke-width="1.5" />
               <text x={pos[n.id].x} y={pos[n.id].y - Math.min(5 + n.count, 16) - 4} text-anchor="middle" class="nlabel">{nodeLabel(n)}</text>
             </g>
           {/if}
@@ -98,17 +98,17 @@
 <style>
   .view { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 12px; gap: 10px; box-sizing: border-box; }
   .hdr { display: flex; align-items: center; gap: 12px; } .hdr .dim { font-size: 12px; }
-  .auto { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #555; }
-  .btn { background: #f0f0f0; border: 1px solid #c8c8c8; border-radius: 3px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  .auto { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); }
+  .btn { background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 3px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
   .canvas-wrap { flex: 1; min-height: 0; border: 1px solid #e3e3e3; border-radius: 6px; overflow: auto; background: #fcfcfd; display: flex; align-items: center; justify-content: center; }
   .graph { width: 100%; height: 100%; }
   .node { cursor: pointer; }
   .node.dim-node { opacity: 0.3; }
-  .nlabel { font-size: 9px; fill: #444; font-family: ui-monospace, Consolas, monospace; }
+  .nlabel { font-size: 9px; fill: var(--text-2); font-family: ui-monospace, Consolas, monospace; }
   .empty { padding: 40px; text-align: center; }
-  .detail { font-size: 12px; border: 1px solid #e3e3e3; border-radius: 6px; padding: 8px 12px; background: #fafafa; }
+  .detail { font-size: 12px; border: 1px solid #e3e3e3; border-radius: 6px; padding: 8px 12px; background: var(--surface-1); }
   .adj { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
-  .lbl { font-size: 10px; text-transform: uppercase; color: #999; margin-right: 6px; }
+  .lbl { font-size: 10px; text-transform: uppercase; color: var(--text-dim); margin-right: 6px; }
   .chip { display: inline-block; background: #eef2f7; border-radius: 3px; padding: 1px 7px; margin: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
-  .dim { color: #888; }
+  .dim { color: var(--text-muted); }
 </style>

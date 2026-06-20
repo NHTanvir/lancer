@@ -13,10 +13,61 @@
 
   function sourceOf(r) { return r.tool_generated ? "tool" : "proxy"; }
 
+  // §12 advanced capture filter (client-side expression). When enabled, only
+  // rows for which the boolean expression is true are shown. Field bindings:
+  // host, method, status, path, mime, scheme, length, params, comment, tool.
+  let captureFilterOn = false;
+  let captureFilter = "";
+  try {
+    const s = localStorage.getItem("lancer.logger.captureFilter");
+    if (s) { const v = JSON.parse(s); captureFilterOn = !!v.on; captureFilter = v.expr || ""; }
+  } catch {}
+  $: try { localStorage.setItem("lancer.logger.captureFilter", JSON.stringify({ on: captureFilterOn, expr: captureFilter })); } catch {}
+
+  let captureFilterErr = "";
+  // Compile once per expression change; null when empty/invalid.
+  $: captureFn = (() => {
+    captureFilterErr = "";
+    if (!captureFilterOn || !captureFilter.trim()) return null;
+    try {
+      // Sandboxed-ish: expression sees only the named bindings we pass in.
+      // eslint-disable-next-line no-new-func
+      return new Function(
+        "host", "method", "status", "path", "mime", "scheme", "length", "params", "comment", "tool",
+        `"use strict"; return (${captureFilter});`
+      );
+    } catch (e) {
+      captureFilterErr = e.message;
+      return null;
+    }
+  })();
+
+  function passesCapture(r) {
+    if (!captureFn) return true;
+    try {
+      return !!captureFn(
+        (r.host || "").toLowerCase(),
+        (r.method || "").toUpperCase(),
+        Number(r.status) || 0,
+        (r.path || "").toLowerCase(),
+        (r.mime || "").toLowerCase(),
+        (r.scheme || "http").toLowerCase(),
+        Number(r.response_length) || 0,
+        hasParams(r),
+        (r.comment || "").toLowerCase(),
+        sourceOf(r)
+      );
+    } catch (e) {
+      captureFilterErr = e.message;
+      return true;
+    }
+  }
+
   $: filteredRows = rows.filter(r => {
     const src = sourceOf(r);
     if (!capture[src]) return false;
     if (sourceFilter !== "all" && src !== sourceFilter) return false;
+    if (!passesCapture(r)) return false;
     return !filter ||
       (r.host && r.host.toLowerCase().includes(filter.toLowerCase())) ||
       (r.path && r.path.toLowerCase().includes(filter.toLowerCase())) ||
@@ -119,6 +170,62 @@
     closeCtxMenu();
   }
 
+  // ── Annotation: inline comment + highlight color ─────────────────────
+  // Persists via the existing PATCH /api/v1/history/{id} {comment,color}.
+  const HIGHLIGHT_COLORS = [
+    { name: "Red",    value: "#ffd5d5" },
+    { name: "Orange", value: "#ffe2c2" },
+    { name: "Yellow", value: "#fff7bf" },
+    { name: "Green",  value: "#d6f5d6" },
+    { name: "Cyan",   value: "#cdeff5" },
+    { name: "Blue",   value: "#d5e3ff" },
+    { name: "Purple", value: "#e8d9ff" },
+  ];
+  let editingCommentId = null;
+
+  async function patchHistory(row, patch) {
+    if (!row || row.id == null) return false;
+    try {
+      const r = await fetch(`/api/v1/history/${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
+  async function setComment(row, value) {
+    const next = value == null ? "" : value;
+    if ((row.comment || "") === next) return;
+    const ok = await patchHistory(row, { comment: next });
+    if (ok) { row.comment = next; rows = rows; }
+  }
+
+  async function setColor(row, value) {
+    const ok = await patchHistory(row, { color: value || "" });
+    if (ok) { row.color = value || null; rows = rows; }
+  }
+
+  function startCommentEdit(row) {
+    editingCommentId = row.id;
+  }
+  function commitCommentEdit(row, value) {
+    editingCommentId = null;
+    setComment(row, value);
+  }
+
+  function ctxSetHighlight(value) {
+    if (!ctxMenu) return;
+    setColor(ctxMenu.row, value);
+    closeCtxMenu();
+  }
+  function ctxAddComment() {
+    if (!ctxMenu) return;
+    startCommentEdit(ctxMenu.row);
+    closeCtxMenu();
+  }
+
   function statusClass(s) {
     if (!s) return "dim";
     if (s >= 500) return "status-5";
@@ -172,8 +279,22 @@
     </select>
     <label class="cap-tog" title="Capture proxy traffic"><input type="checkbox" bind:checked={capture.proxy} /> Proxy</label>
     <label class="cap-tog" title="Capture tool-generated traffic"><input type="checkbox" bind:checked={capture.tool} /> Tools</label>
+    <label class="cap-tog" title="Enable advanced capture-filter expression"><input type="checkbox" bind:checked={captureFilterOn} /> Capture filter</label>
     <span class="dim" style="font-size:12px;margin-left:auto">{filteredRows.length} entries</span>
   </div>
+  {#if captureFilterOn}
+    <div class="capfilter-bar">
+      <input
+        class="capfilter-input"
+        class:cap-err={!!captureFilterErr}
+        placeholder="e.g.  status >= 400 && host.includes('api')  —  fields: host, method, status, path, mime, scheme, length, params, comment, tool"
+        bind:value={captureFilter}
+      />
+      {#if captureFilterErr}
+        <span class="capfilter-err" title={captureFilterErr}>expression error</span>
+      {/if}
+    </div>
+  {/if}
 
   <div class="logger-body">
     <div class="table-wrap">
@@ -199,6 +320,8 @@
             <tr
               class:row-selected={selected === row}
               class:row-even={i % 2 === 0}
+              class:has-color={!!row.color}
+              style={row.color ? `background:${row.color}` : ""}
               on:click={() => selected = selected === row ? null : row}
               on:contextmenu={(e) => onRowContextMenu(e, row)}
             >
@@ -213,7 +336,20 @@
               <td class="dim">{row.response_length ?? "-"}</td>
               <td class="dim">{row.mime || "-"}</td>
               <td class="dim mono time-cell">{formatTime(row.captured_at)}</td>
-              <td class="dim comment-cell">{row.comment || ""}</td>
+              <td class="comment-cell" on:click|stopPropagation on:dblclick={() => startCommentEdit(row)} title="Double-click to edit comment">
+                {#if editingCommentId === row.id}
+                  <!-- svelte-ignore a11y-autofocus -->
+                  <input
+                    class="comment-input"
+                    autofocus
+                    value={row.comment || ""}
+                    on:blur={(e) => commitCommentEdit(row, e.target.value)}
+                    on:keydown={(e) => { if (e.key === "Enter") e.target.blur(); else if (e.key === "Escape") { editingCommentId = null; } }}
+                  />
+                {:else}
+                  <span class="dim comment-text">{row.comment || ""}</span>
+                {/if}
+              </td>
             </tr>
           {/each}
           {#if filteredRows.length === 0}
@@ -260,6 +396,22 @@
     <div class="ctx-item" on:click={() => ctxSendToComparer("response")}>Send response to Comparer</div>
     <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
     <div class="ctx-sep"></div>
+    <div class="ctx-item" on:click={ctxAddComment}>Add comment</div>
+    <div class="ctx-item ctx-submenu">
+      Set highlight
+      <span class="ctx-shortcut">▸</span>
+      <div class="ctx-flyout">
+        <div class="ctx-item ctx-color" on:click={() => ctxSetHighlight("")}>
+          <span class="color-swatch swatch-none"></span> None
+        </div>
+        {#each HIGHLIGHT_COLORS as c}
+          <div class="ctx-item ctx-color" on:click={() => ctxSetHighlight(c.value)}>
+            <span class="color-swatch" style="background:{c.value}"></span> {c.name}
+          </div>
+        {/each}
+      </div>
+    </div>
+    <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
   </div>
 {/if}
@@ -268,7 +420,7 @@
   .ctx-menu {
     position: fixed; z-index: 9999;
     background: #ffffff;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.18);
     padding: 4px 0;
@@ -278,32 +430,79 @@
   .ctx-item {
     padding: 6px 14px;
     cursor: pointer;
-    color: #212121;
+    color: var(--text);
     user-select: none;
   }
-  .ctx-item:hover { background: #f0f7ff; }
-  .ctx-sep { height: 1px; background: #e8e8e8; margin: 4px 0; }
-  .ctx-shortcut { float: right; color: #888; font-size: 11px; padding-left: 14px; }
+  .ctx-item:hover { background: var(--row-hover); }
+  .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+  .ctx-shortcut { float: right; color: var(--text-muted); font-size: 11px; padding-left: 14px; }
+
+  /* Highlight submenu */
+  .ctx-submenu { position: relative; }
+  .ctx-flyout {
+    position: absolute; left: 100%; top: -4px;
+    display: none;
+    background: #ffffff;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    padding: 4px 0; min-width: 140px;
+  }
+  .ctx-submenu:hover .ctx-flyout { display: block; }
+  .ctx-color { display: flex; align-items: center; gap: 8px; }
+  .color-swatch {
+    width: 12px; height: 12px; border-radius: 3px;
+    border: 1px solid var(--border-strong); flex-shrink: 0;
+  }
+  .swatch-none { background: repeating-linear-gradient(45deg, #fff, #fff 3px, var(--border) 3px, var(--border) 4px); }
+
+  /* Inline comment editing */
+  .comment-input {
+    width: 100%; box-sizing: border-box;
+    font-size: 12px; padding: 1px 4px; font-style: normal;
+    border: 1px solid var(--accent); border-radius: 2px;
+    background: #fff; color: var(--text); outline: none;
+  }
+  .comment-text { display: block; overflow: hidden; text-overflow: ellipsis; }
+  /* Colored rows: keep hover/selection legible by letting them win */
+  .data-table tbody tr.has-color:hover { filter: brightness(0.96); }
+  .data-table tbody tr.has-color.row-selected { box-shadow: inset 3px 0 0 var(--accent); }
 
   .toolbar {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 12px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .toolbar-btn {
     padding: 4px 10px; font-size: 13px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px;
     cursor: pointer;
   }
-  .src-sel { padding: 4px 6px; font-size: 12px; border: 1px solid #c8c8c8; border-radius: 3px; }
-  .cap-tog { display: flex; align-items: center; gap: 3px; font-size: 12px; color: #555; }
+  .src-sel { padding: 4px 6px; font-size: 12px; border: 1px solid var(--border-strong); border-radius: 3px; }
+  .cap-tog { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--text-2); }
   .src-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
   .src-proxy { background: #e6f0fb; color: #2e6fae; }
   .src-tool { background: #fff1e6; color: #c2620a; }
-  .toolbar-btn:hover { background: #e4e4e4; }
+  .toolbar-btn:hover { background: var(--surface-3); }
+
+  .capfilter-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .capfilter-input {
+    flex: 1; font-size: 12px; padding: 4px 8px;
+    border: 1px solid var(--border-strong); border-radius: 3px;
+    background: #fff; color: var(--text);
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  .capfilter-input.cap-err { border-color: #d42c2c; }
+  .capfilter-err { font-size: 11px; color: #d42c2c; white-space: nowrap; }
 
   .logger-body {
     flex: 1; display: flex; flex-direction: column;
@@ -316,41 +515,41 @@
   .data-table th, .data-table td {
     text-align: left;
     padding: 5px 10px;
-    border-bottom: 1px solid #e8e8e8;
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
   .data-table thead th {
-    background: #f5f5f5;
-    color: #767676;
+    background: var(--surface-2);
+    color: var(--text-muted);
     font-size: 11px; font-weight: 600;
     position: sticky; top: 0; z-index: 1;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
   }
   .data-table tbody tr { cursor: pointer; }
-  .data-table tbody tr:hover { background: #f0f7ff; }
-  .row-selected { background: #daeeff !important; }
-  .row-even { background: #fafafa; }
+  .data-table tbody tr:hover { background: var(--row-hover); }
+  .row-selected { background: var(--row-active) !important; }
+  .row-even { background: var(--surface-1); }
   .url-cell    { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
   .time-cell   { font-size: 11px; }
   .comment-cell{ max-width: 120px; overflow: hidden; text-overflow: ellipsis; font-style: italic; }
   .mono { font-family: ui-monospace, Consolas, monospace; }
-  .empty-cell { text-align: center; padding: 40px; color: #767676; }
+  .empty-cell { text-align: center; padding: 40px; color: var(--text-muted); }
 
   .detail-pane {
     height: 260px; flex-shrink: 0;
-    border-top: 2px solid #dedede;
+    border-top: 2px solid var(--border);
   }
   .pane-header {
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
-    font-size: 12px; font-weight: 600; color: #444;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--text-2);
     flex-shrink: 0;
   }
   .raw-area {
     flex: 1; resize: none; min-height: 0;
     border: none; border-radius: 0;
-    background: #ffffff; color: #212121;
+    background: #ffffff; color: var(--text);
     font-size: 11px; padding: 10px; height: 100%;
     outline: none;
     font-family: ui-monospace, Consolas, monospace;

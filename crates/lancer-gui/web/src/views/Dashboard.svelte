@@ -171,11 +171,11 @@
             <div class="empty-state">
               <!-- Stacked boxes SVG -->
               <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                <rect x="8" y="20" width="32" height="20" rx="2" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
-                <rect x="12" y="14" width="24" height="8" rx="2" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
-                <rect x="16" y="8" width="16" height="8" rx="2" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
+                <rect x="8" y="20" width="32" height="20" rx="2" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
+                <rect x="12" y="14" width="24" height="8" rx="2" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
+                <rect x="16" y="8" width="16" height="8" rx="2" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
               </svg>
-              <span style="font-weight:500;color:#444">No items to show</span>
+              <span style="font-weight:500;color:#434a54">No items to show</span>
               <span class="dim" style="font-size:12px">Items found in the crawl will display here.</span>
             </div>
           {/if}
@@ -286,7 +286,7 @@
     width: 220px;
     flex-shrink: 0;
     background: #ffffff;
-    border-right: 1px solid #dedede;
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -296,7 +296,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    color: #767676;
+    color: var(--text-muted);
     padding: 10px 12px 6px;
     flex-shrink: 0;
   }
@@ -306,7 +306,7 @@
     flex-shrink: 0;
   }
   .btn-orange {
-    background: #e03a00;
+    background: var(--accent);
     color: #ffffff;
     border: none;
     border-radius: 3px;
@@ -315,20 +315,20 @@
     cursor: pointer;
     text-align: left;
   }
-  .btn-orange:hover { background: #c73400; }
+  .btn-orange:hover { background: var(--accent-hover); }
   .btn-secondary {
-    background: #f0f0f0;
-    color: #333;
-    border: 1px solid #c8c8c8;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     padding: 5px 12px;
     font-size: 13px;
     cursor: pointer;
     text-align: left;
   }
-  .btn-secondary:hover { background: #e4e4e4; }
+  .btn-secondary:hover { background: var(--surface-3); }
   .task-divider {
-    height: 1px; background: #dedede;
+    height: 1px; background: var(--border);
     margin: 0; flex-shrink: 0;
   }
   .task-list {
@@ -338,12 +338,12 @@
     display: flex; align-items: flex-start; gap: 6px;
     padding: 8px 10px;
     cursor: pointer;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--surface-2);
     font-size: 12px;
     line-height: 1.4;
   }
-  .task-item:hover { background: #f0f7ff; }
-  .task-selected { background: #daeeff !important; }
+  .task-item:hover { background: var(--row-hover); }
+  .task-selected { background: var(--row-active) !important; }
   .task-bullet { padding-top: 3px; flex-shrink: 0; }
   .task-dot {
     display: inline-block;
@@ -351,17 +351,17 @@
     border-radius: 50%;
   }
   .dot-on  { background: #1a75c4; }
-  .dot-off { background: #c8c8c8; }
+  .dot-off { background: var(--border-strong); }
   .task-info { flex: 1; display: flex; gap: 4px; flex-wrap: wrap; }
-  .task-num { color: #767676; flex-shrink: 0; }
-  .task-label { color: #212121; }
+  .task-num { color: var(--text-muted); flex-shrink: 0; }
+  .task-label { color: var(--text); }
   .task-toggle-wrap { flex-shrink: 0; }
   .task-toggle {
     font-size: 10px; font-weight: 700;
     padding: 1px 6px; border-radius: 3px;
   }
   .toggle-on  { background: #e6f0fb; color: #1a75c4; }
-  .toggle-off { background: #f0f0f0; color: #767676; }
+  .toggle-off { background: var(--surface-2); color: var(--text-muted); }
 
   /* CENTER */
   .dash-center {
@@ -372,23 +372,23 @@
   .center-topbar {
     display: flex; align-items: center; gap: 12px;
     padding: 6px 14px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .breadcrumb { font-size: 12px; cursor: pointer; }
   .center-title {
     font-size: 12px; font-weight: 600;
-    color: #212121;
+    color: var(--text);
     flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .center-section-label {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 14px;
     font-size: 12px; font-weight: 600;
-    color: #444;
-    background: #fafafa;
-    border-bottom: 1px solid #dedede;
+    color: var(--text-2);
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .view-link {
@@ -404,26 +404,26 @@
   .data-table th, .data-table td {
     text-align: left;
     padding: 5px 12px;
-    border-bottom: 1px solid #e8e8e8;
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
   .data-table thead th {
-    background: #f5f5f5;
-    color: #767676;
+    background: var(--surface-2);
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 600;
     position: sticky; top: 0; z-index: 1;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
   }
-  .data-table tbody tr:hover { background: #f0f7ff; }
-  .row-even { background: #fafafa; }
+  .data-table tbody tr:hover { background: var(--row-hover); }
+  .row-even { background: var(--surface-1); }
   .url-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
   .center-section-divider {
     padding: 5px 14px;
-    font-size: 11px; color: #767676;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
-    border-top: 1px solid #dedede;
+    font-size: 11px; color: var(--text-muted);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
     flex-shrink: 0;
     text-align: center;
     letter-spacing: 0.04em;
@@ -435,7 +435,7 @@
     width: 280px;
     flex-shrink: 0;
     background: #ffffff;
-    border-left: 1px solid #dedede;
+    border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -444,26 +444,26 @@
     padding: 10px 14px;
   }
   .right-divider {
-    height: 1px; background: #dedede; flex-shrink: 0;
+    height: 1px; background: var(--border); flex-shrink: 0;
   }
   .right-header {
     font-size: 12px; font-weight: 600;
-    color: #212121;
+    color: var(--text);
     margin-bottom: 8px;
     display: flex; align-items: center; justify-content: space-between;
   }
   .right-header.collapsible { cursor: pointer; }
-  .right-header.collapsible:hover { color: #e03a00; }
-  .collapse-arrow { font-size: 10px; color: #767676; }
+  .right-header.collapsible:hover { color: var(--accent); }
+  .collapse-arrow { font-size: 10px; color: var(--text-muted); }
   .config-row {
     display: flex; justify-content: space-between; align-items: center;
     padding: 4px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--surface-2);
     font-size: 12px;
   }
   .config-row:last-child { border-bottom: none; }
-  .config-label { color: #767676; }
-  .config-value { color: #212121; }
+  .config-label { color: var(--text-muted); }
+  .config-value { color: var(--text); }
   .config-toggle {
     font-size: 10px; font-weight: 700;
     padding: 1px 6px; border-radius: 3px;
@@ -472,11 +472,11 @@
     display: flex; justify-content: space-between;
     padding: 4px 0;
     font-size: 12px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--surface-2);
   }
   .stat-row:last-child { border-bottom: none; }
-  .stat-label { color: #767676; }
-  .stat-value { color: #212121; font-weight: 600; }
+  .stat-label { color: var(--text-muted); }
+  .stat-value { color: var(--text); font-weight: 600; }
 
   .task-log {
     max-height: 160px; overflow-y: auto;
@@ -488,5 +488,5 @@
     font-family: ui-monospace, Consolas, monospace;
   }
   .log-time { flex-shrink: 0; width: 70px; }
-  .log-msg { color: #444; }
+  .log-msg { color: var(--text-2); }
 </style>

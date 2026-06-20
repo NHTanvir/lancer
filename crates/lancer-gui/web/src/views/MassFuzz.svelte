@@ -123,28 +123,28 @@
 
 <style>
   .view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  .config { padding: 10px 12px; background: #fafafa; border-bottom: 1px solid #dedede; }
+  .config { padding: 10px 12px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   .row.wrap { align-items: flex-start; }
-  .method { padding: 6px 8px; border: 1px solid #c8c8c8; border-radius: 3px; }
-  .url { flex: 1; padding: 6px 9px; border: 1px solid #c8c8c8; border-radius: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
-  .fld { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; }
+  .method { padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 3px; }
+  .url { flex: 1; padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .fld { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
   .fld.grow { flex: 1; }
-  .fld input, .fld textarea { padding: 5px 8px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 12px; font-family: ui-monospace, Consolas, monospace; }
+  .fld input, .fld textarea { padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 12px; font-family: ui-monospace, Consolas, monospace; }
   .fld input { width: 150px; }
   .col { display: flex; flex-direction: column; gap: 6px; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 6px 16px; font-size: 13px; cursor: pointer; white-space: nowrap; }
-  .btn-primary:hover { background: #c73400; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 6px 16px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .btn-primary:hover { background: var(--accent-hover); }
   .btn-primary:disabled { opacity: 0.5; }
-  .btn-sec { background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .btn-sec { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
   .err { color: #d42c2c; font-size: 12px; margin-top: 4px; }
-  .results-bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #ededed; }
-  .vf { flex: 0 0 320px; padding: 4px 8px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 12px; }
+  .results-bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid #ededed; }
+  .vf { flex: 0 0 320px; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 12px; }
   .table-wrap { flex: 1; overflow: auto; min-height: 0; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .data-table th, .data-table td { text-align: left; padding: 4px 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
-  .data-table thead th { background: #f5f5f5; color: #767676; font-size: 11px; font-weight: 600; position: sticky; top: 0; }
-  .row-even { background: #fafafa; }
+  .data-table th, .data-table td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data-table thead th { background: var(--surface-2); color: var(--text-muted); font-size: 11px; font-weight: 600; position: sticky; top: 0; }
+  .row-even { background: var(--surface-1); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .url-cell { max-width: 400px; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; color: #2e6fae; cursor: pointer; }
   .badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 3px; }
@@ -152,6 +152,6 @@
   .badge.s3 { background: #fff6e0; color: #a06800; }
   .badge.s4 { background: #fdeaea; color: #c0392b; }
   .badge.s5 { background: #f3e6f7; color: #8e44ad; }
-  .empty { text-align: center; padding: 30px; color: #888; }
-  .dim { color: #888; }
+  .empty { text-align: center; padding: 30px; color: var(--text-muted); }
+  .dim { color: var(--text-muted); }
 </style>

@@ -214,7 +214,7 @@
   .section-text { font-size: 12px; color: #a6adc8; line-height: 1.5; }
   .remediation { color: #a6e3a1; }
   .fp-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; }
-  .filter-btn.primary { background: #e03a00; color: #fff; border-color: #e03a00; }
+  .filter-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .add-form { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; background: #1e1e2e; border-bottom: 1px solid #313244; align-items: center; }
   .add-form input, .add-form select { background: #11111b; border: 1px solid #313244; color: #cdd6f4; border-radius: 3px; padding: 4px 7px; font-size: 12px; }
   .add-form input.grow { flex: 1; min-width: 160px; }

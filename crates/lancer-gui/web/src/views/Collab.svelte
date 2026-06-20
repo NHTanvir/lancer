@@ -3,7 +3,7 @@
 
   let me_ = null;          // our peer {id, display_name, color}
   let name = "";
-  let color = "#e03a00";
+  let color = "#e5481d";
   let peers = [];
   let events = [];
   let chatMsg = "";
@@ -106,19 +106,19 @@
   .view { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 14px; gap: 12px; box-sizing: border-box; }
   .hdr { display: flex; gap: 10px; align-items: baseline; } .hdr .dim { font-size: 12px; }
   .join, .joined { display: flex; gap: 8px; align-items: center; }
-  .join input[type="text"], .join input:not([type]) { padding: 6px 9px; border: 1px solid #c8c8c8; border-radius: 3px; }
+  .join input[type="text"], .join input:not([type]) { padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: 3px; }
   .me { font-weight: 600; color: var(--c); }
   .cols { flex: 1; display: grid; grid-template-columns: 1fr 1.4fr; gap: 14px; min-height: 0; }
   .peers, .chat { border: 1px solid #e3e3e3; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
-  .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #888; margin-bottom: 8px; }
+  .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
   .peer { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
   .dot { width: 9px; height: 9px; border-radius: 50%; }
   .view-tag { margin-left: auto; font-size: 11px; background: #eef2f7; padding: 1px 7px; border-radius: 3px; }
   .chat-log { flex: 1; overflow: auto; font-size: 13px; }
   .msg { padding: 2px 0; } .msg-author { font-weight: 600; color: #2e6fae; }
   .chat-input { display: flex; gap: 6px; margin-top: 8px; }
-  .chat-input input { flex: 1; padding: 6px 9px; border: 1px solid #c8c8c8; border-radius: 3px; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
-  .btn-sec { background: #f0f0f0; border: 1px solid #c8c8c8; border-radius: 3px; padding: 5px 12px; cursor: pointer; }
-  .dim { color: #888; font-size: 12px; }
+  .chat-input input { flex: 1; padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: 3px; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  .btn-sec { background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 3px; padding: 5px 12px; cursor: pointer; }
+  .dim { color: var(--text-muted); font-size: 12px; }
 </style>

@@ -108,7 +108,7 @@
   .url-input{flex:1;min-width:220px;padding:4px 8px}
   .auth-input{flex:0.6;min-width:140px}
   .num-input{width:70px}
-  .run-btn{background:#e03a00;color:white;padding:5px 14px;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+  .run-btn{background:var(--accent);color:white;padding:5px 14px;border:none;border-radius:4px;cursor:pointer;font-weight:600}
   .run-btn:disabled{opacity:0.5}
   .toggle{display:flex;align-items:center;gap:4px;font-size:11px}
   .filter-input{width:160px}
@@ -117,16 +117,16 @@
   .ar-body{flex:1;overflow:auto}
   .ar-table{width:100%;border-collapse:collapse}
   .ar-table th{background:var(--bg-hover);text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;position:sticky;top:0;z-index:1}
-  .ar-table td{padding:4px 8px;border-bottom:1px solid var(--border-light, #eee)}
+  .ar-table td{padding:4px 8px;border-bottom:1px solid var(--border-light, var(--border))}
   .ar-table tr:hover td{background:var(--bg-hover)}
   .ar-table tr.hit td{background:#fff7e6}
-  .method{font-weight:600;color:#e03a00}
+  .method{font-weight:600;color:var(--accent)}
   .url-cell{max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace}
   .status{padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700}
   .s-2xx{background:#eafaf1;color:#27ae60}
   .s-3xx{background:#eaf4fb;color:#2980b9}
   .s-4xx{background:#fef9e6;color:#b7770d}
   .s-5xx{background:#fde8e8;color:#c0392b}
-  .s-none{background:#eee;color:#666}
+  .s-none{background:var(--border);color:#666}
   .empty{padding:40px;text-align:center;color:var(--text-muted);font-style:italic}
 </style>

@@ -124,7 +124,7 @@
   .row input,.row select{flex:1;padding:4px 8px}
   .row input[type="number"]{width:80px}
   .dim{color:var(--text-muted);font-size:11px}
-  .run{background:#e03a00;color:white;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;width:100%;margin-top:6px}
+  .run{background:var(--accent);color:white;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;width:100%;margin-top:6px}
   .run:disabled{opacity:0.5}
   .results{flex:1;display:flex;overflow:hidden}
   .sessions{width:240px;border-right:1px solid var(--border);overflow-y:auto;padding:8px}

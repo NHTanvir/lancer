@@ -165,6 +165,24 @@
     }).catch(() => {});
   }
 
+  // ── Add file (load an item from a local file) ──────────────────────────
+  let file1El;
+  let file2El;
+  function onFilePicked(target, event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      if (target === 1) item1 = text;
+      else item2 = text;
+    };
+    reader.onerror = () => {};
+    reader.readAsText(file);
+    // Reset so re-picking the same file fires change again.
+    event.target.value = "";
+  }
+
   async function jumpToDiff(idx) {
     if (!diffChunkIndices.length || !diffEl) return;
     diffIdx = idx;
@@ -335,7 +353,11 @@
     <div class="input-pane">
       <div class="pane-header">
         <span>Item 1</span>
-        <button class="sm-btn" on:click={() => paste(1)}>Paste</button>
+        <div class="pane-header-actions">
+          <button class="sm-btn" on:click={() => paste(1)}>Paste</button>
+          <button class="sm-btn" on:click={() => file1El && file1El.click()}>Add file</button>
+          <input type="file" bind:this={file1El} on:change={(e) => onFilePicked(1, e)} style="display:none" />
+        </div>
       </div>
       <textarea
         class="item-area"
@@ -350,7 +372,11 @@
     <div class="input-pane">
       <div class="pane-header">
         <span>Item 2</span>
-        <button class="sm-btn" on:click={() => paste(2)}>Paste</button>
+        <div class="pane-header-actions">
+          <button class="sm-btn" on:click={() => paste(2)}>Paste</button>
+          <button class="sm-btn" on:click={() => file2El && file2El.click()}>Add file</button>
+          <input type="file" bind:this={file2El} on:change={(e) => onFilePicked(2, e)} style="display:none" />
+        </div>
       </div>
       <textarea
         class="item-area"
@@ -404,24 +430,24 @@
   .top-toolbar {
     display: flex; align-items: center; gap: 12px;
     padding: 6px 12px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .mode-group { display: flex; gap: 0; }
   .mode-btn {
     font-size: 13px; padding: 4px 14px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 0;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 0;
     cursor: pointer;
   }
   .mode-btn:first-child { border-radius: 3px 0 0 3px; }
   .mode-btn:last-child  { border-radius: 0 3px 3px 0; border-left: none; }
-  .mode-btn:hover { background: #e4e4e4; }
-  .mode-active { background: #fce8e2 !important; color: #e03a00 !important; border-color: #e03a00 !important; z-index: 1; }
+  .mode-btn:hover { background: var(--surface-3); }
+  .mode-active { background: var(--accent-soft) !important; color: var(--accent) !important; border-color: var(--accent) !important; z-index: 1; }
 
   .diff-stats { display: flex; gap: 12px; font-size: 12px; }
-  .stat-same { color: #767676; }
+  .stat-same { color: var(--text-muted); }
   .stat-add  { color: #1b8c1b; font-weight: 600; }
   .stat-del  { color: #d42c2c; font-weight: 600; }
 
@@ -429,50 +455,50 @@
   .select-section {
     display: grid; grid-template-columns: 1fr 1fr;
     height: 160px; flex-shrink: 0;
-    border-bottom: 2px solid #dedede;
+    border-bottom: 2px solid var(--border);
     overflow: hidden;
   }
   .select-pane {
     display: flex; flex-direction: column;
-    border-right: 1px solid #dedede;
+    border-right: 1px solid var(--border);
     overflow: hidden;
   }
   .select-pane:last-child { border-right: none; }
   .select-header {
     display: flex; align-items: center; gap: 8px;
     padding: 4px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
-  .sel-label { font-size: 12px; font-weight: 600; color: #333; }
+  .sel-label { font-size: 12px; font-weight: 600; color: var(--text); }
   .sel-mode-group { display: flex; gap: 0; margin-left: auto; }
   .sel-mode-btn {
     font-size: 11px; padding: 2px 8px;
-    background: #ebebeb; color: #555;
-    border: 1px solid #c8c8c8; border-radius: 0; cursor: pointer;
+    background: var(--border); color: var(--text-2);
+    border: 1px solid var(--border-strong); border-radius: 0; cursor: pointer;
   }
   .sel-mode-btn:first-child { border-radius: 3px 0 0 3px; }
   .sel-mode-btn:last-child  { border-radius: 0 3px 3px 0; border-left: none; }
-  .sel-active { background: #fce8e2 !important; color: #e03a00 !important; border-color: #e03a00 !important; }
+  .sel-active { background: var(--accent-soft) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
   .sel-table-wrap { flex: 1; overflow-y: auto; overflow-x: hidden; }
   .sel-table {
     width: 100%; border-collapse: collapse; font-size: 11px;
   }
   .sel-table th {
     position: sticky; top: 0;
-    background: #f0f0f0; border-bottom: 1px solid #dedede;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
     padding: 3px 6px; text-align: left;
-    color: #767676; font-weight: 600;
+    color: var(--text-muted); font-weight: 600;
   }
   .sel-table td {
-    padding: 3px 6px; border-bottom: 1px solid #f0f0f0;
+    padding: 3px 6px; border-bottom: 1px solid var(--surface-2);
     white-space: nowrap; max-width: 200px;
     overflow: hidden; text-overflow: ellipsis;
   }
   .sel-table tr { cursor: pointer; }
-  .sel-table tr:hover { background: #f0f7ff; }
-  .row-sel { background: #fce8e2 !important; }
+  .sel-table tr:hover { background: var(--row-hover); }
+  .row-sel { background: var(--accent-soft) !important; }
   .sel-empty {
     padding: 16px 12px; font-size: 12px; text-align: center;
   }
@@ -483,7 +509,7 @@
   .m-post   { color: #e65100; font-weight: 600; }
   .m-put    { color: #0277bd; font-weight: 600; }
   .m-del    { color: #b71c1c; font-weight: 600; }
-  .m-other  { color: #555; font-weight: 600; }
+  .m-other  { color: var(--text-2); font-weight: 600; }
   .s2 { color: #2e7d32; font-weight: 600; }
   .s3 { color: #0277bd; }
   .s4 { color: #e65100; font-weight: 600; }
@@ -496,29 +522,30 @@
   }
   .input-pane {
     display: flex; flex-direction: column;
-    border-right: 1px solid #dedede; overflow: hidden;
+    border-right: 1px solid var(--border); overflow: hidden;
   }
   .input-pane:last-child { border-right: none; }
   .pane-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
-    font-size: 12px; font-weight: 600; color: #444;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--text-2);
     flex-shrink: 0;
   }
+  .pane-header-actions { display: flex; gap: 5px; align-items: center; }
   .sm-btn {
     font-size: 11px; padding: 2px 8px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer;
     font-weight: 400;
   }
-  .sm-btn:hover { background: #e4e4e4; }
+  .sm-btn:hover { background: var(--surface-3); }
   .sm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .item-area {
     flex: 1; resize: none;
     border: none; border-radius: 0;
-    background: #ffffff; color: #212121;
+    background: #ffffff; color: var(--text);
     font-size: 12px; padding: 10px;
     min-height: 0; outline: none;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
@@ -531,19 +558,19 @@
     height: 180px; flex-shrink: 0;
     display: flex; flex-direction: column;
     overflow: hidden;
-    border-top: 2px solid #dedede;
+    border-top: 2px solid var(--border);
   }
   .diff-header {
     display: flex; align-items: center; gap: 12px;
     padding: 5px 12px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .diff-header-label {
     font-size: 11px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
-    color: #767676;
+    color: var(--text-muted);
   }
   .diff-output {
     flex: 1; overflow-y: auto;
@@ -557,19 +584,19 @@
     word-break: break-all;
     white-space: pre-wrap;
   }
-  .chunk-same { color: #444; }
+  .chunk-same { color: var(--text-2); }
   .chunk-add  { background: #eaf5ea; color: #1b8c1b; border-radius: 2px; }
   .chunk-del  { background: #fde8e8; color: #d42c2c; border-radius: 2px; text-decoration: line-through; }
-  .chunk-current { outline: 2px solid #e03a00; box-shadow: 0 0 0 2px rgba(224,58,0,0.15); }
+  .chunk-current { outline: 2px solid var(--accent); box-shadow: 0 0 0 2px rgba(224,58,0,0.15); }
   .chunk-match { background: #fff3a0 !important; color: #6b5700 !important; }
-  .search-box { font-size: 12px; padding: 3px 8px; border: 1px solid #c8c8c8; border-radius: 3px; width: 150px; }
+  .search-box { font-size: 12px; padding: 3px 8px; border: 1px solid var(--border-strong); border-radius: 3px; width: 150px; }
   .empty-state-sm {
     display: flex; align-items: center; justify-content: center;
-    height: 60px; color: #767676; font-size: 13px;
+    height: 60px; color: var(--text-muted); font-size: 13px;
   }
   .no-wrap { white-space: pre !important; word-break: normal !important; overflow-x: auto !important; }
-  .check-label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #444; cursor: pointer; }
-  .check-label input { accent-color: #e03a00; cursor: pointer; }
+  .check-label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+  .check-label input { accent-color: var(--accent); cursor: pointer; }
   .nav-group { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-  .dim { color: #767676; }
+  .dim { color: var(--text-muted); }
 </style>

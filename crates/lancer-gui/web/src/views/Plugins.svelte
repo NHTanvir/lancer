@@ -217,11 +217,11 @@
           {#if plugins.length === 0}
             <div class="empty-state">
               <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <rect x="6" y="6" width="28" height="28" rx="4" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
-                <path d="M13 20 h14" stroke="#c8c8c8" stroke-width="1.3" stroke-linecap="round"/>
-                <path d="M20 13 v14" stroke="#c8c8c8" stroke-width="1.3" stroke-linecap="round"/>
+                <rect x="6" y="6" width="28" height="28" rx="4" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
+                <path d="M13 20 h14" stroke="#d5dae1" stroke-width="1.3" stroke-linecap="round"/>
+                <path d="M20 13 v14" stroke="#d5dae1" stroke-width="1.3" stroke-linecap="round"/>
               </svg>
-              <span style="font-weight:500;color:#444">No extensions installed</span>
+              <span style="font-weight:500;color:#434a54">No extensions installed</span>
               <span class="dim" style="font-size:12px">Click <strong>Add</strong> to load a Rhai, WASM, Lua, Python, Native, or JVM extension.</span>
             </div>
           {:else}
@@ -250,7 +250,7 @@
                         on:click|stopPropagation
                         on:change={() => toggleEnabled(i)}
                         title="Toggle extension"
-                        style="accent-color:#e03a00;cursor:pointer"
+                        style="accent-color:#e5481d;cursor:pointer"
                       />
                     </td>
                     <td class="col-type">
@@ -269,7 +269,7 @@
                         type="checkbox"
                         checked={false}
                         on:click|stopPropagation
-                        style="accent-color:#e03a00;cursor:pointer"
+                        style="accent-color:#e5481d;cursor:pointer"
                       />
                     </td>
                   </tr>
@@ -293,7 +293,7 @@
             {#if selectedPlugin}
               <div class="details-row">
                 <label class="check-label">
-                  <input type="checkbox" checked={!!selectedPlugin.enabled} style="accent-color:#e03a00" on:change={() => toggleEnabled(selectedIndex)} />
+                  <input type="checkbox" checked={!!selectedPlugin.enabled} style="accent-color:#e5481d" on:change={() => toggleEnabled(selectedIndex)} />
                   Extension loaded
                 </label>
               </div>
@@ -417,10 +417,10 @@
       {#if scanChecks.length === 0}
         <div class="empty-state">
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <rect x="6" y="6" width="28" height="28" rx="4" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
-            <path d="M13 20 h14" stroke="#dedede" stroke-width="1.3" stroke-linecap="round"/>
+            <rect x="6" y="6" width="28" height="28" rx="4" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
+            <path d="M13 20 h14" stroke="#e6e9ee" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <span style="font-weight:500;color:#444">No custom scan checks</span>
+          <span style="font-weight:500;color:#434a54">No custom scan checks</span>
           <span class="dim" style="font-size:12px">Add a Rhai or Python script to define a passive or active scan check.</span>
         </div>
       {:else}
@@ -433,7 +433,7 @@
           <tbody>
             {#each scanChecks as c}
               <tr>
-                <td><input type="checkbox" checked={c.enabled} style="accent-color:#e03a00"/></td>
+                <td><input type="checkbox" checked={c.enabled} style="accent-color:#e5481d"/></td>
                 <td>{c.name}</td>
                 <td>{c.type}</td>
                 <td><code class="mono">{c.file}</code></td>
@@ -475,7 +475,7 @@
 
         <div class="setting-row-ext">
           <label class="check-label-ext">
-            <input type="checkbox" bind:checked={extSettings.autoReload} style="accent-color:#e03a00" />
+            <input type="checkbox" bind:checked={extSettings.autoReload} style="accent-color:#e5481d" />
             Auto-reload extensions on file change
           </label>
           <span class="dim" style="font-size:11px;margin-left:24px">Watch extension files and reload automatically when they are modified.</span>
@@ -483,7 +483,7 @@
 
         <div class="setting-row-ext">
           <label class="check-label-ext">
-            <input type="checkbox" bind:checked={extSettings.loadOnStartup} style="accent-color:#e03a00" />
+            <input type="checkbox" bind:checked={extSettings.loadOnStartup} style="accent-color:#e5481d" />
             Load extensions on startup
           </label>
           <span class="dim" style="font-size:11px;margin-left:24px">Automatically load all enabled extensions when Lancer starts.</span>
@@ -491,7 +491,7 @@
 
         <div class="setting-row-ext">
           <label class="check-label-ext">
-            <input type="checkbox" bind:checked={extSettings.errorNotify} style="accent-color:#e03a00" />
+            <input type="checkbox" bind:checked={extSettings.errorNotify} style="accent-color:#e5481d" />
             Notify on extension errors
           </label>
           <span class="dim" style="font-size:11px;margin-left:24px">Show a notification in the status bar when an extension produces an error.</span>
@@ -499,7 +499,7 @@
 
         <div class="setting-row-ext">
           <label class="check-label-ext">
-            <input type="checkbox" bind:checked={extSettings.aiEnabled} style="accent-color:#e03a00" />
+            <input type="checkbox" bind:checked={extSettings.aiEnabled} style="accent-color:#e5481d" />
             Enable AI features for extensions
           </label>
           <span class="dim" style="font-size:11px;margin-left:24px">Allow extensions to use Lancer AI APIs (consumes AI credits).</span>
@@ -509,12 +509,12 @@
       <div class="settings-card-ext" style="margin-top:12px">
         <div class="card-title-ext">Plugin directory</div>
         <div class="setting-row-ext">
-          <span style="font-size:13px;color:#444;min-width:130px;flex-shrink:0">Plugins dir</span>
-          <code class="mono" style="font-size:12px;background:#f5f5f5;border:1px solid #dedede;padding:3px 8px;border-radius:3px">%LOCALAPPDATA%\Lancer\plugins\</code>
+          <span style="font-size:13px;color:#434a54;min-width:130px;flex-shrink:0">Plugins dir</span>
+          <code class="mono" style="font-size:12px;background:#f1f3f6;border:1px solid #e6e9ee;padding:3px 8px;border-radius:3px">%LOCALAPPDATA%\Lancer\plugins\</code>
           <span class="dim" style="font-size:11px;margin-left:8px">Override with <code>LANCER_PLUGINS_DIR</code> env var</span>
         </div>
         <div class="setting-row-ext" style="margin-top:8px">
-          <span style="font-size:13px;color:#444;min-width:130px;flex-shrink:0">Supported runtimes</span>
+          <span style="font-size:13px;color:#434a54;min-width:130px;flex-shrink:0">Supported runtimes</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <span class="badge badge-rhai">Rhai</span>
             <span class="badge badge-wasm">WASM</span>
@@ -555,14 +555,14 @@
     align-items: center;
     gap: 8px;
     padding: 5px 14px;
-    background: #fafafa;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     font-size: 12px;
-    color: #444;
+    color: var(--text-2);
   }
   .impact-icon { font-size: 14px; color: #1a75c4; line-height: 1; }
-  .impact-label { font-size: 12px; color: #444; }
+  .impact-label { font-size: 12px; color: var(--text-2); }
   .impact-value { font-weight: 600; font-size: 12px; }
   .impact-low  { color: #1b8c1b; }
   .impact-med  { color: #c98a00; }
@@ -570,7 +570,7 @@
   .impact-track {
     width: 120px;
     height: 8px;
-    background: #e8e8e8;
+    background: var(--border);
     border-radius: 4px;
     overflow: hidden;
     flex-shrink: 0;
@@ -588,10 +588,10 @@
   .section-header {
     padding: 6px 14px;
     font-size: 12px;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
     background: #ffffff;
     flex-shrink: 0;
-    color: #212121;
+    color: var(--text);
   }
 
   /* Body: side buttons + table */
@@ -611,8 +611,8 @@
     padding: 8px 6px;
     width: 80px;
     flex-shrink: 0;
-    background: #f5f5f5;
-    border-right: 1px solid #dedede;
+    background: var(--surface-2);
+    border-right: 1px solid var(--border);
     align-items: stretch;
   }
   .side-btn {
@@ -620,13 +620,13 @@
     padding: 4px 0;
     font-size: 12px;
     background: #ffffff;
-    color: #333;
-    border: 1px solid #c8c8c8;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     cursor: pointer;
     text-align: center;
   }
-  .side-btn:hover:not(:disabled) { background: #f0f0f0; border-color: #aaa; }
+  .side-btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text-dim); }
   .side-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* Table wrapper */
@@ -645,11 +645,11 @@
   }
   .ext-table th {
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     font-size: 11px;
     font-weight: 600;
-    color: #767676;
+    color: var(--text-muted);
     text-align: left;
     position: sticky;
     top: 0;
@@ -658,15 +658,15 @@
   }
   .ext-table td {
     padding: 5px 10px;
-    border-bottom: 1px solid #f0f0f0;
-    color: #212121;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .ext-table tbody tr { cursor: pointer; }
-  .ext-table tbody tr:hover { background: #fafafa; }
-  .row-selected td { background: #fce8e2 !important; }
+  .ext-table tbody tr:hover { background: var(--surface-1); }
+  .row-selected td { background: var(--accent-soft) !important; }
 
   /* Column widths */
   .col-loaded  { width: 62px;  }
@@ -695,14 +695,14 @@
     flex-direction: column;
     flex-shrink: 0;
     height: 180px;
-    border-top: 2px solid #dedede;
+    border-top: 2px solid var(--border);
     background: #ffffff;
   }
   .bottom-tabs {
     display: flex;
     align-items: stretch;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     height: 30px;
     flex-shrink: 0;
   }
@@ -713,14 +713,14 @@
     border-bottom: 2px solid transparent;
     border-radius: 0;
     font-size: 12px;
-    color: #444;
+    color: var(--text-2);
     cursor: pointer;
     height: 100%;
   }
-  .bottom-tab:hover { color: #212121; background: rgba(0,0,0,0.04); }
+  .bottom-tab:hover { color: var(--text); background: rgba(0,0,0,0.04); }
   .bottom-tab.active {
-    color: #e03a00;
-    border-bottom-color: #e03a00;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
     font-weight: 600;
     background: transparent;
   }
@@ -740,7 +740,7 @@
     align-items: center;
     gap: 7px;
     font-size: 12px;
-    color: #212121;
+    color: var(--text);
     cursor: pointer;
   }
   .detail-table {
@@ -750,21 +750,21 @@
     max-width: 640px;
   }
   .detail-table th {
-    background: #f5f5f5;
-    color: #767676;
+    background: var(--surface-2);
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 600;
     padding: 4px 10px;
     text-align: left;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
   }
   .detail-table td {
     padding: 4px 10px;
-    border-bottom: 1px solid #f0f0f0;
-    color: #212121;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text);
     vertical-align: top;
   }
-  .detail-table td:first-child { color: #767676; width: 140px; font-weight: 500; }
+  .detail-table td:first-child { color: var(--text-muted); width: 140px; font-weight: 500; }
   .no-selection {
     padding: 16px 4px;
     font-size: 12px;
@@ -777,11 +777,11 @@
     font-size: 11px;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     resize: none;
-    background: #fafafa;
-    border: 1px solid #e8e8e8;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
     border-radius: 3px;
     padding: 6px 8px;
-    color: #444;
+    color: var(--text-2);
     outline: none;
   }
   .log-area-errors { color: #d42c2c; background: #fff8f8; border-color: #f5c0c0; }
@@ -807,18 +807,18 @@
   }
   .bapp-card {
     background: #ffffff;
-    border: 1px solid #dedede;
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 12px 14px;
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
-  .bapp-card:hover { border-color: #e03a00; }
+  .bapp-card:hover { border-color: var(--accent); }
   .bapp-card-name {
     font-size: 13px;
     font-weight: 600;
-    color: #212121;
+    color: var(--text);
   }
   .bapp-card-desc {
     font-size: 11px;
@@ -827,7 +827,7 @@
   }
   .bapp-install-btn {
     align-self: flex-start;
-    background: #e03a00;
+    background: var(--accent);
     color: #ffffff;
     border: none;
     border-radius: 3px;
@@ -836,14 +836,14 @@
     cursor: pointer;
     margin-top: 2px;
   }
-  .bapp-install-btn:hover { background: #c73400; }
+  .bapp-install-btn:hover { background: var(--accent-hover); }
 
   /* ── APIs & Bambda tables ── */
   .apis-header {
     padding: 0 0 10px 0;
     font-size: 12px;
-    color: #212121;
-    border-bottom: 1px solid #dedede;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
     margin-bottom: 10px;
   }
   .api-table {
@@ -852,30 +852,30 @@
     font-size: 12px;
   }
   .api-table th {
-    background: #f5f5f5;
-    color: #767676;
+    background: var(--surface-2);
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 600;
     padding: 5px 12px;
     text-align: left;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
   }
   .api-table td {
     padding: 6px 12px;
-    border-bottom: 1px solid #f0f0f0;
-    color: #212121;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text);
   }
   .api-name {
     font-weight: 500;
-    color: #212121;
+    color: var(--text);
     white-space: nowrap;
     width: 220px;
   }
 
   /* ── Extension settings ── */
   .settings-card-ext {
-    background: #fafafa;
-    border: 1px solid #dedede;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 14px 18px;
     max-width: 680px;
@@ -885,10 +885,10 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #767676;
+    color: var(--text-muted);
     margin-bottom: 12px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #e8e8e8;
+    border-bottom: 1px solid var(--border);
   }
   .setting-row-ext {
     display: flex;
@@ -902,13 +902,13 @@
     align-items: center;
     gap: 7px;
     font-size: 13px;
-    color: #212121;
+    color: var(--text);
     cursor: pointer;
   }
 
   /* ── Badge colors ── */
   .badge { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 1px 6px; border-radius: 2px; letter-spacing: 0.03em; }
-  .badge-rhai    { background: #fce8e2; color: #e03a00; }
+  .badge-rhai    { background: var(--accent-soft); color: var(--accent); }
   .badge-wasm    { background: #e6f0fb; color: #1a75c4; }
   .badge-lua     { background: #eaf5ea; color: #1b8c1b; }
   .badge-py      { background: #fef0e6; color: #e86c00; }
@@ -922,8 +922,8 @@
     font-size: 11px;
   }
   code {
-    background: #f5f5f5;
-    border: 1px solid #dedede;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
     padding: 0 5px;
     border-radius: 2px;
   }

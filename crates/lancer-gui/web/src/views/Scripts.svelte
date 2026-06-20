@@ -100,25 +100,25 @@
 
 <style>
   .view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  .subtabs { display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #dedede; }
-  .subtab { padding: 4px 12px; font-size: 13px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: #555; }
-  .subtab.active { color: #e03a00; border-bottom-color: #e03a00; font-weight: 600; }
+  .subtabs { display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .subtab { padding: 4px 12px; font-size: 13px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: var(--text-2); }
+  .subtab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
   .note { margin-left: auto; font-size: 11px; }
   .pane { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
   .row { display: flex; align-items: flex-end; gap: 10px; }
-  .row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; }
-  .row select { padding: 5px 8px; border: 1px solid #c8c8c8; border-radius: 3px; }
-  .lbl { font-size: 11px; font-weight: 600; color: #767676; }
-  .code { width: 100%; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid #c8c8c8; border-radius: 4px; resize: vertical; min-height: 90px; }
+  .row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
+  .row select { padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 3px; }
+  .lbl { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .code { width: 100%; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 4px; resize: vertical; min-height: 90px; }
   .tall { min-height: 150px; } .tall2 { min-height: 320px; }
   .samples { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
-  .btn-primary:hover { background: #c73400; }
-  .btn-sec { background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-sec { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
   .err { color: #d42c2c; font-size: 12px; font-family: ui-monospace, Consolas, monospace; }
   .result { padding: 8px 12px; background: #f5f8fc; border: 1px solid #d8e4f0; border-radius: 4px; font-size: 13px; }
   .result.ok { background: #eef7ee; border-color: #cfe6cf; }
-  .ok { color: #1b8c1b; } .no { color: #888; }
-  .finding { font-family: ui-monospace, Consolas, monospace; font-size: 11px; margin-top: 3px; color: #444; }
-  .dim { color: #888; font-size: 12px; }
+  .ok { color: #1b8c1b; } .no { color: var(--text-muted); }
+  .finding { font-family: ui-monospace, Consolas, monospace; font-size: 11px; margin-top: 3px; color: var(--text-2); }
+  .dim { color: var(--text-muted); font-size: 12px; }
 </style>

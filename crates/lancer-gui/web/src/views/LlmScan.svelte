@@ -141,7 +141,7 @@
   .cats{display:flex;gap:6px;flex-wrap:wrap;flex:1}
   .cat-chip{display:flex;gap:4px;align-items:center;font-size:11px;background:var(--bg);padding:2px 8px;border-radius:10px;border:1px solid var(--border)}
   .actions{justify-content:flex-end;margin-top:8px}
-  .primary{background:#e03a00;color:white;border:none;padding:5px 14px;border-radius:4px;font-weight:600;cursor:pointer}
+  .primary{background:var(--accent);color:white;border:none;padding:5px 14px;border-radius:4px;font-weight:600;cursor:pointer}
   .estimate{font-size:11px;color:var(--text-muted);margin-left:8px}
   .lp-summary{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border)}
   .sum-badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
@@ -151,7 +151,7 @@
   .lp-results{flex:1;overflow:auto;padding:0 12px}
   table{width:100%;border-collapse:collapse}
   th{position:sticky;top:0;background:var(--bg-hover);padding:5px;border-bottom:1px solid var(--border);text-align:left;font-size:11px}
-  td{padding:4px 5px;border-bottom:1px solid var(--border-light, #eee)}
+  td{padding:4px 5px;border-bottom:1px solid var(--border-light, var(--border))}
   .verdict{padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700}
   .v-pass{background:#eafaf1;color:#27ae60}
   .v-fail{background:#fde8e8;color:#c0392b}

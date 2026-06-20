@@ -110,12 +110,12 @@
       <div class="empty-state">
         <!-- Document icon -->
         <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-          <rect x="10" y="6" width="32" height="40" rx="3" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
-          <path d="M17 18 L35 18" stroke="#c8c8c8" stroke-width="1.3" stroke-linecap="round"/>
-          <path d="M17 24 L35 24" stroke="#c8c8c8" stroke-width="1.3" stroke-linecap="round"/>
-          <path d="M17 30 L28 30" stroke="#c8c8c8" stroke-width="1.3" stroke-linecap="round"/>
+          <rect x="10" y="6" width="32" height="40" rx="3" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
+          <path d="M17 18 L35 18" stroke="#d5dae1" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M17 24 L35 24" stroke="#d5dae1" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M17 30 L28 30" stroke="#d5dae1" stroke-width="1.3" stroke-linecap="round"/>
         </svg>
-        <span style="font-weight:500;color:#444">No report generated yet</span>
+        <span style="font-weight:500;color:#434a54">No report generated yet</span>
         <span class="dim" style="font-size:12px">Select a format and click "Render report"</span>
       </div>
     {/if}
@@ -126,42 +126,42 @@
   .rep-toolbar {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 12px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
-  .toolbar-label { font-size: 13px; color: #444; }
+  .toolbar-label { font-size: 13px; color: var(--text-2); }
   .format-tabs { display: flex; gap: 0; }
   .fmt-btn {
     font-size: 13px; padding: 4px 12px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 0;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 0;
     cursor: pointer;
   }
   .fmt-btn:first-child { border-radius: 3px 0 0 3px; }
   .fmt-btn:last-child  { border-radius: 0 3px 3px 0; }
   .fmt-btn + .fmt-btn  { border-left: none; }
-  .fmt-btn:hover { background: #e4e4e4; }
+  .fmt-btn:hover { background: var(--surface-3); }
   .fmt-active {
-    background: #fce8e2 !important;
-    border-color: #e03a00 !important;
-    color: #e03a00 !important;
+    background: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
     z-index: 1;
   }
 
   .btn-orange {
-    background: #e03a00; color: #fff;
+    background: var(--accent); color: #fff;
     border: none; border-radius: 3px;
     padding: 5px 14px; font-size: 13px; cursor: pointer;
   }
-  .btn-orange:hover:not(:disabled) { background: #c73400; }
+  .btn-orange:hover:not(:disabled) { background: var(--accent-hover); }
   .btn-orange:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-secondary {
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px;
     padding: 5px 12px; font-size: 13px; cursor: pointer;
   }
-  .btn-secondary:hover:not(:disabled) { background: #e4e4e4; }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface-3); }
   .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .preview-area {
@@ -173,8 +173,8 @@
   .text-preview {
     flex: 1; margin: 0;
     padding: 14px 16px;
-    background: #fafafa;
-    color: #212121;
+    background: var(--surface-1);
+    color: var(--text);
     font-size: 12px;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     overflow: auto;
@@ -197,8 +197,8 @@
 
   .spinner {
     width: 28px; height: 28px;
-    border: 2px solid #dedede;
-    border-top-color: #e03a00;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
   }

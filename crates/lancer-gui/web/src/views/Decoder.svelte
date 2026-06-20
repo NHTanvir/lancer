@@ -1,9 +1,12 @@
 <script>
   import { onMount } from "svelte";
 
-  // Each row: { input, output, opLabel, mode }
+  // Each row: { input, output, opLabel, mode, viewMode }
+  // viewMode: 'text' | 'hex' — toggles how the INPUT is edited (Burp's
+  // input-mode switch). The underlying bytes (row.input) stay the same; in
+  // 'hex' mode the editor shows/edits a hex representation of those bytes.
   let rows = [
-    { input: "", output: "", opLabel: "", mode: "decode" }
+    { input: "", output: "", opLabel: "", mode: "decode", viewMode: "text" }
   ];
 
   onMount(() => {
@@ -208,6 +211,57 @@
     }
   }
 
+  // ── Pretty-print XML (client-side) ─────────────────────────────────────
+  // Parse with DOMParser, reject parsererror documents, then indent the DOM
+  // recursively. Avoids any external dependency.
+  function prettyXml(s) {
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(s, "application/xml");
+    } catch (e) {
+      return "(invalid XML: " + e.message + ")";
+    }
+    if (doc.getElementsByTagName("parsererror").length) {
+      const err = doc.getElementsByTagName("parsererror")[0];
+      return "(invalid XML: " + (err.textContent || "parse error").trim() + ")";
+    }
+    function indent(node, depth) {
+      const pad = "  ".repeat(depth);
+      let out = "";
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType === 1) { // element
+          const el = child;
+          const attrs = Array.from(el.attributes || [])
+            .map(a => ` ${a.name}="${a.value}"`)
+            .join("");
+          const kids = Array.from(el.childNodes);
+          const onlyText = kids.length === 1 && kids[0].nodeType === 3;
+          if (kids.length === 0) {
+            out += `${pad}<${el.nodeName}${attrs}/>\n`;
+          } else if (onlyText) {
+            out += `${pad}<${el.nodeName}${attrs}>${kids[0].nodeValue.trim()}</${el.nodeName}>\n`;
+          } else {
+            out += `${pad}<${el.nodeName}${attrs}>\n`;
+            out += indent(el, depth + 1);
+            out += `${pad}</${el.nodeName}>\n`;
+          }
+        } else if (child.nodeType === 3) { // text
+          const t = child.nodeValue.trim();
+          if (t) out += `${pad}${t}\n`;
+        } else if (child.nodeType === 8) { // comment
+          out += `${pad}<!--${child.nodeValue}-->\n`;
+        }
+      }
+      return out;
+    }
+    try {
+      const decl = /^\s*<\?xml[^>]*\?>/i.exec(s);
+      return (decl ? decl[0].trim() + "\n" : "") + indent(doc, 0).replace(/\n$/, "");
+    } catch (e) {
+      return "(invalid XML: " + e.message + ")";
+    }
+  }
+
   const encodeOps = [
     { label: "Base64", fn: b64encode },
     { label: "URL",    fn: urlEncode },
@@ -242,6 +296,7 @@
   ];
   const formatOps = [
     { label: "Pretty-print JSON", fn: prettyJson },
+    { label: "Pretty-print XML", fn: prettyXml },
   ];
 
   async function apply(i, op, mode) {
@@ -292,12 +347,49 @@
   }
 
   function addRow(i) {
-    const next = { input: rows[i].output, output: "", opLabel: "", mode: "decode" };
+    const next = { input: rows[i].output, output: "", opLabel: "", mode: "decode", viewMode: "text" };
     rows = [...rows.slice(0, i + 1), next, ...rows.slice(i + 1)];
   }
 
   function clearRow(i) {
-    rows[i] = { input: "", output: "", opLabel: "", mode: "decode" };
+    rows[i] = { input: "", output: "", opLabel: "", mode: "decode", viewMode: "text" };
+    rows = rows;
+  }
+
+  // ── Per-row input-mode (text ↔ hex) ────────────────────────────────────
+  function toggleView(i) {
+    const row = rows[i];
+    if (row.viewMode === "hex") {
+      // Leaving hex: row.input already holds the decoded bytes.
+      row.viewMode = "text";
+      row.hexBuffer = undefined;
+    } else {
+      // Entering hex: seed the editable hex buffer from current bytes.
+      row.viewMode = "hex";
+      row.hexBuffer = hexEncode(row.input || "");
+    }
+    rows = rows;
+  }
+  // What the editable input textarea shows for a row, given its viewMode.
+  // In hex mode we render the live edit buffer so in-progress (odd-length)
+  // typing is never discarded; row.input only updates once the hex is valid.
+  function inputDisplay(row) {
+    if (row.viewMode === "hex") {
+      return row.hexBuffer != null ? row.hexBuffer : hexEncode(row.input || "");
+    }
+    return row.input || "";
+  }
+  function onInputEdit(i, value) {
+    if (rows[i].viewMode === "hex") {
+      rows[i].hexBuffer = value;
+      const t = value.replace(/[\s:,-]/g, "");
+      // Only commit to bytes once we have a valid even-length hex string.
+      if (/^[0-9a-fA-F]*$/.test(t) && t.length % 2 === 0) {
+        rows[i].input = hexDecode(value);
+      }
+    } else {
+      rows[i].input = value;
+    }
     rows = rows;
   }
 </script>
@@ -309,14 +401,24 @@
         <!-- Input area -->
         <div class="io-block">
           <div class="io-header">
-            <span class="io-label">Input</span>
+            <span class="io-label">
+              Input
+              {#if row.viewMode === "hex"}<span class="op-tag">Hex</span>{/if}
+            </span>
             <div class="io-actions">
+              <button
+                class="sm-btn"
+                class:sm-active={row.viewMode === "hex"}
+                on:click={() => toggleView(i)}
+                title="Switch input between text and hex"
+              >{row.viewMode === "hex" ? "Text" : "Hex"}</button>
               <button class="sm-btn" on:click={() => clearRow(i)}>Clear</button>
             </div>
           </div>
           <textarea
             class="io-area"
-            bind:value={row.input}
+            value={inputDisplay(row)}
+            on:input={(e) => onInputEdit(i, e.target.value)}
             placeholder="Paste text to encode or decode..."
             spellcheck="false"
           ></textarea>
@@ -409,7 +511,7 @@
         {#if i < rows.length - 1}
           <div class="chain-arrow">
             <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
-              <path d="M8 2 L8 14 M4 10 L8 14 L12 10" stroke="#767676" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8 2 L8 14 M4 10 L8 14 L12 10" stroke="#69707b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
         {/if}
@@ -429,7 +531,7 @@
 <style>
   .decoder-row { margin-bottom: 4px; }
   .io-block {
-    border: 1px solid #dedede;
+    border: 1px solid var(--border);
     border-radius: 3px;
     overflow: hidden;
     background: #ffffff;
@@ -437,58 +539,63 @@
   .io-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
   }
-  .io-label { font-size: 12px; font-weight: 600; color: #444; }
+  .io-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
   .io-actions { display: flex; gap: 5px; }
   .sm-btn {
     font-size: 11px; padding: 2px 8px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer;
   }
-  .sm-btn:hover:not(:disabled) { background: #e4e4e4; }
+  .sm-btn:hover:not(:disabled) { background: var(--surface-3); }
   .sm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sm-active {
+    background: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+  }
   .io-area {
     min-height: 90px; resize: vertical;
     border: none; border-radius: 0;
-    background: #ffffff; color: #212121;
+    background: #ffffff; color: var(--text);
     padding: 8px 10px;
     font-size: 12px;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     width: 100%; outline: none;
   }
   .io-area:focus { outline: none; }
-  .io-output { color: #444; background: #fafafa; }
-  .op-tag { font-size: 11px; color: #e03a00; font-weight: 500; margin-left: 8px; }
+  .io-output { color: var(--text-2); background: var(--surface-1); }
+  .op-tag { font-size: 11px; color: var(--accent); font-weight: 500; margin-left: 8px; }
 
   .ops-bar {
     display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     padding: 6px 10px;
-    background: #f5f5f5;
-    border-left: 1px solid #dedede;
-    border-right: 1px solid #dedede;
+    background: var(--surface-2);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
   }
   .ops-group { display: flex; align-items: center; gap: 4px; }
-  .ops-label { font-size: 11px; color: #767676; margin-right: 2px; white-space: nowrap; }
+  .ops-label { font-size: 11px; color: var(--text-muted); margin-right: 2px; white-space: nowrap; }
   .op-btn {
     font-size: 12px; padding: 3px 10px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer;
   }
-  .op-btn:hover:not(:disabled) { background: #e4e4e4; border-color: #aaa; }
+  .op-btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--text-dim); }
   .op-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .op-active {
-    background: #fce8e2 !important;
-    border-color: #e03a00 !important;
-    color: #e03a00 !important;
+    background: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
   }
   .op-smart {
     background: #e6f0fb; color: #1a75c4;
     border-color: #9dc3e8;
   }
   .op-smart:hover:not(:disabled) { background: #cde1f5; }
-  .ops-sep { width: 1px; height: 18px; background: #dedede; margin: 0 2px; }
+  .ops-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
 
   .chain-arrow {
     display: flex; justify-content: center;

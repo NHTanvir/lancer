@@ -105,7 +105,7 @@
   .ms-bar{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center}
   .ms-bar select{padding:4px 8px}
   .ms-bar input{flex:1;padding:4px 8px}
-  .run{background:#e03a00;color:white;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600}
+  .run{background:var(--accent);color:white;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600}
   .run:disabled{opacity:0.5}
   .btn-danger{background:#fde8e8;color:#c0392b;border:1px solid #e74c3c;padding:5px 10px;border-radius:4px;cursor:pointer}
   .ms-body{flex:1;display:flex;overflow:hidden}
@@ -117,7 +117,7 @@
   .ms-detail h4{margin:12px 0 6px;color:var(--text-muted);font-size:12px}
   table{width:100%;border-collapse:collapse;margin-bottom:6px}
   th{background:var(--bg-hover);padding:5px;border-bottom:1px solid var(--border);text-align:left;font-size:11px}
-  td{padding:4px 6px;border-bottom:1px solid var(--border-light, #eee);vertical-align:top}
+  td{padding:4px 6px;border-bottom:1px solid var(--border-light, var(--border));vertical-align:top}
   .desc{font-size:11px;color:var(--text-muted);max-width:380px}
   .hash{font-size:10px}
   .findings{display:flex;flex-direction:column;gap:8px}

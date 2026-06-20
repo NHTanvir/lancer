@@ -22,17 +22,42 @@
     window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: tab }));
     actionMenuOpen = false;
   }
+  function pausedUrl() {
+    const raw = pausedWire();
+    const line = raw.split("\r\n")[0] || raw.split("\n")[0] || "";
+    const [, path = "/"] = line.split(" ");
+    const host = (raw.match(/host:\s*(.+)/i) || [])[1]?.trim() || selectedPaused?.host || "target";
+    return `https://${host}${path}`;
+  }
   function actionCopy(fmt) {
     const raw = pausedWire();
     const line = raw.split("\r\n")[0] || raw.split("\n")[0] || "";
-    const [method = "GET", path = "/"] = line.split(" ");
-    const host = (raw.match(/host:\s*(.+)/i) || [])[1]?.trim() || selectedPaused?.host || "target";
-    const url = `https://${host}${path}`;
+    const [method = "GET"] = line.split(" ");
+    const url = pausedUrl();
     let out;
     if (fmt === "curl") out = `curl -X ${method} '${url}'`;
     else if (fmt === "powershell") out = `Invoke-WebRequest -Method ${method} -Uri '${url}'`;
     else out = `fetch('${url}', { method: '${method}' })`;
     navigator.clipboard.writeText(out).catch(() => {});
+    actionMenuOpen = false;
+  }
+  function actionCopyUrl() {
+    navigator.clipboard.writeText(pausedUrl()).catch(() => {});
+    actionMenuOpen = false;
+  }
+  async function actionSendToScanner() {
+    try {
+      await fetch("/api/v1/scan/full", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: pausedUrl() }),
+      });
+    } catch {}
+    actionMenuOpen = false;
+  }
+  function actionSendToDecoder() {
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: pausedWire() }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
     actionMenuOpen = false;
   }
   let editedWire = "";
@@ -114,6 +139,36 @@
     } catch {}
   }
 
+  // WS right-click context menu
+  let wsCtxMenu = null;
+  function onWsContextMenu(event, m) {
+    event.preventDefault();
+    selectedWs = m;
+    wsCtxMenu = { x: event.clientX, y: event.clientY, msg: m };
+  }
+  function closeWsCtxMenu() { wsCtxMenu = null; }
+  function wsSendToComparer() {
+    if (!wsCtxMenu) return;
+    const item = wsCtxMenu.msg.payload_text || "";
+    const existing = JSON.parse(localStorage.getItem("lancer.send.comparer") || "{}");
+    if (!existing.item1) existing.item1 = item;
+    else existing.item2 = item;
+    localStorage.setItem("lancer.send.comparer", JSON.stringify(existing));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "comparer" }));
+    closeWsCtxMenu();
+  }
+  function wsSendToDecoder() {
+    if (!wsCtxMenu) return;
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: wsCtxMenu.msg.payload_text || "" }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
+    closeWsCtxMenu();
+  }
+  function wsCopyPayload() {
+    if (!wsCtxMenu) return;
+    navigator.clipboard.writeText(wsCtxMenu.msg.payload_text || "").catch(() => {});
+    closeWsCtxMenu();
+  }
+
   // ── Right-click context menu state ──────────────────
   let ctxMenu = null;
   function onRowContextMenu(event, row) {
@@ -121,7 +176,7 @@
     selected = row;
     ctxMenu = { x: event.clientX, y: event.clientY, row };
   }
-  function closeCtxMenu() { ctxMenu = null; actionMenuOpen = false; }
+  function closeCtxMenu() { ctxMenu = null; actionMenuOpen = false; highlightMenuOpen = false; mimeGroupsOpen = false; wsCtxMenu = null; }
 
   function payloadFromRow(row) {
     return {
@@ -204,6 +259,125 @@
     navigator.clipboard.writeText(curl).catch(() => {});
     closeCtxMenu();
   }
+
+  // ── Copy as PowerShell / fetch (history context menu) ──
+  function ctxCopyAs(fmt) {
+    if (!ctxMenu) return;
+    const r = ctxMenu.row;
+    const url = `${r.scheme || "http"}://${r.host}${r.path || "/"}`;
+    const method = r.method || "GET";
+    let out;
+    if (fmt === "powershell") out = `Invoke-WebRequest -Method ${method} -Uri '${url}'`;
+    else out = `fetch('${url}', { method: '${method}' })`;
+    navigator.clipboard.writeText(out).catch(() => {});
+    closeCtxMenu();
+  }
+
+  // ── Send to Decoder (history context menu) ──
+  function ctxSendToDecoderReq() {
+    if (!ctxMenu) return;
+    localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: formatRequest(ctxMenu.row) }));
+    window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
+    closeCtxMenu();
+  }
+
+  // ── Save entire history (export rows JSON) ──
+  function saveEntireHistory() {
+    const blob = new Blob([JSON.stringify(filteredRows, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "lancer-http-history.json";
+    a.click();
+    closeCtxMenu();
+  }
+
+  // ── Highlight colors (Burp 7-color palette) ──
+  const HIGHLIGHT_COLORS = [
+    { name: "Red",    value: "#ffd5d5" },
+    { name: "Orange", value: "#ffe2c2" },
+    { name: "Yellow", value: "#fff6c2" },
+    { name: "Green",  value: "#d6f5d6" },
+    { name: "Cyan",   value: "#cdefff" },
+    { name: "Blue",   value: "#d6e0ff" },
+    { name: "Purple", value: "#ecd6ff" },
+  ];
+  let highlightMenuOpen = false;
+  async function patchHistory(id, body) {
+    try {
+      await fetch(`/api/v1/history/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {}
+  }
+  async function setRowColor(color) {
+    if (!ctxMenu) return;
+    const row = ctxMenu.row;
+    row.color = color;
+    rows = rows;
+    await patchHistory(row.id, { color: color || "" });
+    closeCtxMenu();
+  }
+
+  // ── Inline comment editing ──
+  let commentEditId = null;
+  let commentDraft = "";
+  function startEditComment(row, e) {
+    if (e) e.stopPropagation();
+    commentEditId = row.id;
+    commentDraft = row.comment || "";
+  }
+  async function saveComment(row) {
+    row.comment = commentDraft;
+    rows = rows;
+    commentEditId = null;
+    await patchHistory(row.id, { comment: commentDraft });
+  }
+  function ctxAddComment() {
+    if (!ctxMenu) return;
+    startEditComment(ctxMenu.row);
+    closeCtxMenu();
+  }
+  function focusOnMount(node) {
+    node.focus();
+    if (node.select) node.select();
+    return {};
+  }
+
+  // ── History filters (client-side) ──
+  let onlyInScope = false;
+  let onlyWithComments = false;
+  let onlyParametrized = false;
+  let hide4xx = false;
+  let hide5xx = false;
+  let extFilter = "";
+  let mimeGroupsOpen = false;
+  const MIME_GROUPS = ["HTML", "Script", "CSS", "XML", "JSON", "Image", "Text", "Other"];
+  let mimeGroupSel = {};
+
+  function mimeGroupOf(mime) {
+    const m = (mime || "").toLowerCase();
+    if (!m) return "Other";
+    if (m.includes("html")) return "HTML";
+    if (m.includes("javascript") || m.includes("ecmascript") || m === "script") return "Script";
+    if (m.includes("css")) return "CSS";
+    if (m.includes("json")) return "JSON";
+    if (m.includes("xml")) return "XML";
+    if (m.includes("image")) return "Image";
+    if (m.startsWith("text") || m.includes("plain")) return "Text";
+    return "Other";
+  }
+  function extOf(path) {
+    const clean = (path || "").split("?")[0].split("#")[0];
+    const seg = clean.split("/").pop() || "";
+    const dot = seg.lastIndexOf(".");
+    return dot > 0 ? seg.slice(dot + 1).toLowerCase() : "";
+  }
+  function isParametrized(row) {
+    return (row.path || "").includes("?") || !!(row.request && (row.request.body && bytesToText(row.request.body).length > 0));
+  }
+  $: anyMimeSelected = MIME_GROUPS.some(g => mimeGroupSel[g]);
 
   async function loadProxyStatus() {
     try {
@@ -403,13 +577,23 @@
     window.removeEventListener("click", closeCtxMenu);
   });
 
-  $: filteredRows = rows.filter(r =>
-    !filter ||
-    (r.host && r.host.includes(filter)) ||
-    (r.path && r.path.includes(filter)) ||
-    String(r.status || "").includes(filter) ||
-    (r.method && r.method.includes(filter.toUpperCase()))
-  );
+  $: filteredRows = rows.filter(r => {
+    const textMatch = !filter ||
+      (r.host && r.host.includes(filter)) ||
+      (r.path && r.path.includes(filter)) ||
+      String(r.status || "").includes(filter) ||
+      (r.method && r.method.includes(filter.toUpperCase()));
+    if (!textMatch) return false;
+    if (onlyInScope && !r.in_scope) return false;
+    if (onlyWithComments && !(r.comment && r.comment.trim())) return false;
+    if (onlyParametrized && !isParametrized(r)) return false;
+    const s = Number(r.status) || 0;
+    if (hide4xx && s >= 400 && s < 500) return false;
+    if (hide5xx && s >= 500 && s < 600) return false;
+    if (extFilter && !extOf(r.path).includes(extFilter.toLowerCase().replace(/^\./, ""))) return false;
+    if (anyMimeSelected && !mimeGroupSel[mimeGroupOf(r.mime)]) return false;
+    return true;
+  });
 
   $: if (subtab === "history") refreshHistory();
   $: if (subtab === "matchreplace") loadRules();
@@ -455,7 +639,11 @@
           <div class="action-menu" on:click|stopPropagation>
             <div class="ctx-item" on:click={() => actionSend("repeater")}>Send to Repeater</div>
             <div class="ctx-item" on:click={() => actionSend("intruder")}>Send to Intruder</div>
+            <div class="ctx-item" on:click={actionSendToScanner}>Send to Scanner</div>
             <div class="ctx-item" on:click={() => actionSend("comparer")}>Send to Comparer</div>
+            <div class="ctx-item" on:click={actionSendToDecoder}>Send to Decoder</div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" on:click={actionCopyUrl}>Copy URL</div>
             <div class="ctx-item" on:click={() => actionCopy("curl")}>Copy as curl</div>
             <div class="ctx-item" on:click={() => actionCopy("powershell")}>Copy as PowerShell</div>
             <div class="ctx-item" on:click={() => actionCopy("fetch")}>Copy as fetch</div>
@@ -522,7 +710,7 @@
       {:else}
         <div class="intercept-off-state">
           <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-            <rect x="28" y="8" width="24" height="64" rx="8" fill="#444" opacity="0.1"/>
+            <rect x="28" y="8" width="24" height="64" rx="8" fill="#434a54" opacity="0.1"/>
             <circle cx="40" cy="24" r="9" fill="#d42c2c" opacity="0.4"/>
             <circle cx="40" cy="40" r="9" fill="#c98a00" opacity="0.4"/>
             <circle cx="40" cy="56" r="9" fill="#1b8c1b" opacity="1"/>
@@ -547,6 +735,26 @@
       <button on:click={refreshHistory} class="toolbar-btn">Reload</button>
       <span class="dim" style="margin-left:auto;font-size:12px">{filteredRows.length} requests</span>
     </div>
+    <div class="toolbar history-filter-bar">
+      <label class="filter-chk"><input type="checkbox" bind:checked={onlyInScope} />In scope only</label>
+      <label class="filter-chk"><input type="checkbox" bind:checked={onlyWithComments} />With comments</label>
+      <label class="filter-chk"><input type="checkbox" bind:checked={onlyParametrized} />Parametrized</label>
+      <label class="filter-chk"><input type="checkbox" bind:checked={hide4xx} />Hide 4xx</label>
+      <label class="filter-chk"><input type="checkbox" bind:checked={hide5xx} />Hide 5xx</label>
+      <input class="ext-filter" placeholder="ext (e.g. js)" bind:value={extFilter} title="Show only this file extension" />
+      <div class="action-wrap">
+        <button class="toolbar-btn" on:click|stopPropagation={() => mimeGroupsOpen = !mimeGroupsOpen}>
+          MIME {anyMimeSelected ? `(${MIME_GROUPS.filter(g => mimeGroupSel[g]).length})` : ""} ▼
+        </button>
+        {#if mimeGroupsOpen}
+          <div class="action-menu" on:click|stopPropagation>
+            {#each MIME_GROUPS as g}
+              <label class="ctx-item filter-chk"><input type="checkbox" bind:checked={mimeGroupSel[g]} />{g}</label>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
 
     <div class="history-body">
       <div class="table-wrap">
@@ -554,7 +762,8 @@
           <thead>
             <tr>
               <th>#</th><th>Host</th><th>Method</th><th>URL</th>
-              <th>Status</th><th>Length</th><th>MIME</th><th>Time (ms)</th><th></th>
+              <th>Status</th><th>Length</th><th>MIME</th><th>Ext</th><th>Params</th>
+              <th>TLS</th><th>Time (ms)</th><th>Comment</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -562,6 +771,7 @@
               <tr
                 class:row-selected={selected === row}
                 class:row-even={i % 2 === 0}
+                style={row.color ? `background:${row.color}` : ""}
                 on:click={() => selected = selected === row ? null : row}
                 on:contextmenu={(e) => onRowContextMenu(e, row)}
               >
@@ -572,14 +782,32 @@
                 <td class={statusClass(row.status)}>{row.status || "-"}</td>
                 <td class="dim">{row.response_length ?? "-"}</td>
                 <td class="dim">{row.mime || "-"}</td>
+                <td class="dim">{extOf(row.path) || "-"}</td>
+                <td class="dim" style="text-align:center">{isParametrized(row) ? "✓" : ""}</td>
+                <td class="dim" style="text-align:center" title={row.scheme}>{row.scheme === "https" ? "🔒" : ""}</td>
                 <td class="dim">{row.elapsed_ms ?? "-"}</td>
+                <td class="comment-cell" on:click|stopPropagation>
+                  {#if commentEditId === row.id}
+                    <input
+                      class="comment-input"
+                      bind:value={commentDraft}
+                      use:focusOnMount
+                      on:blur={() => saveComment(row)}
+                      on:keydown={(e) => { if (e.key === "Enter") saveComment(row); else if (e.key === "Escape") commentEditId = null; }}
+                    />
+                  {:else}
+                    <span class="comment-text" title="Click to edit comment" on:click={(e) => startEditComment(row, e)}>
+                      {row.comment || "+"}
+                    </span>
+                  {/if}
+                </td>
                 <td>
                   <button class="del-btn dim" title="Delete" on:click={e => deleteHistoryItem(row.id, e)}>×</button>
                 </td>
               </tr>
             {/each}
             {#if filteredRows.length === 0}
-              <tr><td colspan="9" class="empty-cell">No requests yet. Browse through <code>{listenAddr}</code>.</td></tr>
+              <tr><td colspan="13" class="empty-cell">No requests yet. Browse through <code>{listenAddr}</code>.</td></tr>
             {/if}
           </tbody>
         </table>
@@ -641,6 +869,7 @@
                 class:row-selected={selectedWs === m}
                 class:row-even={i % 2 === 0}
                 on:click={() => selectedWs = selectedWs === m ? null : m}
+                on:contextmenu={(e) => onWsContextMenu(e, m)}
               >
                 <td class="dim mono">{i + 1}</td>
                 <td class="dim small">{(m.captured_at || "").slice(11, 19)}</td>
@@ -745,7 +974,7 @@
             <button class="toolbar-btn" on:click={() => downloadCert("der")}>Export DER (browser)</button>
             <button class="toolbar-btn" on:click={() => downloadCert("pem")}>Export PEM</button>
           </div>
-          <p class="settings-desc" style="margin-top:8px;font-size:12px;color:#767676">
+          <p class="settings-desc" style="margin-top:8px;font-size:12px;color:#69707b">
             To install in Chrome/Edge: Settings → Security → Manage certificates → Authorities → Import → select lancer-ca.der
           </p>
         </div>
@@ -760,19 +989,48 @@
     <div class="ctx-item" on:click={ctxSendToIntruder}>Send to Intruder <span class="ctx-shortcut">Ctrl+I</span></div>
     <div class="ctx-item" on:click={() => ctxSendToComparer("request")}>Send request to Comparer</div>
     <div class="ctx-item" on:click={() => ctxSendToComparer("response")}>Send response to Comparer</div>
-    <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
+    <div class="ctx-item" on:click={ctxSendToDecoder}>Send response to Decoder</div>
+    <div class="ctx-item" on:click={ctxSendToDecoderReq}>Send request to Decoder</div>
     <div class="ctx-item" on:click={ctxSendToScanner}>Send to Scanner</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item ctx-submenu" on:click|stopPropagation={() => highlightMenuOpen = !highlightMenuOpen}>
+      Highlight <span class="ctx-shortcut">▸</span>
+      {#if highlightMenuOpen}
+        <div class="ctx-flyout" on:click|stopPropagation>
+          {#each HIGHLIGHT_COLORS as c}
+            <div class="ctx-item color-item" on:click={() => setRowColor(c.value)}>
+              <span class="color-swatch" style="background:{c.value}"></span>{c.name}
+            </div>
+          {/each}
+          <div class="ctx-sep"></div>
+          <div class="ctx-item" on:click={() => setRowColor(null)}>None</div>
+        </div>
+      {/if}
+    </div>
+    <div class="ctx-item" on:click={ctxAddComment}>Add comment</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxAddToScope}>Add host to scope</div>
     <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
     <div class="ctx-item" on:click={ctxCopyAsCurl}>Copy as curl</div>
+    <div class="ctx-item" on:click={() => ctxCopyAs("powershell")}>Copy as PowerShell</div>
+    <div class="ctx-item" on:click={() => ctxCopyAs("fetch")}>Copy as fetch</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" on:click={saveEntireHistory}>Save entire history</div>
+  </div>
+{/if}
+
+{#if wsCtxMenu}
+  <div class="ctx-menu" style="left:{wsCtxMenu.x}px;top:{wsCtxMenu.y}px" on:click|stopPropagation>
+    <div class="ctx-item" on:click={wsSendToComparer}>Send to Comparer</div>
+    <div class="ctx-item" on:click={wsSendToDecoder}>Send to Decoder</div>
+    <div class="ctx-item" on:click={wsCopyPayload}>Copy payload</div>
   </div>
 {/if}
 
 <style>
   .ws-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
   .ws-body .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
-  .ws-detail { height: 220px; flex-shrink: 0; border-top: 2px solid #dedede; display: flex; flex-direction: column; }
+  .ws-detail { height: 220px; flex-shrink: 0; border-top: 2px solid var(--border); display: flex; flex-direction: column; }
   .ws-detail .raw-area { flex: 1; resize: none; border: none; padding: 8px 10px; font-size: 11px; font-family: ui-monospace, Consolas, monospace; outline: none; background: #ffffff; }
   .ws-preview { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir-c2s { color: #1a75c4; font-weight: 600; }
@@ -782,7 +1040,7 @@
   .ctx-menu {
     position: fixed; z-index: 9999;
     background: #ffffff;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.18);
     padding: 4px 0;
@@ -792,18 +1050,18 @@
   .ctx-item {
     padding: 6px 14px;
     cursor: pointer;
-    color: #212121;
+    color: var(--text);
     user-select: none;
   }
-  .ctx-item:hover { background: #f0f7ff; }
-  .ctx-sep { height: 1px; background: #e8e8e8; margin: 4px 0; }
-  .ctx-shortcut { float: right; color: #888; font-size: 11px; padding-left: 14px; }
+  .ctx-item:hover { background: var(--row-hover); }
+  .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+  .ctx-shortcut { float: right; color: var(--text-muted); font-size: 11px; padding-left: 14px; }
 
   .intercept-toolbar {
     display: flex; align-items: center; gap: 4px;
     padding: 6px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     flex-wrap: wrap;
   }
@@ -813,22 +1071,22 @@
     font-size: 13px; font-weight: 500;
     border-radius: 3px; cursor: pointer;
   }
-  .intercept-off { background: #f0f0f0; color: #444; border: 1px solid #c8c8c8; }
-  .intercept-on  { background: #e03a00; color: #fff; border: 1px solid #c73400; }
-  .intercept-off:hover { background: #e4e4e4; }
-  .intercept-on:hover  { background: #c73400; }
+  .intercept-off { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border-strong); }
+  .intercept-on  { background: var(--accent); color: #fff; border: 1px solid var(--accent-hover); }
+  .intercept-off:hover { background: var(--surface-3); }
+  .intercept-on:hover  { background: var(--accent-hover); }
   .toolbar-btn {
     padding: 4px 10px; font-size: 13px;
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer;
     display: flex; align-items: center; gap: 4px;
   }
-  .toolbar-btn:hover:not(:disabled) { background: #e4e4e4; }
+  .toolbar-btn:hover:not(:disabled) { background: var(--surface-3); }
   .toolbar-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .dd-arrow { font-size: 10px; }
   .queue-badge {
     font-size: 11px; font-weight: 600;
-    background: #e03a00; color: #fff;
+    background: var(--accent); color: #fff;
     padding: 2px 8px; border-radius: 10px;
     margin-left: 4px;
   }
@@ -842,18 +1100,18 @@
   .queue-list {
     width: 180px; flex-shrink: 0;
     overflow-y: auto;
-    border-right: 1px solid #dedede;
-    background: #fafafa;
+    border-right: 1px solid var(--border);
+    background: var(--surface-1);
   }
   .queue-item {
     display: flex; flex-direction: column; gap: 1px;
     padding: 6px 10px; cursor: pointer;
-    border-bottom: 1px solid #e8e8e8;
+    border-bottom: 1px solid var(--border);
     font-size: 12px;
   }
-  .queue-item:hover { background: #f0f7ff; }
-  .queue-item-active { background: #daeeff !important; }
-  .queue-method { font-weight: 600; font-size: 11px; color: #e03a00; }
+  .queue-item:hover { background: var(--row-hover); }
+  .queue-item-active { background: var(--row-active) !important; }
+  .queue-method { font-weight: 600; font-size: 11px; color: var(--accent); }
   .queue-host { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .intercept-editor-wrap {
@@ -862,16 +1120,16 @@
   .editor-toolbar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     font-size: 12px;
   }
-  .editor-label { font-weight: 600; color: #444; font-family: ui-monospace, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+  .editor-label { font-weight: 600; color: var(--text-2); font-family: ui-monospace, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
   .intercept-area {
     flex: 1; resize: none;
     border: none; border-radius: 0;
-    background: #ffffff; color: #212121;
+    background: #ffffff; color: var(--text);
     font-size: 12px;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     padding: 10px 12px; min-height: 0;
@@ -884,24 +1142,24 @@
     gap: 12px; padding: 40px;
   }
   .intercept-off-title {
-    font-size: 16px; font-weight: 700; color: #212121; margin: 0;
+    font-size: 16px; font-weight: 700; color: var(--text); margin: 0;
   }
   .intercept-off-actions { display: flex; gap: 8px; margin-top: 6px; }
   .btn-orange {
-    background: #e03a00; color: #fff; border: none; border-radius: 3px;
+    background: var(--accent); color: #fff; border: none; border-radius: 3px;
     padding: 5px 14px; font-size: 13px; cursor: pointer;
   }
-  .btn-orange:hover { background: #c73400; }
+  .btn-orange:hover { background: var(--accent-hover); }
   .btn-secondary {
-    background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px;
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px;
     padding: 5px 14px; font-size: 13px; cursor: pointer;
   }
-  .btn-secondary:hover { background: #e4e4e4; }
+  .btn-secondary:hover { background: var(--surface-3); }
 
   /* Spinner */
   .spinner {
     width: 32px; height: 32px; border-radius: 50%;
-    border: 3px solid #dedede; border-top-color: #e03a00;
+    border: 3px solid var(--border); border-top-color: var(--accent);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -910,44 +1168,62 @@
   .history-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
   .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #e8e8e8; white-space: nowrap; }
-  .data-table thead th { background: #f5f5f5; color: #767676; font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 1; border-bottom: 1px solid #dedede; }
+  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data-table thead th { background: var(--surface-2); color: var(--text-muted); font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--border); }
   .data-table tbody tr { cursor: pointer; }
-  .data-table tbody tr:hover { background: #f0f7ff; }
-  .row-selected { background: #daeeff !important; }
-  .row-even { background: #fafafa; }
+  .data-table tbody tr:hover { background: var(--row-hover); }
+  .row-selected { background: var(--row-active) !important; }
+  .row-even { background: var(--surface-1); }
   .path-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
-  .empty-cell { text-align: center; padding: 40px; color: #767676; }
+  .empty-cell { text-align: center; padding: 40px; color: var(--text-muted); }
   .mono-cell { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
-  .del-btn { padding: 1px 6px; font-size: 13px; background: transparent; border: none; cursor: pointer; color: #767676; }
+  .del-btn { padding: 1px 6px; font-size: 13px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); }
   .del-btn:hover { color: #d42c2c; }
   .mr-in { width: 100%; box-sizing: border-box; padding: 3px 6px; border: 1px solid #d8d8d8; border-radius: 3px; font-size: 12px; }
   .mr-in.mono { font-family: ui-monospace, Consolas, monospace; }
   .mr-sel { padding: 3px 4px; border: 1px solid #d8d8d8; border-radius: 3px; font-size: 11px; }
-  .ord-btn { padding: 0 4px; font-size: 10px; background: #f0f0f0; border: 1px solid #c8c8c8; border-radius: 2px; cursor: pointer; }
+  .ord-btn { padding: 0 4px; font-size: 10px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 2px; cursor: pointer; }
   .ord-btn:disabled { opacity: 0.35; cursor: default; }
   .action-wrap { position: relative; display: inline-block; }
-  .action-menu { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #c8c8c8; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); z-index: 50; min-width: 200px; padding: 4px 0; }
+  .action-menu { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid var(--border-strong); border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); z-index: 50; min-width: 200px; padding: 4px 0; }
   .action-menu .ctx-item { padding: 5px 14px; font-size: 12px; cursor: pointer; }
-  .action-menu .ctx-item:hover { background: #f0f7ff; }
+  .action-menu .ctx-item:hover { background: var(--row-hover); }
 
-  .detail-pane { height: 260px; flex-shrink: 0; border-top: 2px solid #dedede; }
+  .detail-pane { height: 260px; flex-shrink: 0; border-top: 2px solid var(--border); }
   .pane-header { display: flex !important; align-items: center !important; justify-content: space-between !important; }
   .inline-tabs { display: flex; gap: 2px; }
-  .itab { padding: 2px 8px; font-size: 11px; background: transparent; border: 1px solid transparent; border-radius: 3px; color: #767676; cursor: pointer; }
-  .itab:hover { color: #212121; background: #f0f0f0; }
-  .itab-active { color: #e03a00 !important; border-color: #e03a00 !important; background: transparent !important; }
-  .raw-area { flex: 1; resize: none; min-height: 0; border: none; border-radius: 0; background: #ffffff; color: #212121; font-size: 11px; padding: 10px; height: 100%; outline: none; font-family: ui-monospace, Consolas, monospace; }
+  .itab { padding: 2px 8px; font-size: 11px; background: transparent; border: 1px solid transparent; border-radius: 3px; color: var(--text-muted); cursor: pointer; }
+  .itab:hover { color: var(--text); background: var(--surface-2); }
+  .itab-active { color: var(--accent) !important; border-color: var(--accent) !important; background: transparent !important; }
+  .raw-area { flex: 1; resize: none; min-height: 0; border: none; border-radius: 0; background: #ffffff; color: var(--text); font-size: 11px; padding: 10px; height: 100%; outline: none; font-family: ui-monospace, Consolas, monospace; }
 
   /* Match & Replace */
   .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px; }
 
   /* Settings */
   .settings-section { display: flex; flex-direction: column; gap: 8px; }
-  .settings-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #767676; margin-bottom: 6px; }
-  .settings-card { background: #fafafa; border: 1px solid #dedede; border-radius: 4px; padding: 14px; }
+  .settings-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+  .settings-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 4px; padding: 14px; }
   .settings-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .settings-label { font-size: 13px; color: #444; white-space: nowrap; }
-  .settings-desc { font-size: 13px; color: #444; margin: 4px 0; line-height: 1.5; }
-  code { background: #f0f0f0; color: #212121; padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .settings-label { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+  .settings-desc { font-size: 13px; color: var(--text-2); margin: 4px 0; line-height: 1.5; }
+  code { background: var(--surface-2); color: var(--text); padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+  /* History filter bar */
+  .history-filter-bar { padding-top: 0; gap: 12px; flex-wrap: wrap; }
+  .filter-chk { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; user-select: none; }
+  .filter-chk input { cursor: pointer; }
+  .ext-filter { width: 110px; padding: 3px 6px; font-size: 12px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--surface-1); color: var(--text); }
+
+  /* Inline comment editing */
+  .comment-cell { max-width: 180px; }
+  .comment-text { display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; color: var(--text-2); cursor: text; padding: 0 2px; }
+  .comment-text:hover { color: var(--accent); }
+  .comment-input { width: 160px; padding: 2px 5px; font-size: 12px; border: 1px solid var(--accent); border-radius: 3px; background: var(--surface-1); color: var(--text); }
+
+  /* Highlight submenu / flyout */
+  .ctx-submenu { position: relative; }
+  .ctx-flyout { position: absolute; left: 100%; top: -5px; background: #ffffff; border: 1px solid var(--border-strong); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,0.18); padding: 4px 0; min-width: 140px; z-index: 10000; }
+  .color-item { display: flex; align-items: center; gap: 8px; }
+  .color-swatch { display: inline-block; width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border-strong); flex-shrink: 0; }
 </style>

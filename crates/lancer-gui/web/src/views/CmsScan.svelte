@@ -99,7 +99,7 @@
   .cm-bar{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
   .cm-bar input{flex:1;padding:4px 8px}
   .toggle{display:flex;gap:4px;align-items:center;font-size:11px}
-  .run{background:#e03a00;color:white;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600}
+  .run{background:var(--accent);color:white;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600}
   .btn-danger{background:#fde8e8;color:#c0392b;border:1px solid #e74c3c;padding:5px 10px;border-radius:4px;cursor:pointer}
   .cm-body{flex:1;display:flex;overflow:hidden}
   .results-list{width:240px;border-right:1px solid var(--border);overflow-y:auto}

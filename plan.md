@@ -14,6 +14,28 @@ A Rust-based web application security testing suite. Goal: match every feature o
 
 ---
 
+# IMPLEMENTATION STATUS — 2026-06-20 (batch-26) — UI REDESIGN + BURP-PARITY GRANULAR PASS
+
+Two pieces of work, GUI `vite build` clean (zero errors; pre-existing a11y warnings only).
+
+## Full UI redesign — light, modern, token-driven
+- Replaced the flat-grey / loud-orange Burp-clone palette with a refined **design-token layer** in `App.svelte` (`:root` light tokens + `[data-theme="dark"]` overrides): cool neutral surfaces, a refined ember accent (`#e5481d`), soft shadows, 6–11px radii, focus rings, `accent-color` form controls, crisper typography.
+- Swept all 47 `web/src/views/*` + `lib/*` files so every component consumes `var(--token)` inside `<style>` (theme-aware) and the new literals in markup/SVG — ~1,100 colour refs. Light **and** dark themes are now consistent across all 42 tabs (verified in Chrome: 9 representative views + dark mode + a 42-tab mount sweep, zero console errors).
+
+## Burp-parity granular pass — ~60 inventory items closed
+A code-grounded audit (8 agents over the real `crates/` code) found the 2026-05-24 granular `□` inventory was heavily **stale** — many items shipped in batches 12–25 but were never re-ticked. The genuinely-missing-yet-implementable items were then closed (6 agents, one per view file, all client-side over existing backends):
+- **Proxy → HTTP history** — 7-colour row highlighting (`PATCH /v1/history/{id}`), inline comment editing, Ext/Params/TLS/Comment columns, filters (in-scope / parametrized / with-comments / extension / MIME-group / hide-4xx / hide-5xx), Action-menu + right-click additions (Send to Scanner/Decoder, Copy URL, Copy as PowerShell/fetch, Save history), WebSocket-history → Send to Comparer.
+- **Target → Site map** — host→port grouping, per-branch severity circles, requested-vs-inferred text, MIME/parametrized/hide-error filters.
+- **Intruder** (13), **Repeater/Sequencer** (7: update-Content-Length / follow-redirects / cookie-jar toggles, live-capture token-location, …), **Decoder/Comparer/Logger/Organizer** (7), **Settings** (10).
+- **Suite-wide (`App.svelte`)** — status bar now shows **running-scan count + JS-heap (Mem)**; new **Help menu** (Documentation / Report issue / About) + an **About** modal.
+- **"Open Browser" dev fix** — the route is served by `lancer-gui`'s own server in production, but the vite dev server proxies `/api/*` to `lancer-api` (no such route) so it 404'd under `npm run dev`; added a vite dev-middleware that launches Chrome/Edge through the proxy (dev parity with production).
+
+## Honestly still open (the ~63 audit items not done this pass + 7 infra-blocked)
+- **Needs backend work**: a Bambda/DSL filter+custom-column engine (history/logger), per-payload-type Intruder config panels (backend `payload_specs` already exist — only the UIs are missing), save/load Intruder attack file, config-library CRUD, Organizer collections, natural-language scan config, WebAuthn scanner check.
+- **Large / infra-blocked** (unchanged): HTTP/2 frame editor + WebSocket Repeater mode, AI-enhanced scanner checks, vim/emacs editor mode (needs CodeMirror), embedded-Chromium runtime, live WS/HTTP-3 capture, Linux eBPF object, hosted public Collaborator + RSA callbacks, BApp marketplace, Negotiate/Kerberos platform auth, Tauri detachable/multi-monitor panels.
+
+---
+
 # IMPLEMENTATION STATUS — 2026-05-24
 
 Comprehensive audit of `crates/` vs `crates/lancer-gui/web/src/views/` while side-by-side with Burp Community 2026.4.3.

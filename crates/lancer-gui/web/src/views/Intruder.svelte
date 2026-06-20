@@ -13,8 +13,14 @@
   // Positions
   let attackType      = "Sniper";
   let requestTemplate = `GET /users?id=§1§ HTTP/1.1\nHost: example.com\nUser-Agent: Lancer/1.0\nAccept: */*\n\n`;
+  // Pristine copy of the request as first loaded (or last applied), so the
+  // Refresh button can restore the original request after editing/auto-marking.
+  let originalTemplate = requestTemplate;
   let reqEditorMode   = "raw";
   let editorSearch    = "";
+
+  // Restore the request template to the pristine original (Burp's "Refresh").
+  function refreshTemplate() { requestTemplate = originalTemplate; }
 
   $: positionCount = (requestTemplate.match(/§/g) || []).length / 2 | 0;
 
@@ -65,17 +71,131 @@
   let dateFrom="2024-01-01"; let dateTo="2024-12-31"; let dateFmt="yyyy-MM-dd";
   // Username / char sub
   let userGenBase="John Smith"; let charSubBase="admin";
+  // Username generator — first/last NAME LISTS (one per line, like Burp).
+  let userGenFirsts="John\nJane\nAdmin"; let userGenLasts="Smith\nDoe"; let userGenSep=".";
+  // Character frobber / bit flipper base string (backend-supported types).
+  let frobberBase="password"; let bitFlipBase="password";
 
   // Attack / Results
   let results=[]; let running=false; let showResults=false; let attackNum=0;
   let selectedResult=null; let resultReqTab="request";
   let filterStatus=""; let filterPayload="";
 
-  $: filteredResults = results.filter(r => {
-    if (filterStatus  && !String(r.status||"").includes(filterStatus)) return false;
-    if (filterPayload && !(r.payload||"").toLowerCase().includes(filterPayload.toLowerCase())) return false;
-    return true;
-  });
+  // Column sorting for the results table (click a header to sort).
+  let sortKey=""; let sortDir=1;
+  function sortBy(key) { if (sortKey===key) sortDir=-sortDir; else { sortKey=key; sortDir=1; } }
+  function sortVal(r,key) {
+    switch (key) {
+      case "index":  return r.index??0;
+      case "payload":return (r.payload||(r.payloads||[]).join(", ")||"").toLowerCase();
+      case "status": return r.status||0;
+      case "length": return r.length??0;
+      case "time":   return r.time_ms??0;
+      case "started":return r.started_at||"";
+      default:       return "";
+    }
+  }
+  // Max number of payload positions across all results — drives one column per
+  // position for multi-position (Pitchfork/Cluster bomb) attacks.
+  $: maxPositions = results.reduce((m,r)=>Math.max(m,(r.payloads||[]).length),0);
+
+  $: filteredResults = (() => {
+    let out = results.filter(r => {
+      if (filterStatus  && !String(r.status||"").includes(filterStatus)) return false;
+      if (filterPayload && !((r.payload||(r.payloads||[]).join(", ")||"").toLowerCase().includes(filterPayload.toLowerCase()))) return false;
+      return true;
+    });
+    if (sortKey) {
+      out = out.slice().sort((a,b) => {
+        const va=sortVal(a,sortKey), vb=sortVal(b,sortKey);
+        if (va<vb) return -sortDir; if (va>vb) return sortDir; return 0;
+      });
+    }
+    return out;
+  })();
+
+  function fmtTime(r) {
+    if (!r.started_at) return "";
+    try { return new Date(r.started_at).toLocaleTimeString(); } catch { return ""; }
+  }
+
+  // ── Export / save-load helpers ────────────────────────────────────────
+  function downloadBlob(name, text, mime) {
+    try {
+      const blob = new Blob([text], { type: mime || "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    } catch {}
+  }
+  function csvCell(v) {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }
+  // Save the visible results table as CSV (Burp's "Save results table").
+  function saveResultsCsv() {
+    const head = ["#","Payload","Status","Length","Response time (ms)","Timestamp","Error"];
+    const lines = [head.map(csvCell).join(",")];
+    for (const r of filteredResults) {
+      lines.push([
+        r.index, (r.payload||(r.payloads||[]).join(" | ")), r.status, r.length,
+        r.time_ms, r.started_at, r.error||""
+      ].map(csvCell).join(","));
+    }
+    downloadBlob(`intruder-attack-${attackNum||1}.csv`, lines.join("\n"), "text/csv");
+  }
+  // Save the whole attack (config + results) as a portable .lancer JSON file.
+  function saveAttack() {
+    const data = {
+      _format:"lancer.intruder", version:1, savedAt:new Date().toISOString(),
+      target:{host,port,scheme,updateHostHeader},
+      attackType, requestTemplate,
+      payload:{ type:payloadType, text:payloadText, encodeEnabled:payloadEncodeEnabled, encodeChars:payloadEncodeChars },
+      grep:{
+        matchEnabled:grepMatchEnabled, matchRules:grepMatchRules,
+        extractEnabled:grepExtractEnabled, extractRules:grepExtractRules,
+        payloadsEnabled:grepPayloadsEnabled, payloadsExpr:grepPayloadsExpr,
+      },
+      processingRules, results,
+    };
+    downloadBlob(`intruder-attack-${attackNum||1}.lancer`, JSON.stringify(data,null,2), "application/json");
+  }
+  // Restore an attack previously saved with saveAttack().
+  function loadAttackFile(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(String(reader.result));
+        if (d.target) { if(d.target.host)host=d.target.host; if(d.target.port)port=String(d.target.port); if(d.target.scheme)scheme=d.target.scheme; if(typeof d.target.updateHostHeader==="boolean")updateHostHeader=d.target.updateHostHeader; }
+        if (d.attackType) attackType=d.attackType;
+        if (d.requestTemplate) { requestTemplate=d.requestTemplate; originalTemplate=d.requestTemplate; }
+        if (d.payload) { if(d.payload.type)payloadType=d.payload.type; if(d.payload.text!=null)payloadText=d.payload.text; if(typeof d.payload.encodeEnabled==="boolean")payloadEncodeEnabled=d.payload.encodeEnabled; if(d.payload.encodeChars!=null)payloadEncodeChars=d.payload.encodeChars; }
+        if (d.grep) { grepMatchEnabled=!!d.grep.matchEnabled; if(Array.isArray(d.grep.matchRules))grepMatchRules=d.grep.matchRules; grepExtractEnabled=!!d.grep.extractEnabled; if(Array.isArray(d.grep.extractRules))grepExtractRules=d.grep.extractRules; grepPayloadsEnabled=!!d.grep.payloadsEnabled; if(d.grep.payloadsExpr!=null)grepPayloadsExpr=d.grep.payloadsExpr; }
+        if (Array.isArray(d.processingRules)) processingRules=d.processingRules;
+        if (Array.isArray(d.results)) { results=d.results; if(results.length){ showResults=true; attackNum+=1; } }
+      } catch (err) { attackError="Could not load attack file: "+err; }
+    };
+    reader.readAsText(f);
+    e.target.value="";
+  }
+  // Send two selected results to the Comparer (response bodies if available).
+  let compareSel=[];
+  function toggleCompare(r) {
+    if (compareSel.includes(r)) compareSel=compareSel.filter(x=>x!==r);
+    else compareSel=[...compareSel, r].slice(-2);
+  }
+  function sendToComparer() {
+    if (compareSel.length<2) return;
+    const [a,b]=compareSel;
+    const txt=(r)=> r.raw_response || resultResponse(r);
+    try {
+      localStorage.setItem("lancer.send.comparer", JSON.stringify({ item1:txt(a), item2:txt(b) }));
+      window.dispatchEvent(new CustomEvent("lancer:navigate", { detail:"comparer" }));
+    } catch {}
+  }
 
   onMount(() => {
     try {
@@ -83,7 +203,7 @@
       if (raw) {
         const p = JSON.parse(raw);
         if (p.scheme) scheme=p.scheme; if (p.host) host=p.host;
-        if (p.port) port=String(p.port); if (p.raw) requestTemplate=p.raw;
+        if (p.port) port=String(p.port); if (p.raw) { requestTemplate=p.raw; originalTemplate=p.raw; }
         requestLoaded=true; localStorage.removeItem("lancer.send.intruder"); subtab="positions";
       }
     } catch {}
@@ -103,10 +223,13 @@
       case "Brute forcer": return { type:"bruteforce", charset:bruteCharSet, min_len:parseInt(bruteMinLen,10)||1, max_len:parseInt(bruteMaxLen,10)||3 };
       case "Null payloads": return { type:"null", count:parseInt(nullCount,10)||10 };
       case "Username generator": {
-        const parts=userGenBase.trim().split(/\s+/);
-        return { type:"usernamegenerator", firsts:[parts[0]||""], lasts:[parts.slice(1).join(" ")||""], sep:"." };
+        const firsts=userGenFirsts.split("\n").map(s=>s.trim()).filter(Boolean);
+        const lasts =userGenLasts.split("\n").map(s=>s.trim()).filter(Boolean);
+        return { type:"usernamegenerator", firsts:firsts.length?firsts:[""], lasts:lasts.length?lasts:[""], sep:userGenSep||"." };
       }
       case "Case modification": return { type:"casemodification", base:charSubBase||"" };
+      case "Character frobber": return { type:"charfrobber", base:frobberBase||"" };
+      case "Bit flipper": return { type:"bitflipper", base:bitFlipBase||"" };
       default: return null;
     }
   }
@@ -146,7 +269,11 @@
     // Typed payload set drives the backend generator for non-list types.
     const spec = buildPayloadSpec();
     const procs = buildProcessors();
-    const reqBody = {host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",grep,max_concurrency:parseInt(sThreads,10)||10,throttle_ms:parseInt(sThrottle,10)||0,max_retries:parseInt(sRetries,10)||0};
+    // Resource pool: when a dedicated pool is selected, its max-concurrent /
+    // delay override the global request-engine threads/throttle.
+    const maxConc = (rpMode==="new" ? parseInt(rpMaxConcurrent,10) : parseInt(sThreads,10)) || 10;
+    const throttle = (rpMode==="new" ? parseInt(rpDelay,10) : parseInt(sThrottle,10)) || 0;
+    const reqBody = {host,port:parseInt(port,10),scheme,request:requestTemplate,kind:KIND_MAP[attackType]||"Sniper",grep,max_concurrency:maxConc,throttle_ms:throttle,max_retries:parseInt(sRetries,10)||0};
     if (spec) reqBody.payload_specs=Array.from({ length: setCount }, () => spec); else reqBody.payloads=sets;
     if (procs.length) reqBody.processors=procs;
     try {
@@ -176,7 +303,8 @@
   let grepPayloadsEnabled=false; let grepPayloadsExpr="";
   // Dynamic grep result columns derived from the config sent with each attack.
   let activeGrepCols={matches:[],extracts:[]};
-  $: atkColCount=7+activeGrepCols.matches.length+activeGrepCols.extracts.length+(grepPayloadsEnabled?1:0);
+  // Fixed columns: compare, #, payload(s), status, error, timeout, length, time, timestamp, comment.
+  $: atkColCount=10+(maxPositions>1?maxPositions-1:0)+activeGrepCols.matches.length+activeGrepCols.extracts.length+(grepPayloadsEnabled?1:0);
 
   // Settings
   let sThreads=10; let sRetries=3; let sPause=2000; let sThrottle=0;
@@ -184,6 +312,8 @@
 
   // Resource pool
   let rpMode="shared"; let rpName=""; let rpMaxConcurrent=10; let rpDelay=0;
+  let rpSaved=false;
+  function savePool() { rpSaved=true; setTimeout(()=>rpSaved=false, 2000); }
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -202,6 +332,10 @@
       <button class="btn-start" on:click={startAttack} disabled={running}>
         {#if running}<span class="spinner"></span> Running…{:else}▶ Start attack{/if}
       </button>
+      <label class="load-attack-btn" title="Load a saved .lancer attack">
+        Load attack
+        <input type="file" accept=".lancer,application/json,.json" on:change={loadAttackFile} style="display:none" />
+      </label>
       <button class="btn-gear" title="Intruder settings">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="3" stroke="#666" stroke-width="2"/>
@@ -240,6 +374,7 @@
           <button class="pos-btn" on:click={addMarker}>Add §</button>
           <button class="pos-btn" on:click={clearMarkers}>Clear §</button>
           <button class="pos-btn" on:click={autoMarkers}>Auto §</button>
+          <button class="pos-btn" on:click={refreshTemplate} title="Reload the original request">Refresh</button>
         </div>
       </div>
       <div class="editor-body">
@@ -247,7 +382,7 @@
         <textarea
           id="req-editor"
           class="req-textarea"
-          style="background:transparent;caret-color:#212121"
+          style="background:transparent;caret-color:#1b2026"
           bind:value={requestTemplate}
           spellcheck="false"
           on:scroll={syncOverlay}
@@ -312,6 +447,8 @@
                 <option>Brute forcer</option>
                 <option>Null payloads</option>
                 <option>Username generator</option>
+                <option>Character frobber</option>
+                <option>Bit flipper</option>
                 <option>ECB block shuffler</option>
               </select>
             </div>
@@ -393,10 +530,20 @@
               </div>
 
             {:else if payloadType === "Username generator"}
-              <div class="ps-desc">Generates a list of usernames derived from a supplied name.</div>
+              <div class="ps-desc">Generates usernames by combining first and last names (one per line).</div>
+              <div class="payload-layout">
+                <div style="flex:1">
+                  <div class="ps-label" style="margin-bottom:4px">First names:</div>
+                  <textarea class="payload-ta" style="min-height:96px" bind:value={userGenFirsts} placeholder="One first name per line…" spellcheck="false"></textarea>
+                </div>
+                <div style="flex:1">
+                  <div class="ps-label" style="margin-bottom:4px">Last names:</div>
+                  <textarea class="payload-ta" style="min-height:96px" bind:value={userGenLasts} placeholder="One last name per line…" spellcheck="false"></textarea>
+                </div>
+              </div>
               <div class="ps-row" style="margin-top:8px">
-                <label class="ps-label">Name:</label>
-                <input type="text" class="add-item-input" style="flex:1" bind:value={userGenBase} placeholder="e.g. John Smith" />
+                <label class="ps-label">Separator:</label>
+                <input type="text" class="num-in" style="width:60px" bind:value={userGenSep} placeholder="." />
               </div>
 
             {:else if payloadType === "Character substitution"}
@@ -421,6 +568,20 @@
                 <label class="num-label">To:</label>   <input type="date" class="num-in" style="width:130px" bind:value={dateTo} />
                 <label class="num-label">Format:</label>
                 <select class="cp-select" bind:value={dateFmt}><option>yyyy-MM-dd</option><option>dd/MM/yyyy</option><option>MM/dd/yyyy</option><option>ddMMyyyy</option></select>
+              </div>
+
+            {:else if payloadType === "Character frobber"}
+              <div class="ps-desc">Iterates through each character of the base string, mutating one position at a time.</div>
+              <div class="ps-row" style="margin-top:8px">
+                <label class="ps-label">Base string:</label>
+                <input type="text" class="add-item-input" style="flex:1" bind:value={frobberBase} placeholder="e.g. password" />
+              </div>
+
+            {:else if payloadType === "Bit flipper"}
+              <div class="ps-desc">Generates payloads by flipping each bit of the base string in turn.</div>
+              <div class="ps-row" style="margin-top:8px">
+                <label class="ps-label">Base string:</label>
+                <input type="text" class="add-item-input" style="flex:1" bind:value={bitFlipBase} placeholder="e.g. password" />
               </div>
 
             {:else}
@@ -496,7 +657,11 @@
                 <input type="number" class="num-in" bind:value={rpDelay} min="0" />
               </div>
             {/if}
-            <div style="margin-top:12px"><button class="btn-sec">Save pool settings</button></div>
+            <div style="margin-top:12px">
+              <button class="btn-sec" on:click={savePool}>Save pool settings</button>
+              {#if rpSaved}<span class="dim" style="margin-left:8px;font-size:12px">✓ Applied to next attack</span>{/if}
+            </div>
+            {#if rpMode === "new"}<div class="ps-hint dim" style="margin-top:6px">Max concurrent and delay override the global request-engine settings for the next attack.</div>{/if}
           </div>
         </div>
 
@@ -583,6 +748,9 @@
       <span class="attack-title">Intruder attack {attackNum}</span>
       <div class="attack-hright">
         {#if running}<span class="atk-running">⏳ Running…</span>{:else}<span class="atk-done">{results.length} requests completed</span>{/if}
+        <button class="btn-sec" on:click={sendToComparer} disabled={compareSel.length<2} title="Send 2 selected responses to Comparer">Compare ({compareSel.length})</button>
+        <button class="btn-sec" on:click={saveResultsCsv} disabled={!results.length} title="Save results table as CSV">Save CSV</button>
+        <button class="btn-sec" on:click={saveAttack} disabled={!results.length} title="Save attack (config + results)">Save attack</button>
         <button class="attack-close" on:click={()=>showResults=false}>✕ Close</button>
       </div>
     </div>
@@ -597,7 +765,20 @@
     <div class="attack-body">
       <div class="attack-table-wrap">
         <table class="attack-table">
-          <thead><tr><th>#</th><th>Payload</th><th>Status</th><th>Error</th><th>Timeout</th><th>Length</th><th>Comment</th>
+          <thead><tr>
+            <th class="atk-cmp-th" title="Select two rows to compare"></th>
+            <th class="atk-sort" on:click={()=>sortBy("index")}>#{sortKey==="index"?(sortDir>0?" ▲":" ▼"):""}</th>
+            {#if maxPositions > 1}
+              {#each Array(maxPositions) as _p, pi}<th>Payload {pi+1}</th>{/each}
+            {:else}
+              <th class="atk-sort" on:click={()=>sortBy("payload")}>Payload{sortKey==="payload"?(sortDir>0?" ▲":" ▼"):""}</th>
+            {/if}
+            <th class="atk-sort" on:click={()=>sortBy("status")}>Status{sortKey==="status"?(sortDir>0?" ▲":" ▼"):""}</th>
+            <th>Error</th><th>Timeout</th>
+            <th class="atk-sort" on:click={()=>sortBy("length")}>Length{sortKey==="length"?(sortDir>0?" ▲":" ▼"):""}</th>
+            <th class="atk-sort" on:click={()=>sortBy("time")}>Time (ms){sortKey==="time"?(sortDir>0?" ▲":" ▼"):""}</th>
+            <th class="atk-sort" on:click={()=>sortBy("started")}>Timestamp{sortKey==="started"?(sortDir>0?" ▲":" ▼"):""}</th>
+            <th>Comment</th>
             {#each activeGrepCols.matches as m}<th title={"grep-match: "+m}>≈ {m.length>12?m.slice(0,12)+"…":m}</th>{/each}
             {#each activeGrepCols.extracts as e}<th title={"grep-extract: "+e}>⌑ {e}</th>{/each}
             {#if grepPayloadsEnabled}<th title="payload reflected in response">Reflected</th>{/if}
@@ -607,12 +788,19 @@
             {#if !running && results.length===0 && !attackError}<tr><td colspan={atkColCount} class="dim" style="text-align:center;padding:18px">No results.</td></tr>{/if}
             {#each filteredResults as r}
               <tr class:atk-sel={selectedResult===r} on:click={()=>{selectedResult=r;resultReqTab="request"}}>
+                <td class="atk-cmp-td" on:click|stopPropagation><input type="checkbox" checked={compareSel.includes(r)} on:change={()=>toggleCompare(r)} title="Select for compare" /></td>
                 <td class="dim atk-num">{r.index}</td>
-                <td class="atk-pl">{r.payload||(r.payloads||[]).join(", ")||"—"}</td>
+                {#if maxPositions > 1}
+                  {#each Array(maxPositions) as _p, pi}<td class="atk-pl">{(r.payloads||[])[pi]??""}</td>{/each}
+                {:else}
+                  <td class="atk-pl">{r.payload||(r.payloads||[]).join(", ")||"—"}</td>
+                {/if}
                 <td class={statusClass(r.status)}>{r.status||"—"}</td>
                 <td class={r.error?"atk-err":"dim"}>{r.error?"✓":""}</td>
                 <td class={r.timeout?"atk-warn":"dim"}>{r.timeout?"✓":""}</td>
                 <td class="dim atk-num">{r.length??"—"}</td>
+                <td class="dim atk-num">{r.time_ms??""}</td>
+                <td class="dim">{fmtTime(r)}</td>
                 <td class="dim">{r.comment||""}</td>
                 {#each activeGrepCols.matches as _m, gi}<td class="dim" style="text-align:center">{(r.grep&&r.grep.matches&&r.grep.matches[gi])?"✓":""}</td>{/each}
                 {#each activeGrepCols.extracts as _e, gi}<td class="atk-pl">{(r.grep&&r.grep.extracts&&r.grep.extracts[gi])||""}</td>{/each}
@@ -643,59 +831,65 @@
 <style>
   .intruder-root {
     display: flex; flex-direction: column; height: 100%;
-    background: #f5f5f5; font-family: system-ui, -apple-system, sans-serif;
-    font-size: 13px; color: #212121; overflow: hidden; position: relative;
+    background: var(--surface-2); font-family: system-ui, -apple-system, sans-serif;
+    font-size: 13px; color: var(--text); overflow: hidden; position: relative;
   }
 
   /* ── Top toolbar ─────────────────────────────────────────────────────── */
   .top-toolbar {
-    display: flex; align-items: center; background: #f0f0f0;
-    border-bottom: 1px solid #dedede; padding: 4px 8px; gap: 6px; flex-shrink: 0;
+    display: flex; align-items: center; background: var(--surface-2);
+    border-bottom: 1px solid var(--border); padding: 4px 8px; gap: 6px; flex-shrink: 0;
   }
   .tab-pills { display: flex; align-items: center; gap: 4px; }
   .tab-pill {
     display: flex; align-items: center; gap: 4px;
-    background: #e03a00; border: 1px solid #c73400;
+    background: var(--accent); border: 1px solid var(--accent-hover);
     border-radius: 3px 3px 0 0; padding: 3px 10px;
-    font-size: 12px; color: #fff; border-bottom-color: #e03a00;
+    font-size: 12px; color: #fff; border-bottom-color: var(--accent);
   }
   .tab-pill-num { font-weight: 600; }
   .tab-pill-x   { font-size: 11px; opacity: 0.7; cursor: pointer; }
   .tab-add {
-    background: none; border: 1px solid #c8c8c8; border-radius: 3px;
+    background: none; border: 1px solid var(--border-strong); border-radius: 3px;
     width: 22px; height: 22px; font-size: 16px; line-height: 1;
-    cursor: pointer; color: #555; padding: 0;
+    cursor: pointer; color: var(--text-2); padding: 0;
   }
-  .tab-add:hover { background: #e8e8e8; }
+  .tab-add:hover { background: var(--border); }
   .toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
   .btn-start {
     display: flex; align-items: center; gap: 6px;
-    background: #e03a00; color: #fff; border: none; border-radius: 3px;
+    background: var(--accent); color: #fff; border: none; border-radius: 3px;
     padding: 5px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
   }
-  .btn-start:hover:not(:disabled) { background: #c73400; }
+  .btn-start:hover:not(:disabled) { background: var(--accent-hover); }
   .btn-start:disabled { opacity: 0.55; cursor: not-allowed; }
   .btn-gear {
     display: flex; align-items: center; justify-content: center;
-    background: none; border: 1px solid #c8c8c8; border-radius: 3px;
+    background: none; border: 1px solid var(--border-strong); border-radius: 3px;
     width: 28px; height: 28px; cursor: pointer; padding: 0;
   }
-  .btn-gear:hover { background: #e8e8e8; }
+  .btn-gear:hover { background: var(--border); }
+  .load-attack-btn {
+    display: inline-flex; align-items: center;
+    background: #fff; border: 1px solid var(--border-strong); border-radius: 3px;
+    padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text); white-space: nowrap;
+  }
+  .load-attack-btn:hover { background: var(--surface-2); }
   .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Target bar ──────────────────────────────────────────────────────── */
   .target-bar {
     display: flex; align-items: center; gap: 8px; background: #ffffff;
-    border-bottom: 1px solid #dedede; padding: 5px 12px; font-size: 12px; flex-shrink: 0;
+    border-bottom: 1px solid var(--border); padding: 5px 12px; font-size: 12px; flex-shrink: 0;
   }
-  .target-label { color: #767676; font-weight: 500; }
-  .target-url   { font-family: ui-monospace, Consolas, monospace; color: #212121; }
+  .target-label { color: var(--text-muted); font-weight: 500; }
+  .target-url   { font-family: ui-monospace, Consolas, monospace; color: var(--text); }
   .change-target-link { background:none;border:none;padding:0;color:#1a75c4;cursor:pointer;font-size:12px; }
   .change-target-link:hover { text-decoration:underline; }
-  .target-sep   { color: #c8c8c8; }
+  .target-sep   { color: var(--border-strong); }
   .target-check-label { display:flex;align-items:center;gap:5px;cursor:pointer; }
-  .target-check-label input { accent-color:#e03a00;cursor:pointer; }
+  .target-check-label input { accent-color:var(--accent);cursor:pointer; }
 
   /* ── Main area: editor | content panel | vertical tabs ──────────────── */
   .main-area {
@@ -705,34 +899,34 @@
   /* ── Left: editor pane ───────────────────────────────────────────────── */
   .editor-pane {
     display: flex; flex-direction: column;
-    flex: 0 0 55%; border-right: 1px solid #dedede;
+    flex: 0 0 55%; border-right: 1px solid var(--border);
     background: #ffffff; overflow: hidden; min-height: 0;
   }
   .editor-toolbar {
     display: flex; align-items: center; gap: 6px;
-    background: #f5f5f5; border-bottom: 1px solid #dedede;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
     padding: 3px 8px; flex-shrink: 0; flex-wrap: wrap;
   }
   .editor-modetabs { display: flex; }
   .mode-tab {
-    background: none; border: 1px solid #dedede; border-radius: 0;
-    padding: 2px 10px; font-size: 12px; cursor: pointer; color: #555;
+    background: none; border: 1px solid var(--border); border-radius: 0;
+    padding: 2px 10px; font-size: 12px; cursor: pointer; color: var(--text-2);
   }
   .mode-tab:first-child { border-radius: 3px 0 0 3px; }
   .mode-tab:last-child  { border-left: none; border-radius: 0 3px 3px 0; }
-  .mode-tab.active { background: #e03a00; border-color: #e03a00; color: #fff; }
+  .mode-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .mode-tab-nl { border-left: none; padding: 2px 7px; font-family: monospace; }
   .editor-search {
-    border: 1px solid #c8c8c8; border-radius: 3px;
+    border: 1px solid var(--border-strong); border-radius: 3px;
     padding: 2px 8px; font-size: 12px; outline: none; width: 130px;
   }
-  .editor-search:focus { border-color: #e03a00; }
+  .editor-search:focus { border-color: var(--accent); }
   .pos-btns { display: flex; gap: 3px; margin-left: 4px; }
   .pos-btn {
-    background: #fff; border: 1px solid #c8c8c8; border-radius: 3px;
-    padding: 2px 9px; font-size: 12px; cursor: pointer; color: #333; white-space: nowrap;
+    background: #fff; border: 1px solid var(--border-strong); border-radius: 3px;
+    padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--text); white-space: nowrap;
   }
-  .pos-btn:hover { background: #f0f0f0; }
+  .pos-btn:hover { background: var(--surface-2); }
 
   .editor-body {
     flex: 1; position: relative; overflow: hidden; min-height: 0;
@@ -750,10 +944,10 @@
   }
   .req-textarea {
     position: absolute; top:0;left:0;right:0;bottom:0;
-    background: transparent; caret-color: #212121; z-index: 1;
+    background: transparent; caret-color: var(--text); z-index: 1;
     resize: none; border: none; outline: none;
     font-family: ui-monospace,Consolas,"Courier New",monospace;
-    font-size: 12px; line-height: 1.5; padding: 10px 12px; color: #212121;
+    font-size: 12px; line-height: 1.5; padding: 10px 12px; color: var(--text);
   }
 
   /* ── Middle: content pane ────────────────────────────────────────────── */
@@ -767,62 +961,62 @@
 
   /* Positions content */
   .cp-section { margin-bottom: 12px; }
-  .cp-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#767676;margin-bottom:10px; }
+  .cp-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px; }
   .cp-row { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
-  .cp-label { font-size:13px;color:#444;white-space:nowrap; }
-  .cp-select { border:1px solid #c8c8c8;border-radius:3px;padding:3px 6px;font-size:12px;background:#fff;color:#212121; }
-  .pos-count-badge { font-size:12px;color:#555;background:#f0f0f0;border:1px solid #dedede;border-radius:3px;padding:5px 10px;margin-bottom:10px; }
-  .cp-hint { font-size:12px;color:#767676;line-height:1.5;margin:0; }
-  .view-results-btn { background:#f0f0f0;color:#333;border:1px solid #c8c8c8;border-radius:3px;padding:5px 14px;font-size:12px;cursor:pointer;width:100%; }
-  .view-results-btn:hover { background:#e4e4e4; }
+  .cp-label { font-size:13px;color:var(--text-2);white-space:nowrap; }
+  .cp-select { border:1px solid var(--border-strong);border-radius:3px;padding:3px 6px;font-size:12px;background:#fff;color:var(--text); }
+  .pos-count-badge { font-size:12px;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:3px;padding:5px 10px;margin-bottom:10px; }
+  .cp-hint { font-size:12px;color:var(--text-muted);line-height:1.5;margin:0; }
+  .view-results-btn { background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:5px 14px;font-size:12px;cursor:pointer;width:100%; }
+  .view-results-btn:hover { background:var(--surface-3); }
 
   /* Payloads content */
   .no-pos-banner { display:flex;align-items:flex-start;gap:8px;background:#fff3cd;border:1px solid #ffc107;border-radius:3px;padding:8px 12px;font-size:12px;color:#856404;margin-bottom:8px;line-height:1.4; }
-  .ps-section { background:#fff;border:1px solid #dedede;border-radius:3px;padding:10px 12px;margin-bottom:8px; }
-  .ps-header { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#767676;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:5px; }
+  .ps-section { background:#fff;border:1px solid var(--border);border-radius:3px;padding:10px 12px;margin-bottom:8px; }
+  .ps-header { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:5px; }
   .ps-row { display:flex;align-items:center;gap:8px; }
-  .ps-label { font-size:13px;color:#444;white-space:nowrap; }
-  .ps-num { width:50px;border:1px solid #c8c8c8;border-radius:3px;padding:2px 5px;font-size:12px; }
+  .ps-label { font-size:13px;color:var(--text-2);white-space:nowrap; }
+  .ps-num { width:50px;border:1px solid var(--border-strong);border-radius:3px;padding:2px 5px;font-size:12px; }
   .ps-spacer { flex:1; }
-  .ps-count { font-size:13px;font-weight:600;color:#212121; }
-  .ps-desc { font-size:12px;color:#767676;margin-bottom:8px;line-height:1.4; }
+  .ps-count { font-size:13px;font-weight:600;color:var(--text); }
+  .ps-desc { font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.4; }
   .ps-hint { font-size:11px;margin-top:5px; }
   .payload-layout { display:flex;gap:6px;align-items:flex-start; }
-  .payload-ta { flex:1;min-height:140px;resize:vertical;border:1px solid #c8c8c8;border-radius:3px;font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:6px 8px;background:#fafafa;color:#212121;box-sizing:border-box; }
+  .payload-ta { flex:1;min-height:140px;resize:vertical;border:1px solid var(--border-strong);border-radius:3px;font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:6px 8px;background:var(--surface-1);color:var(--text);box-sizing:border-box; }
   .payload-btns { display:flex;flex-direction:column;gap:3px;flex-shrink:0;min-width:82px; }
   .add-item-row { display:flex;gap:6px;margin-top:8px;align-items:center; }
-  .add-item-input { flex:1;border:1px solid #c8c8c8;border-radius:3px;padding:3px 8px;font-size:12px;background:#fff;outline:none; }
-  .add-item-input:focus { border-color:#e03a00; }
+  .add-item-input { flex:1;border:1px solid var(--border-strong);border-radius:3px;padding:3px 8px;font-size:12px;background:#fff;outline:none; }
+  .add-item-input:focus { border-color:var(--accent); }
   .num-grid { display:grid;grid-template-columns:auto 1fr;gap:5px 10px;align-items:center; }
-  .num-label { font-size:12px;color:#444;white-space:nowrap; }
-  .num-in { width:80px;border:1px solid #c8c8c8;border-radius:3px;padding:2px 6px;font-size:12px; }
+  .num-label { font-size:12px;color:var(--text-2);white-space:nowrap; }
+  .num-in { width:80px;border:1px solid var(--border-strong);border-radius:3px;padding:2px 6px;font-size:12px; }
   .null-opts { display:flex;flex-direction:column; }
-  .radio-label { display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:#444; }
-  .radio-label input[type=radio] { accent-color:#e03a00;cursor:pointer; }
+  .radio-label { display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--text-2); }
+  .radio-label input[type=radio] { accent-color:var(--accent);cursor:pointer; }
   .pro-notice { display:flex;align-items:flex-start;gap:8px;background:#e8f4fd;border:1px solid #b3d7f5;border-radius:3px;padding:8px 12px;font-size:12px;color:#1a75c4;margin-top:8px;line-height:1.4; }
-  .proc-table { width:100%;border-collapse:collapse;font-size:12px;border:1px solid #dedede;border-radius:3px; }
+  .proc-table { width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-radius:3px; }
   .proc-table th,.proc-table td { text-align:left;padding:4px 8px;border-bottom:1px solid #efefef; }
-  .proc-table thead th { background:#f5f5f5;color:#767676;font-size:11px;font-weight:600; }
+  .proc-table thead th { background:var(--surface-2);color:var(--text-muted);font-size:11px;font-weight:600; }
   .proc-empty { text-align:center;padding:10px; }
   .proc-btns { display:flex;gap:4px;margin-top:6px; }
   .rule-acts { float:right;display:flex;gap:2px; }
-  .rule-btn { background:none;border:1px solid #dedede;border-radius:2px;padding:0 4px;font-size:11px;cursor:pointer;color:#555; }
+  .rule-btn { background:none;border:1px solid var(--border);border-radius:2px;padding:0 4px;font-size:11px;cursor:pointer;color:var(--text-2); }
   .rule-btn:disabled { opacity:.35;cursor:not-allowed; }
   .encode-row { display:flex;align-items:center;gap:6px;margin-bottom:6px; }
-  .encode-label { font-size:13px;color:#444;cursor:pointer; }
-  .encode-input { width:100%;border:1px solid #c8c8c8;border-radius:3px;padding:4px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace;background:#fafafa;box-sizing:border-box; }
-  .encode-input:disabled { color:#aaa;background:#f0f0f0; }
+  .encode-label { font-size:13px;color:var(--text-2);cursor:pointer; }
+  .encode-input { width:100%;border:1px solid var(--border-strong);border-radius:3px;padding:4px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace;background:var(--surface-1);box-sizing:border-box; }
+  .encode-input:disabled { color:var(--text-dim);background:var(--surface-2); }
 
   /* Settings content */
   .srow { display:flex;align-items:center;gap:10px;margin-bottom:6px; }
-  .slabel { font-size:13px;color:#444;white-space:nowrap; }
-  .snum { width:68px;border:1px solid #c8c8c8;border-radius:3px;padding:2px 6px;font-size:12px; }
+  .slabel { font-size:13px;color:var(--text-2);white-space:nowrap; }
+  .snum { width:68px;border:1px solid var(--border-strong);border-radius:3px;padding:2px 6px;font-size:12px; }
 
   /* Shared */
-  .btn-sec { background:#fff;border:1px solid #c8c8c8;border-radius:3px;padding:3px 10px;font-size:12px;cursor:pointer;color:#333; }
-  .btn-sec:hover:not(:disabled) { background:#f0f0f0; }
+  .btn-sec { background:#fff;border:1px solid var(--border-strong);border-radius:3px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--text); }
+  .btn-sec:hover:not(:disabled) { background:var(--surface-2); }
   .btn-sec:disabled { opacity:.45;cursor:not-allowed; }
-  .dim { color:#767676; }
+  .dim { color:var(--text-muted); }
   .link-btn { background:none;border:none;padding:0;color:#1a75c4;font-size:inherit;cursor:pointer;text-decoration:underline; }
   .link-btn:hover { color:#0055a5; }
 
@@ -830,48 +1024,53 @@
   .vtab-strip {
     display: flex; flex-direction: column;
     width: 26px; flex-shrink: 0;
-    background: #ebebeb; border-left: 1px solid #d4d4d4;
+    background: var(--border); border-left: 1px solid #d4d4d4;
   }
   .vtab {
     display: flex; align-items: center; justify-content: center;
     writing-mode: vertical-rl; text-orientation: mixed;
     transform: rotate(180deg);
     padding: 12px 5px; border: none; background: none;
-    cursor: pointer; font-size: 11px; color: #555; font-weight: 500;
+    cursor: pointer; font-size: 11px; color: var(--text-2); font-weight: 500;
     white-space: nowrap; border-top: 1px solid #d4d4d4;
     flex-shrink: 0; letter-spacing: 0.02em;
   }
   .vtab:first-child { border-top: none; }
-  .vtab:hover { background: #e0e0e0; color: #212121; }
+  .vtab:hover { background: var(--border); color: var(--text); }
   .vtab.active {
-    background: #e03a00; color: #ffffff; font-weight: 600;
+    background: var(--accent); color: #ffffff; font-weight: 600;
   }
   .vtab-label { pointer-events: none; }
 
   /* ── Attack results overlay ──────────────────────────────────────────── */
   .attack-overlay {
     position: absolute; top:0;left:0;right:0;bottom:0;
-    background:#fff; z-index:200; display:flex;flex-direction:column; border:1px solid #dedede;
+    background:#fff; z-index:200; display:flex;flex-direction:column; border:1px solid var(--border);
   }
-  .attack-header { display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#f5f5f5;border-bottom:1px solid #dedede;flex-shrink:0; }
-  .attack-title  { font-size:13px;font-weight:600;color:#212121; }
+  .attack-header { display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);flex-shrink:0; }
+  .attack-title  { font-size:13px;font-weight:600;color:var(--text); }
   .attack-hright { display:flex;align-items:center;gap:14px; }
   .atk-running   { font-size:12px;color:#e86c00; }
   .atk-done      { font-size:12px;color:#1b8c1b; }
-  .attack-close  { background:#e03a00;color:#fff;border:none;border-radius:3px;padding:4px 12px;font-size:12px;cursor:pointer; }
-  .attack-close:hover { background:#c73400; }
+  .attack-close  { background:var(--accent);color:#fff;border:none;border-radius:3px;padding:4px 12px;font-size:12px;cursor:pointer; }
+  .attack-close:hover { background:var(--accent-hover); }
   .atk-error-banner { padding:7px 12px;background:#fde8e8;color:#b3231f;border-bottom:1px solid #f5b8b8;font-size:12px;flex-shrink:0; }
-  .attack-filter-bar { display:flex;align-items:center;gap:8px;padding:5px 10px;background:#fafafa;border-bottom:1px solid #e8e8e8;flex-shrink:0; }
-  .atk-filter { font-size:12px;padding:3px 8px;border:1px solid #c8c8c8;border-radius:3px;width:180px; }
+  .attack-filter-bar { display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--surface-1);border-bottom:1px solid var(--border);flex-shrink:0; }
+  .atk-filter { font-size:12px;padding:3px 8px;border:1px solid var(--border-strong);border-radius:3px;width:180px; }
   .attack-body { flex:1;display:grid;grid-template-rows:minmax(120px,55%) 1fr;overflow:hidden; }
-  .attack-table-wrap { overflow:auto;border-bottom:1px solid #dedede; }
+  .attack-table-wrap { overflow:auto;border-bottom:1px solid var(--border); }
   .attack-table { width:100%;border-collapse:collapse;font-size:12px; }
-  .attack-table th { text-align:left;padding:4px 10px;background:#f5f5f5;color:#767676;font-size:11px;font-weight:600;border-bottom:1px solid #dedede;position:sticky;top:0;z-index:1;white-space:nowrap; }
-  .attack-table td { padding:3px 10px;border-bottom:1px solid #f0f0f0;white-space:nowrap; }
+  .attack-table th { text-align:left;padding:4px 10px;background:var(--surface-2);color:var(--text-muted);font-size:11px;font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1;white-space:nowrap; }
+  .attack-table th.atk-sort { cursor:pointer;user-select:none; }
+  .attack-table th.atk-sort:hover { color:var(--text); }
+  .atk-cmp-th { width:24px; }
+  .atk-cmp-td { text-align:center;width:24px; }
+  .atk-cmp-td input { accent-color:var(--accent);cursor:pointer; }
+  .attack-table td { padding:3px 10px;border-bottom:1px solid var(--surface-2);white-space:nowrap; }
   .attack-table tbody tr { cursor:pointer; }
-  .attack-table tbody tr:hover { background:#f0f7ff; }
-  .attack-table tbody tr.atk-sel { background:#daeeff; }
-  .atk-num { text-align:right;font-variant-numeric:tabular-nums;color:#767676; }
+  .attack-table tbody tr:hover { background:var(--row-hover); }
+  .attack-table tbody tr.atk-sel { background:var(--row-active); }
+  .atk-num { text-align:right;font-variant-numeric:tabular-nums;color:var(--text-muted); }
   .atk-pl { max-width:260px;overflow:hidden;text-overflow:ellipsis; }
   .atk-err  { color:#d42c2c;font-weight:600; }
   .atk-warn { color:#c98a00;font-weight:600; }
@@ -881,10 +1080,10 @@
   .status-5 { color:#b71c1c;font-weight:600; }
   .attack-detail { display:flex;flex-direction:column;overflow:hidden; }
   .attack-detail-empty { flex:1;display:flex;align-items:center;justify-content:center;font-size:12px; }
-  .attack-detail-tabs { display:flex;padding:0 0 0 10px;background:#f5f5f5;border-bottom:1px solid #dedede;flex-shrink:0; }
-  .atk-tab { background:transparent;border:none;padding:6px 14px;font-size:12px;color:#555;cursor:pointer;border-bottom:2px solid transparent; }
-  .atk-tab:hover { color:#212121; }
-  .atk-tab.active { color:#e03a00;border-bottom-color:#e03a00;font-weight:600; }
+  .attack-detail-tabs { display:flex;padding:0 0 0 10px;background:var(--surface-2);border-bottom:1px solid var(--border);flex-shrink:0; }
+  .atk-tab { background:transparent;border:none;padding:6px 14px;font-size:12px;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent; }
+  .atk-tab:hover { color:var(--text); }
+  .atk-tab.active { color:var(--accent);border-bottom-color:var(--accent);font-weight:600; }
   .attack-detail-body { flex:1;overflow:auto;padding:10px 12px; }
-  .atk-editor { margin:0;padding:0;font-size:11.5px;font-family:ui-monospace,"Cascadia Code",Consolas,monospace;white-space:pre-wrap;word-break:break-all;color:#212121;line-height:1.6; }
+  .atk-editor { margin:0;padding:0;font-size:11.5px;font-family:ui-monospace,"Cascadia Code",Consolas,monospace;white-space:pre-wrap;word-break:break-all;color:var(--text);line-height:1.6; }
 </style>

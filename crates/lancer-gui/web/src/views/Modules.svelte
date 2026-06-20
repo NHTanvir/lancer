@@ -99,17 +99,17 @@
   .cat-section h3{margin:0 0 6px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
   table{width:100%;border-collapse:collapse}
   th{padding:5px;text-align:left;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border)}
-  td{padding:6px;border-bottom:1px solid var(--border-light, #eee);vertical-align:middle}
+  td{padding:6px;border-bottom:1px solid var(--border-light, var(--border));vertical-align:middle}
   tr.running td{background:#eafaf1}
   .badge{padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px}
   .badge.elev{background:#fde8e8;color:#c0392b}
-  .badge.nope{background:#eee;color:#888}
+  .badge.nope{background:var(--border);color:var(--text-muted)}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
   .dot-running{background:#27ae60}
   .dot-off{background:#bbb}
   .dot-starting,.dot-stopping{background:#f39c12}
   .dot-failed{background:#c0392b}
-  .btn-on{background:#e03a00;color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600}
+  .btn-on{background:var(--accent);color:white;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600}
   .btn-on:disabled{opacity:0.5;cursor:not-allowed}
   .btn-off{background:#fde8e8;color:#c0392b;border:1px solid #e74c3c;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600}
   .footer{margin-top:18px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text-muted)}

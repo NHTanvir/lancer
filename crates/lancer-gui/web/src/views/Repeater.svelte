@@ -26,6 +26,29 @@
   let sending = false;
   let cancelled = false;
   let controller = null;
+  // When on, recompute the Content-Length header from the body before sending.
+  let updateContentLength = true;
+
+  // Recompute Content-Length from the actual body length (client-side, Burp parity).
+  function applyContentLength(raw) {
+    if (!raw) return raw;
+    // Split headers from body on the first blank line (CRLF or LF).
+    let sep = "\r\n\r\n", idx = raw.indexOf(sep);
+    if (idx < 0) { sep = "\n\n"; idx = raw.indexOf(sep); }
+    if (idx < 0) return raw; // no body section
+    const head = raw.slice(0, idx);
+    const body = raw.slice(idx + sep.length);
+    const eol = sep.startsWith("\r") ? "\r\n" : "\n";
+    const lines = head.split(/\r?\n/);
+    const len = String(new TextEncoder().encode(body).length);
+    let found = false;
+    const out = lines.map(line => {
+      if (/^content-length\s*:/i.test(line)) { found = true; return `Content-Length: ${len}`; }
+      return line;
+    });
+    if (!found && body.length) out.push(`Content-Length: ${len}`);
+    return out.join(eol) + sep + body;
+  }
 
   // ── Inspector ─────────────────────────────────────────────────────────────────
   let inspectorOpen = true;
@@ -34,12 +57,38 @@
   let sectionsCollapsed = {
     reqAttributes: false,
     reqHeaders: false,
+    reqCookies: false,
     reqBody: false,
     respHeaders: false,
   };
 
   // Context menu
   let ctxMenu = null;
+
+  // ── Tab context menu + tab colors ────────────────────────────────────────────
+  let tabCtxMenu = null; // { x, y, id }
+  // Burp's 9 tab highlight colors (null = none).
+  const TAB_COLORS = [
+    { name: "None",   value: null },
+    { name: "Red",    value: "#e2574c" },
+    { name: "Orange", value: "#e08a3c" },
+    { name: "Yellow", value: "#d8c43a" },
+    { name: "Green",  value: "#5cae6a" },
+    { name: "Cyan",   value: "#3fb6c4" },
+    { name: "Blue",   value: "#4f8fd6" },
+    { name: "Pink",   value: "#d572ad" },
+    { name: "Violet", value: "#9a73d6" },
+    { name: "Gray",   value: "#9a9a9a" },
+  ];
+  function openTabCtx(e, id) {
+    e.preventDefault();
+    tabCtxMenu = { x: e.clientX, y: e.clientY, id };
+  }
+  function closeTabCtx() { tabCtxMenu = null; }
+  function setTabColor(id, value) {
+    tabs = tabs.map(t => t.id === id ? { ...t, color: value } : t);
+    closeTabCtx();
+  }
 
   // ── Burp AI ───────────────────────────────────────────────────────────────────
   let aiMenuOpen = false;
@@ -292,8 +341,15 @@
     activeTab = nid;
   }
 
-  // F2 renames the active tab (Burp parity).
-  function onTabKey(e) { if (e.key === "F2") { e.preventDefault(); renameTab(activeTab); } }
+  // F2 renames the active tab (Burp parity). Ctrl/Cmd+R or Ctrl/Cmd+Enter sends.
+  function onTabKey(e) {
+    if (e.key === "F2") { e.preventDefault(); renameTab(activeTab); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R" || e.key === "Enter")) {
+      // Ctrl+R is the browser reload combo, so preventDefault is required.
+      e.preventDefault();
+      send();
+    }
+  }
 
   // ── State setters ──────────────────────────────────────────────────────────────
   function setScheme(v) {
@@ -313,11 +369,14 @@
       path += "?" + d.queryParams.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join("&");
     }
     let raw = `${d.method || "GET"} ${path} ${d.version || "HTTP/1.1"}\r\n`;
-    const headers = d.headers.map(h => ({ ...h }));
+    let headers = d.headers.map(h => ({ ...h }));
     if (d.cookies.length) {
       const cookieStr = d.cookies.map(c => `${c.name}=${c.value}`).join("; ");
       const ci = headers.findIndex(h => h.name.toLowerCase() === "cookie");
       if (ci >= 0) headers[ci].value = cookieStr; else headers.push({ name: "Cookie", value: cookieStr });
+    } else if (d.cookies) {
+      // All cookies removed — drop any stale Cookie header so the edit takes effect.
+      headers = headers.filter(h => h.name.toLowerCase() !== "cookie");
     }
     for (const h of headers) if (h.name) raw += `${h.name}: ${h.value}\r\n`;
     raw += "\r\n";
@@ -387,12 +446,13 @@
     s.rawResponse = "";
     tabStates = tabStates;
     controller = new AbortController();
+    const reqToSend = updateContentLength ? applyContentLength(s.request) : s.request;
     try {
       const r = await fetch("/api/v1/repeater", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          request: s.request,
+          request: reqToSend,
           scheme: s.scheme,
           host: s.host,
           port: parseInt(s.port, 10) || 443,
@@ -545,6 +605,75 @@
     closeCtx();
   }
 
+  // Re-encode the request body between url-encoded ↔ JSON ↔ multipart, rewriting
+  // the Content-Type header to match. Cycles through the three encodings.
+  function ctxChangeBodyEncoding() {
+    const d = inspectorData;
+    // Collect current params from whichever representation is present.
+    let params = [];
+    if (d.bodyParams.length) {
+      params = d.bodyParams.map(p => ({ name: p.name, value: p.value }));
+    } else if (d.body) {
+      const trimmed = d.body.trim();
+      // Try JSON first.
+      try {
+        const obj = JSON.parse(trimmed);
+        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+          params = Object.keys(obj).map(k => ({ name: k, value: String(obj[k]) }));
+        }
+      } catch {}
+      // Fall back to url-encoded pairs.
+      if (!params.length && trimmed.includes("=")) {
+        for (const pair of trimmed.split("&")) {
+          const [k, v] = pair.split("=");
+          if (k) params.push({ name: decodeURIComponent(k), value: decodeURIComponent(v || "") });
+        }
+      }
+    }
+    if (!params.length) { closeCtx(); return; }
+
+    // Determine current encoding from Content-Type, then advance to the next.
+    const ctIdx = d.headers.findIndex(h => h.name.toLowerCase() === "content-type");
+    const ct = ctIdx >= 0 ? d.headers[ctIdx].value.toLowerCase() : "";
+    const order = ["urlencoded", "json", "multipart"];
+    let cur = "urlencoded";
+    if (ct.includes("json")) cur = "json";
+    else if (ct.includes("multipart")) cur = "multipart";
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+
+    let newBody = "";
+    let newCt = "";
+    if (next === "urlencoded") {
+      newBody = params.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`).join("&");
+      newCt = "application/x-www-form-urlencoded";
+    } else if (next === "json") {
+      const obj = {};
+      for (const p of params) obj[p.name] = p.value;
+      newBody = JSON.stringify(obj, null, 2);
+      newCt = "application/json";
+    } else {
+      const boundary = "----LancerBoundary" + Math.random().toString(36).slice(2, 12);
+      newBody = params.map(p =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="${p.name}"\r\n\r\n${p.value}`
+      ).join("\r\n") + `\r\n--${boundary}--\r\n`;
+      newCt = `multipart/form-data; boundary=${boundary}`;
+    }
+
+    // Rebuild the raw request: keep request line + headers, swap Content-Type + body.
+    const headers = d.headers.map(h => ({ ...h }));
+    if (ctIdx >= 0) headers[ctIdx] = { name: headers[ctIdx].name, value: newCt };
+    else headers.push({ name: "Content-Type", value: newCt });
+    const clIdx = headers.findIndex(h => h.name.toLowerCase() === "content-length");
+    if (clIdx >= 0) headers[clIdx] = { name: headers[clIdx].name, value: String(newBody.length) };
+
+    let path = (d.fullPath || "/");
+    let raw = `${d.method || "POST"} ${path} ${d.version || "HTTP/1.1"}\r\n`;
+    for (const h of headers) if (h.name) raw += `${h.name}: ${h.value}\r\n`;
+    raw += "\r\n" + newBody;
+    setRequest(raw);
+    closeCtx();
+  }
+
   function ctxAddToSiteMap() {
     const s = tabStates[activeTab];
     window.dispatchEvent(new CustomEvent("lancer:siteMapAdd", {
@@ -585,7 +714,7 @@
         localStorage.removeItem("repeater_prefill");
       } catch {}
     }
-    const onDocClick = () => { closeCtx(); aiMenuOpen = false; };
+    const onDocClick = () => { closeCtx(); closeTabCtx(); aiMenuOpen = false; };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   });
@@ -601,11 +730,13 @@
       <button
         class="rep-tab"
         class:rep-tab-active={activeTab === t.id}
+        style={t.color ? `border-bottom-color:${t.color};box-shadow:inset 0 -2px 0 ${t.color}` : ""}
         on:click={() => (activeTab = t.id)}
         on:dblclick={() => renameTab(t.id)}
-        on:contextmenu|preventDefault={() => duplicateTab(t.id)}
-        title="Double-click to rename · right-click to duplicate · F2 to rename active"
+        on:contextmenu={e => openTabCtx(e, t.id)}
+        title="Double-click to rename · right-click for menu · F2 to rename active"
       >
+        {#if t.color}<span class="tab-color-dot" style="background:{t.color}"></span>{/if}
         <span class="tab-label">{t.label}</span>
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <span
@@ -645,6 +776,14 @@
 
       <!-- Cancel -->
       <button class="toolbar-btn btn-cancel" on:click={cancel} disabled={!sending}>Cancel</button>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Update Content-Length -->
+      <label class="toolbar-check" title="Recompute the Content-Length header from the body before sending">
+        <input type="checkbox" bind:checked={updateContentLength} />
+        <span>Update Content-Length</span>
+      </label>
 
       <div class="toolbar-sep"></div>
 
@@ -1009,6 +1148,31 @@
               {/if}
             </div>
 
+            <!-- Request cookies (editable) -->
+            <div class="isec">
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <div class="isec-hdr" on:click={() => (sectionsCollapsed.reqCookies = !sectionsCollapsed.reqCookies)}>
+                <svg class="isec-arrow" width="8" height="8" viewBox="0 0 8 8" fill="none"
+                  style="transform: rotate({sectionsCollapsed.reqCookies ? -90 : 0}deg)">
+                  <path d="M1 3l3 3 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+                </svg>
+                <span>Request cookies</span>
+                <span class="isec-badge">{inspectorData.cookies.length}</span>
+              </div>
+              {#if !sectionsCollapsed.reqCookies}
+                <div class="isec-rows">
+                  {#each inspectorData.cookies as c, idx}
+                    <div class="irow irow-edit">
+                      <input class="ikey-in mono orange" value={c.name} on:change={e => inspEdit(d => d.cookies[idx].name = e.target.value)} />
+                      <input class="ival-in mono" value={c.value} on:change={e => inspEdit(d => d.cookies[idx].value = e.target.value)} />
+                      <button class="irow-del" on:click={() => inspEdit(d => d.cookies.splice(idx, 1))} title="Remove">×</button>
+                    </div>
+                  {/each}
+                  <button class="irow-add" on:click={() => inspEdit(d => d.cookies.push({ name: "cookie", value: "" }))}>+ Add cookie</button>
+                </div>
+              {/if}
+            </div>
+
             <!-- Request body -->
             <div class="isec">
               <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -1127,6 +1291,7 @@
     <div class="ctx-item" on:click={ctxSendToDecoder}>Send to Decoder</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={ctxChangeMethod}>Change request method</div>
+    <div class="ctx-item" on:click={ctxChangeBodyEncoding}>Change body encoding</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" on:click={() => { navigator.clipboard.writeText(state.request || ""); closeCtx(); }}>Copy <span class="ctx-shortcut">Ctrl+C</span></div>
     <div class="ctx-item" on:click={ctxCopyUrl}>Copy URL</div>
@@ -1144,6 +1309,30 @@
   </div>
 {/if}
 
+<!-- ── Tab right-click context menu (rename / duplicate / color) ── -->
+{#if tabCtxMenu}
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <div class="ctx-overlay" on:click={closeTabCtx}></div>
+  <div class="ctx-menu" style="left:{tabCtxMenu.x}px;top:{tabCtxMenu.y}px">
+    <div class="ctx-item" on:click={() => { const id = tabCtxMenu.id; closeTabCtx(); renameTab(id); }}>Rename <span class="ctx-shortcut">F2</span></div>
+    <div class="ctx-item" on:click={() => { const id = tabCtxMenu.id; closeTabCtx(); duplicateTab(id); }}>Duplicate</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-color-title">Color tab</div>
+    <div class="ctx-color-row">
+      {#each TAB_COLORS as c}
+        <button
+          class="ctx-color-swatch"
+          class:ctx-color-none={c.value === null}
+          style={c.value ? `background:${c.value}` : ""}
+          title={c.name}
+          on:click={() => setTabColor(tabCtxMenu.id, c.value)}
+        >{#if c.value === null}∅{/if}</button>
+      {/each}
+    </div>
+  </div>
+{/if}
+
 <style>
   /* ── Reset / base ── */
   * { box-sizing: border-box; }
@@ -1153,10 +1342,10 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    background: #f5f5f5;
+    background: var(--surface-2);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 13px;
-    color: #212121;
+    color: var(--text);
   }
 
   /* ════════════════════════════════════
@@ -1165,15 +1354,15 @@
   .rep-tabbar {
     display: flex;
     align-items: stretch;
-    background: #f0f0f0;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     height: 34px;
     overflow-x: auto;
     overflow-y: hidden;
   }
   .rep-tabbar::-webkit-scrollbar { height: 3px; }
-  .rep-tabbar::-webkit-scrollbar-thumb { background: #c8c8c8; }
+  .rep-tabbar::-webkit-scrollbar-thumb { background: var(--border-strong); }
 
   .rep-tab {
     display: inline-flex;
@@ -1183,9 +1372,9 @@
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    border-right: 1px solid #dedede;
+    border-right: 1px solid var(--border);
     border-radius: 0;
-    color: #555;
+    color: var(--text-2);
     font-size: 12px;
     cursor: pointer;
     white-space: nowrap;
@@ -1195,12 +1384,19 @@
   }
   .rep-tab:hover { background: #e6e6e6; }
   .rep-tab-active {
-    color: #e03a00;
-    border-bottom-color: #e03a00;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
     font-weight: 600;
     background: #ffffff;
   }
   .tab-label { pointer-events: none; }
+  .tab-color-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    pointer-events: none;
+  }
   .tab-close {
     font-size: 14px;
     line-height: 1;
@@ -1215,14 +1411,14 @@
     padding: 0 14px;
     background: transparent;
     border: none;
-    color: #767676;
+    color: var(--text-muted);
     font-size: 20px;
     line-height: 1;
     cursor: pointer;
     display: flex;
     align-items: center;
   }
-  .rep-tab-add:hover { color: #e03a00; }
+  .rep-tab-add:hover { color: var(--accent); }
 
   /* ════════════════════════════════════
      2. Toolbar row
@@ -1232,8 +1428,8 @@
     align-items: center;
     gap: 5px;
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
 
@@ -1241,7 +1437,7 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    background: #e03a00;
+    background: var(--accent);
     color: #ffffff;
     border: none;
     border-radius: 3px;
@@ -1261,20 +1457,33 @@
     padding: 4px 10px;
     font-size: 12px;
     background: #ececec;
-    color: #333;
-    border: 1px solid #c8c8c8;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     cursor: pointer;
     white-space: nowrap;
     height: 26px;
   }
-  .toolbar-btn:hover:not(:disabled) { background: #e0e0e0; }
+  .toolbar-btn:hover:not(:disabled) { background: var(--border); }
   .toolbar-btn:disabled { opacity: 0.38; cursor: not-allowed; }
 
   .icon-btn { padding: 4px 7px; }
   .nav-btn { gap: 1px; padding: 4px 8px; }
 
-  .btn-cancel { color: #444; }
+  .toolbar-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+    white-space: nowrap;
+    height: 26px;
+    user-select: none;
+  }
+  .toolbar-check input { cursor: pointer; accent-color: var(--accent); margin: 0; }
+
+  .btn-cancel { color: var(--text-2); }
   .rec-on { background: #fdeaea !important; color: #d42c2c !important; border-color: #f3c2c2 !important; }
 
   .toolbar-sep {
@@ -1288,13 +1497,13 @@
   /* Burp AI button */
   .burp-ai-wrap { position: relative; }
   .btn-ai {
-    color: #555;
+    color: var(--text-2);
     gap: 4px;
   }
   .btn-ai svg { opacity: 0.85; }
   .btn-ai-active {
-    color: #e03a00;
-    border-color: #e03a00;
+    color: var(--accent);
+    border-color: var(--accent);
     background: #fff3ef;
   }
 
@@ -1320,8 +1529,8 @@
     cursor: pointer;
   }
   .ai-menu-item:hover { background: #fff3ef; }
-  .ai-menu-label { font-size: 12px; font-weight: 600; color: #333; }
-  .ai-menu-desc { font-size: 10.5px; color: #888; }
+  .ai-menu-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .ai-menu-desc { font-size: 10.5px; color: var(--text-muted); }
 
   /* AI results panel (bottom of view) */
   .ai-panel {
@@ -1329,7 +1538,7 @@
     max-height: 38%;
     display: flex;
     flex-direction: column;
-    border-top: 2px solid #e03a00;
+    border-top: 2px solid var(--accent);
     background: #ffffff;
     overflow: hidden;
   }
@@ -1338,14 +1547,14 @@
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    color: #e03a00;
+    color: var(--accent);
     min-height: 30px;
   }
-  .ai-panel-title { font-size: 12px; font-weight: 700; color: #333; }
-  .ai-panel-action { font-weight: 400; color: #888; text-transform: capitalize; }
+  .ai-panel-title { font-size: 12px; font-weight: 700; color: var(--text); }
+  .ai-panel-action { font-weight: 400; color: var(--text-muted); text-transform: capitalize; }
   .ai-panel-prov {
     font-size: 10px;
     font-weight: 700;
@@ -1357,15 +1566,15 @@
   }
   .ai-panel-btn {
     background: #ececec;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
-    color: #333;
+    color: var(--text);
     font-size: 11px;
     padding: 2px 8px;
     cursor: pointer;
     line-height: 1.4;
   }
-  .ai-panel-btn:hover { background: #e0e0e0; }
+  .ai-panel-btn:hover { background: var(--border); }
   .ai-panel-close { font-size: 14px; padding: 0 7px; line-height: 1.2; }
 
   .ai-panel-body {
@@ -1378,10 +1587,10 @@
     align-items: center;
     gap: 8px;
     padding: 16px;
-    color: #767676;
+    color: var(--text-muted);
     font-size: 12px;
   }
-  .ai-loading svg { color: #e03a00; }
+  .ai-loading svg { color: var(--accent); }
   .ai-err {
     margin: 10px;
     background: #fde8e8;
@@ -1398,13 +1607,13 @@
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     font-size: 12px;
     line-height: 1.55;
-    color: #212121;
+    color: var(--text);
     white-space: pre-wrap;
     word-break: break-word;
   }
   .ai-empty {
     padding: 14px;
-    color: #aaa;
+    color: var(--text-dim);
     font-style: italic;
     font-size: 12px;
   }
@@ -1425,7 +1634,7 @@
     align-items: center;
     padding: 4px 8px;
     background: #ffffff;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     font-size: 12px;
@@ -1439,10 +1648,10 @@
 
   .scheme-sel {
     font-size: 12px;
-    background: #f5f5f5;
-    border: 1px solid #c8c8c8;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: 3px 0 0 3px;
-    color: #e03a00;
+    color: var(--accent);
     font-weight: 600;
     padding: 3px 6px;
     min-width: 66px;
@@ -1452,7 +1661,7 @@
     height: 26px;
   }
   .url-sep {
-    color: #888;
+    color: var(--text-muted);
     padding: 0;
     flex-shrink: 0;
     align-self: center;
@@ -1460,7 +1669,7 @@
   .port-sep { padding: 0 1px; }
   .host-input {
     flex: 1;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
     border-left: none;
     border-right: none;
     border-radius: 0;
@@ -1468,24 +1677,24 @@
     padding: 3px 8px;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     background: #ffffff;
-    color: #212121;
+    color: var(--text);
     outline: none;
     height: 26px;
   }
-  .host-input:focus { background: #fff9f7; border-color: #e03a00; z-index: 1; position: relative; }
+  .host-input:focus { background: #fff9f7; border-color: var(--accent); z-index: 1; position: relative; }
   .port-input {
     width: 58px;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
     border-radius: 0 3px 3px 0;
     font-size: 12px;
     padding: 3px 6px;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     background: #ffffff;
-    color: #212121;
+    color: var(--text);
     outline: none;
     height: 26px;
   }
-  .port-input:focus { background: #fff9f7; border-color: #e03a00; }
+  .port-input:focus { background: #fff9f7; border-color: var(--accent); }
 
   /* ════════════════════════════════════
      4. Main body (three panes)
@@ -1545,7 +1754,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid #dedede;
+    border-right: 1px solid var(--border);
     min-width: 0;
     background: #ffffff;
   }
@@ -1555,8 +1764,8 @@
     display: flex;
     align-items: center;
     padding: 5px 10px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     gap: 6px;
     min-height: 32px;
@@ -1565,7 +1774,7 @@
   .pane-title {
     font-size: 12px;
     font-weight: 700;
-    color: #333;
+    color: var(--text);
     flex-shrink: 0;
     letter-spacing: 0.01em;
   }
@@ -1573,7 +1782,7 @@
   .resp-status {
     font-size: 11px;
     font-weight: 400;
-    color: #767676;
+    color: var(--text-muted);
     margin-left: 6px;
     font-family: ui-monospace, Consolas, monospace;
   }
@@ -1590,14 +1799,14 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 3px;
-    color: #767676;
+    color: var(--text-muted);
     cursor: pointer;
     line-height: 1.5;
   }
-  .stab:hover { background: #e8e8e8; color: #333; }
+  .stab:hover { background: var(--border); color: var(--text); }
   .stab-active {
-    color: #e03a00 !important;
-    border-color: #e03a00 !important;
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
     background: transparent !important;
   }
 
@@ -1611,13 +1820,13 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #888;
+    color: var(--text-muted);
     padding: 3px 4px;
     border-radius: 3px;
     display: flex;
     align-items: center;
   }
-  .pane-icon-btn:hover { color: #333; background: #e8e8e8; }
+  .pane-icon-btn:hover { color: var(--text); background: var(--border); }
 
   /* Layout toggle buttons (response pane top-right) */
   .layout-btns {
@@ -1629,16 +1838,16 @@
     background: transparent;
     border: 1px solid transparent;
     cursor: pointer;
-    color: #888;
+    color: var(--text-muted);
     padding: 3px 4px;
     border-radius: 3px;
     display: flex;
     align-items: center;
   }
-  .layout-btn:hover { color: #333; background: #e8e8e8; }
+  .layout-btn:hover { color: var(--text); background: var(--border); }
   .layout-btn-active {
-    color: #e03a00 !important;
-    border-color: #e03a00 !important;
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
   }
 
   /* ── Code area with line numbers ── */
@@ -1654,7 +1863,7 @@
     flex-shrink: 0;
     width: 38px;
     background: #f8f8f8;
-    border-right: 1px solid #ebebeb;
+    border-right: 1px solid var(--border);
     overflow: hidden;
     padding: 10px 0;
     text-align: right;
@@ -1675,7 +1884,7 @@
     border: none;
     border-radius: 0;
     background: #ffffff;
-    color: #212121;
+    color: var(--text);
     padding: 10px 12px;
     min-height: 0;
     font-size: 12px;
@@ -1701,7 +1910,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: var(--text-muted);
     font-size: 13px;
     font-style: italic;
   }
@@ -1716,8 +1925,8 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-left: 1px solid #dedede;
-    background: #fafafa;
+    border-left: 1px solid var(--border);
+    background: var(--surface-1);
     transition: width 0.15s, min-width 0.15s;
   }
   .inspector-collapsed {
@@ -1731,15 +1940,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 5px 10px;
-    background: #f0f0f0;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     min-height: 32px;
   }
   .inspector-title {
     font-size: 12px;
     font-weight: 700;
-    color: #333;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     letter-spacing: 0.01em;
@@ -1750,14 +1959,14 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #555;
+    color: var(--text-2);
     padding: 2px;
     display: flex;
     align-items: center;
     border-radius: 3px;
     flex-shrink: 0;
   }
-  .inspector-toggle:hover { background: #e0e0e0; }
+  .inspector-toggle:hover { background: var(--border); }
 
   .inspector-body {
     flex: 1;
@@ -1765,11 +1974,11 @@
     overflow-x: hidden;
   }
   .inspector-body::-webkit-scrollbar { width: 5px; }
-  .inspector-body::-webkit-scrollbar-thumb { background: #c8c8c8; border-radius: 3px; }
+  .inspector-body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
   /* Inspector sections */
   .isec {
-    border-bottom: 1px solid #e4e4e4;
+    border-bottom: 1px solid var(--surface-3);
   }
   .isec-resp .isec-hdr { background: #f5f0ff; }
 
@@ -1798,8 +2007,8 @@
     margin-left: auto;
     font-size: 10px;
     font-weight: 500;
-    background: #e0e0e0;
-    color: #555;
+    background: var(--border);
+    color: var(--text-2);
     padding: 1px 6px;
     border-radius: 8px;
     flex-shrink: 0;
@@ -1808,22 +2017,22 @@
   .isec-rows { padding: 2px 0 4px; }
 
   .irow-edit { align-items: center; gap: 4px; }
-  .ikey-in, .ival-in { box-sizing: border-box; padding: 2px 5px; border: 1px solid #e0e0e0; border-radius: 3px; font-size: 11px; background: #fff; }
+  .ikey-in, .ival-in { box-sizing: border-box; padding: 2px 5px; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; background: #fff; }
   .ikey-in { flex: 0 0 38%; }
   .ival-in { flex: 1; min-width: 0; }
-  .ikey-in.orange { color: #c73400; }
-  .ikey-in:focus, .ival-in:focus { outline: none; border-color: #e03a00; }
+  .ikey-in.orange { color: var(--accent-hover); }
+  .ikey-in:focus, .ival-in:focus { outline: none; border-color: var(--accent); }
   .irow-del { flex: 0 0 auto; background: transparent; border: none; color: #bbb; cursor: pointer; font-size: 13px; padding: 0 4px; }
   .irow-del:hover { color: #d42c2c; }
-  .irow-add { margin: 4px 8px; font-size: 11px; padding: 2px 8px; background: #f0f0f0; border: 1px solid #d8d8d8; border-radius: 3px; cursor: pointer; color: #555; }
-  .irow-add:hover { background: #e8e8e8; }
+  .irow-add { margin: 4px 8px; font-size: 11px; padding: 2px 8px; background: var(--surface-2); border: 1px solid #d8d8d8; border-radius: 3px; cursor: pointer; color: var(--text-2); }
+  .irow-add:hover { background: var(--border); }
 
   .irow {
     display: flex;
     gap: 6px;
     padding: 3px 10px 3px 8px;
     font-size: 11px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--surface-2);
     min-width: 0;
     overflow: hidden;
   }
@@ -1839,7 +2048,7 @@
     text-overflow: ellipsis;
   }
   .ival {
-    color: #212121;
+    color: var(--text);
     flex: 1;
     min-width: 0;
     white-space: nowrap;
@@ -1849,7 +2058,7 @@
 
   .orange { color: #c0392b !important; }
   .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
-  .dim { color: #888 !important; }
+  .dim { color: var(--text-muted) !important; }
 
   /* Method badge */
   .method-badge {
@@ -1874,14 +2083,14 @@
   .isec-empty {
     padding: 6px 10px;
     font-size: 11px;
-    color: #aaa;
+    color: var(--text-dim);
     font-style: italic;
   }
   .isec-body-preview {
     padding: 6px 10px;
     font-size: 11px;
     font-family: ui-monospace, Consolas, monospace;
-    color: #555;
+    color: var(--text-2);
     word-break: break-all;
     white-space: pre-wrap;
     max-height: 120px;
@@ -1914,11 +2123,41 @@
     align-items: center;
     justify-content: space-between;
     white-space: nowrap;
-    color: #212121;
+    color: var(--text);
   }
   .ctx-item:hover { background: #f0f4ff; }
   .ctx-disabled { color: #b0b0b0 !important; cursor: not-allowed; }
   .ctx-disabled:hover { background: transparent !important; }
-  .ctx-sep { height: 1px; background: #e8e8e8; margin: 3px 0; }
-  .ctx-shortcut { font-size: 11px; color: #999; margin-left: 16px; }
+  .ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+  .ctx-shortcut { font-size: 11px; color: var(--text-dim); margin-left: 16px; }
+
+  /* Tab color picker (inside tab context menu) */
+  .ctx-color-title {
+    padding: 4px 16px 2px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .ctx-color-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 4px 16px 8px;
+    max-width: 220px;
+  }
+  .ctx-color-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+  .ctx-color-swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ctx-color-none {
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 11px;
+  }
 </style>

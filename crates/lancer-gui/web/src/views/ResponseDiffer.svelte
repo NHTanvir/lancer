@@ -54,17 +54,17 @@
   .view { display: flex; flex-direction: column; height: 100%; overflow: auto; padding: 12px; gap: 12px; box-sizing: border-box; }
   .hdr { display: flex; align-items: center; gap: 10px; } .hdr .dim { font-size: 12px; }
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #767676; margin-bottom: 5px; }
-  textarea { width: 100%; box-sizing: border-box; min-height: 200px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid #c8c8c8; border-radius: 4px; resize: vertical; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
-  .btn-primary:hover { background: #c73400; }
+  .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 200px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 4px; resize: vertical; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
+  .btn-primary:hover { background: var(--accent-hover); }
   .err { color: #d42c2c; font-size: 12px; }
   .metrics { display: flex; gap: 24px; flex-wrap: wrap; }
   .metric { display: flex; flex-direction: column; gap: 3px; }
-  .mk { font-size: 10px; text-transform: uppercase; color: #999; }
+  .mk { font-size: 10px; text-transform: uppercase; color: var(--text-dim); }
   .mv { font-size: 15px; font-weight: 600; } .mv.hi { color: #c0392b; }
   .add { color: #1b8c1b; } .del { color: #d42c2c; }
   .hdiff { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
   .hline { font-family: ui-monospace, Consolas, monospace; font-size: 11px; padding: 1px 0; word-break: break-all; }
-  .dim { color: #999; font-size: 12px; }
+  .dim { color: var(--text-dim); font-size: 12px; }
 </style>

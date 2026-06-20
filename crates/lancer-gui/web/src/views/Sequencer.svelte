@@ -99,6 +99,43 @@
     analyseTokens(tokens);
   }
 
+  // ── Save / reload token sample (client-side) ──────────────────────────────
+  function saveSample() {
+    const list = tokens.length ? tokens : manualTokens.split("\n").map(t => t.trim()).filter(Boolean);
+    if (!list.length) return;
+    const blob = new Blob([list.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sequencer-sample-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  let sampleFileInput;
+  function loadSample(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      manualTokens = String(reader.result || "").replace(/\r\n/g, "\n");
+      subtab = "manual";
+      analyseManual();
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  // Rating class for a per-position entropy value (bits). Char entropy maxes ~6.6
+  // bits for a printable-ASCII alphabet; use a simple threshold scheme.
+  function posRating(bits) {
+    if (bits >= 4) return "status-2";
+    if (bits >= 2) return "status-4";
+    return "status-5";
+  }
+
   function methodClass(m) {
     if (!m) return "";
     m = m.toUpperCase();
@@ -230,8 +267,8 @@
         {#if tokenCount === 0}
           <div class="empty-hint">
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <rect x="4" y="12" width="24" height="14" rx="2" stroke="#c8c8c8" stroke-width="1.2" fill="#f5f5f5"/>
-              <rect x="8" y="8" width="16" height="6" rx="2" stroke="#c8c8c8" stroke-width="1.2" fill="#f5f5f5"/>
+              <rect x="4" y="12" width="24" height="14" rx="2" stroke="#d5dae1" stroke-width="1.2" fill="#f1f3f6"/>
+              <rect x="8" y="8" width="16" height="6" rx="2" stroke="#d5dae1" stroke-width="1.2" fill="#f1f3f6"/>
             </svg>
             <span class="dim">No tokens captured yet</span>
             <span class="dim" style="font-size:12px">Start capture or paste tokens to see entropy statistics</span>
@@ -274,8 +311,31 @@
               {/if}
             </tbody>
           </table>
-          <div style="margin-top:10px">
+
+          <!-- Character-level analysis (per token position) -->
+          {#if fips && Array.isArray(fips.charPos) && fips.charPos.length}
+            <div class="card-title" style="margin-top:16px">Character-level analysis</div>
+            <div class="char-table-wrap">
+              <table class="data-table char-table">
+                <thead>
+                  <tr><th>Position</th><th>Entropy (bits)</th><th>Quality</th></tr>
+                </thead>
+                <tbody>
+                  {#each fips.charPos as bits, i}
+                    <tr class:row-even={i % 2 === 1}>
+                      <td class="mono">{i + 1}</td>
+                      <td class="mono">{(+bits).toFixed(2)}</td>
+                      <td class={posRating(+bits)}>{(+bits) >= 4 ? "Good" : (+bits) >= 2 ? "Medium" : "Low"}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+
+          <div style="margin-top:10px;display:flex;gap:8px">
             <button on:click={clearAll} class="btn-secondary">Clear results</button>
+            <button on:click={saveSample} class="btn-secondary" disabled={!tokens.length}>Save sample</button>
           </div>
         {/if}
       </div>
@@ -297,6 +357,9 @@
         ></textarea>
         <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
           <button class="btn-orange" on:click={analyseManual} disabled={!manualTokens.trim()}>Analyse now</button>
+          <button class="btn-secondary" on:click={() => sampleFileInput.click()}>Load sample…</button>
+          <button class="btn-secondary" on:click={saveSample} disabled={!manualTokens.trim()}>Save sample</button>
+          <input type="file" accept=".txt,.json,text/plain" bind:this={sampleFileInput} on:change={loadSample} style="display:none" />
           <span class="dim" style="font-size:12px">
             {manualTokens.split("\n").filter(l=>l.trim()).length} tokens
           </span>
@@ -373,64 +436,64 @@
   .panel {
     flex: 1; overflow-y: auto;
     padding: 14px 16px;
-    background: #f5f5f5;
+    background: var(--surface-2);
   }
   .card {
     background: #ffffff;
-    border: 1px solid #dedede;
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 14px 16px;
   }
   .card-title {
     font-size: 11px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
-    color: #767676; margin-bottom: 12px;
-    padding-bottom: 8px; border-bottom: 1px solid #eee;
+    color: var(--text-muted); margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
   }
 
   /* Request display */
   .req-display {
     display: flex; align-items: center; gap: 8px;
-    background: #f5f5f5; border: 1px solid #dedede;
+    background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 3px; padding: 6px 10px;
     font-size: 12px; font-family: ui-monospace, Consolas, monospace;
   }
   .req-method { font-weight: 700; }
-  .req-host   { color: #444; }
-  .req-path   { color: #767676; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .req-host   { color: var(--text-2); }
+  .req-path   { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .req-empty  { font-size: 12px; padding: 8px 0; }
   .m-get   { color: #2e7d32; }
   .m-post  { color: #e65100; }
-  .m-other { color: #555; }
+  .m-other { color: var(--text-2); }
 
   /* Request picker table */
   .picker-table-wrap {
     margin-top: 8px;
-    border: 1px solid #dedede; border-radius: 3px;
+    border: 1px solid var(--border); border-radius: 3px;
     overflow: hidden; max-height: 180px; overflow-y: auto;
   }
   .pick-table { width: 100%; border-collapse: collapse; font-size: 11px; }
   .pick-table th {
-    background: #f0f0f0; padding: 3px 6px;
-    text-align: left; color: #767676; font-weight: 600;
-    border-bottom: 1px solid #dedede;
+    background: var(--surface-2); padding: 3px 6px;
+    text-align: left; color: var(--text-muted); font-weight: 600;
+    border-bottom: 1px solid var(--border);
     position: sticky; top: 0;
   }
-  .pick-table td { padding: 3px 6px; border-bottom: 1px solid #f0f0f0; }
+  .pick-table td { padding: 3px 6px; border-bottom: 1px solid var(--surface-2); }
   .pick-table tr { cursor: pointer; }
-  .pick-table tr:hover { background: #f0f7ff; }
-  .row-sel { background: #fce8e2 !important; }
+  .pick-table tr:hover { background: var(--row-hover); }
+  .row-sel { background: var(--accent-soft) !important; }
   .url-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Token location */
   .location-row { display: flex; gap: 20px; flex-wrap: wrap; }
   .radio-label {
     display: flex; align-items: center; gap: 6px;
-    font-size: 13px; cursor: pointer; color: #444;
+    font-size: 13px; cursor: pointer; color: var(--text-2);
   }
-  .radio-label input { cursor: pointer; accent-color: #e03a00; }
+  .radio-label input { cursor: pointer; accent-color: var(--accent); }
   .field-row { display: flex; align-items: center; gap: 10px; }
-  .field-label { font-size: 13px; color: #444; flex-shrink: 0; }
+  .field-label { font-size: 13px; color: var(--text-2); flex-shrink: 0; }
 
   /* Capture progress */
   .capture-progress {
@@ -438,21 +501,21 @@
   }
   .progress-bar-wrap {
     flex: 1; max-width: 160px; height: 6px;
-    background: #e8e8e8; border-radius: 3px; overflow: hidden;
+    background: var(--border); border-radius: 3px; overflow: hidden;
   }
   .progress-bar-fill {
-    height: 100%; background: #e03a00;
+    height: 100%; background: var(--accent);
     border-radius: 3px;
     transition: width 0.4s ease;
   }
 
   /* Buttons */
   .btn-orange {
-    background: #e03a00; color: #fff;
+    background: var(--accent); color: #fff;
     border: none; border-radius: 3px;
     padding: 5px 14px; font-size: 13px; cursor: pointer;
   }
-  .btn-orange:hover:not(:disabled) { background: #c73400; }
+  .btn-orange:hover:not(:disabled) { background: var(--accent-hover); }
   .btn-orange:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-stop {
     background: #d42c2c; color: #fff;
@@ -461,11 +524,11 @@
   }
   .btn-stop:hover { background: #b82020; }
   .btn-secondary {
-    background: #f0f0f0; color: #333;
-    border: 1px solid #c8c8c8; border-radius: 3px;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 3px;
     padding: 4px 10px; font-size: 12px; cursor: pointer;
   }
-  .btn-secondary:hover { background: #e4e4e4; }
+  .btn-secondary:hover { background: var(--surface-3); }
   .btn-sm { padding: 2px 8px; font-size: 11px; margin-left: auto; }
 
   .capturing-pulse {
@@ -483,32 +546,45 @@
   /* Token textarea */
   .token-textarea {
     width: 100%; min-height: 140px; resize: vertical;
-    border: 1px solid #c8c8c8; border-radius: 3px;
+    border: 1px solid var(--border-strong); border-radius: 3px;
     font-family: ui-monospace, Consolas, monospace;
     font-size: 12px; padding: 6px 8px;
-    background: #fafafa; color: #212121;
+    background: var(--surface-1); color: var(--text);
     box-sizing: border-box; outline: none;
   }
-  .token-textarea:focus { border-color: #e03a00; }
+  .token-textarea:focus { border-color: var(--accent); }
 
   /* Data table */
   .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .data-table th, .data-table td {
-    padding: 6px 10px; border-bottom: 1px solid #e8e8e8; text-align: left;
+    padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left;
   }
   .data-table thead th {
-    background: #f5f5f5; color: #767676;
+    background: var(--surface-2); color: var(--text-muted);
     font-size: 11px; font-weight: 600;
-    border-bottom: 1px solid #dedede;
+    border-bottom: 1px solid var(--border);
   }
-  .data-table tbody tr:hover { background: #f0f7ff; }
-  .row-even { background: #fafafa; }
-  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 600; color: #212121; }
+  .data-table tbody tr:hover { background: var(--row-hover); }
+  .row-even { background: var(--surface-1); }
+
+  /* Character-level analysis table (scrollable for long tokens) */
+  .char-table-wrap {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+  .char-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 600; color: var(--text); }
   .settings-row { display: flex; align-items: center; }
 
   /* Status colors */
   .status-2 { color: #2e7d32; font-weight: 600; }
   .status-4 { color: #e65100; font-weight: 600; }
   .status-5 { color: #b71c1c; font-weight: 600; }
-  .dim { color: #767676; }
+  .dim { color: var(--text-muted); }
 </style>

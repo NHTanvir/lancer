@@ -165,7 +165,7 @@
   .ab-table-wrap{flex:1;overflow:auto}
   .ab-table{width:100%;border-collapse:collapse}
   .ab-table th{background:var(--bg-hover);text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;position:sticky;top:0;z-index:1}
-  .ab-table td{padding:4px 8px;border-bottom:1px solid var(--border-light,#eee);vertical-align:middle}
+  .ab-table td{padding:4px 8px;border-bottom:1px solid var(--border-light,var(--border));vertical-align:middle}
   .ab-table tr:hover td{background:var(--bg-hover);cursor:pointer}
   .ab-table tr.selected td{background:#e8f0fe}
   .ab-table tr.bypass td{background:#fffbf0}

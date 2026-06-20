@@ -100,7 +100,7 @@
   .lookup-card h3{margin:0 0 8px;font-size:14px}
   .row{display:flex;gap:6px;margin-bottom:8px}
   .row input{flex:1;padding:5px 8px}
-  .row button{background:#e03a00;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-weight:600}
+  .row button{background:var(--accent);color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-weight:600}
   .row button:disabled{opacity:0.5}
   .info > div{margin-bottom:4px}
   .info ul{margin:4px 0 0 18px;padding:0}

@@ -140,33 +140,33 @@
 </div>
 
 <style>
-  .toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #dedede; flex-shrink: 0; }
-  .toolbar-btn { padding: 4px 10px; font-size: 13px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; }
-  .toolbar-btn:hover { background: #e4e4e4; }
+  .toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .toolbar-btn { padding: 4px 10px; font-size: 13px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; }
+  .toolbar-btn:hover { background: var(--surface-3); }
   .toolbar-btn.danger { color: #d42c2c; border-color: #f5b8b8; }
   .toolbar-btn.danger:hover { background: #fde8e8; }
 
   .cookie-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
   .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #e8e8e8; white-space: nowrap; }
-  .data-table thead th { background: #f5f5f5; color: #767676; font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 1; }
-  .row-even { background: #fafafa; }
+  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data-table thead th { background: var(--surface-2); color: var(--text-muted); font-size: 11px; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+  .row-even { background: var(--surface-1); }
   .value-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; }
-  .empty-cell { text-align: center; padding: 30px; color: #767676; }
+  .empty-cell { text-align: center; padding: 30px; color: var(--text-muted); }
   code { font-family: ui-monospace, Consolas, monospace; }
-  .sm-btn { font-size: 12px; padding: 2px 8px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; }
-  .sm-btn:hover { background: #e4e4e4; }
+  .sm-btn { font-size: 12px; padding: 2px 8px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; }
+  .sm-btn:hover { background: var(--surface-3); }
   .sm-btn.danger { color: #d42c2c; border-color: #f0c4c4; margin-left: 3px; }
   .sm-btn.danger:hover { background: #fde8e8; }
 
-  .add-pane { padding: 12px 14px; background: #fafafa; border-top: 2px solid #dedede; flex-shrink: 0; }
-  .pane-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #767676; margin-bottom: 10px; }
+  .add-pane { padding: 12px 14px; background: var(--surface-1); border-top: 2px solid var(--border); flex-shrink: 0; }
+  .pane-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px; }
   .cookie-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
-  .cookie-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; font-weight: 500; min-width: 120px; }
+  .cookie-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); font-weight: 500; min-width: 120px; }
   .cookie-form label.grow { flex: 1; min-width: 200px; }
   .cookie-form .check-inline { flex-direction: row; align-items: center; }
   .cookie-form .check-inline input { margin-right: 4px; }
-  .btn-primary { background: #e03a00; color: #fff; border: none; border-radius: 3px; padding: 5px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
-  .btn-primary:hover { background: #c73400; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 3px; padding: 5px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-primary:hover { background: var(--accent-hover); }
 </style>

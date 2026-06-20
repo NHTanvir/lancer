@@ -118,7 +118,7 @@
   .iac{display:flex;flex-direction:column;height:100%;font-size:13px}
   .iac-bar{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
   .iac-bar select{padding:4px 8px}
-  .run{background:#e03a00;color:white;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600}
+  .run{background:var(--accent);color:white;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:600}
   .run:disabled{opacity:0.5;cursor:default}
   .iac-body{flex:1;display:flex;overflow:hidden}
   .editor{width:50%;border-right:1px solid var(--border);display:flex}

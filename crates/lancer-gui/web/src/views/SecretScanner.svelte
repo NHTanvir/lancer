@@ -146,7 +146,7 @@
   .ss-table-wrap{flex:1;overflow:auto}
   .ss-table{width:100%;border-collapse:collapse}
   .ss-table th{background:var(--bg-hover);text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;position:sticky;top:0;z-index:1}
-  .ss-table td{padding:4px 8px;border-bottom:1px solid var(--border-light,#eee);vertical-align:top}
+  .ss-table td{padding:4px 8px;border-bottom:1px solid var(--border-light,var(--border));vertical-align:top}
   .ss-table tr:hover td{background:var(--bg-hover);cursor:pointer}
   .ss-table tr.selected td{background:#e8f0fe}
   .url-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

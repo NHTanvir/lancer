@@ -153,8 +153,8 @@
             on:click={() => scanType="full"}
           >
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style="margin-bottom:4px">
-              <circle cx="11" cy="11" r="9" stroke="#e03a00" stroke-width="1.5" fill="none"/>
-              <path d="M7 11 L10 14 L15 8" stroke="#e03a00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="11" cy="11" r="9" stroke="#e5481d" stroke-width="1.5" fill="none"/>
+              <path d="M7 11 L10 14 L15 8" stroke="#e5481d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <span class="scan-label">Full scan</span>
             <span class="scan-desc dim">Passive + Active checks</span>
@@ -165,8 +165,8 @@
             on:click={() => scanType="passive"}
           >
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style="margin-bottom:4px">
-              <ellipse cx="11" cy="11" rx="9" ry="6" stroke="#767676" stroke-width="1.5" fill="none"/>
-              <circle cx="11" cy="11" r="3" fill="#767676" opacity="0.4"/>
+              <ellipse cx="11" cy="11" rx="9" ry="6" stroke="#69707b" stroke-width="1.5" fill="none"/>
+              <circle cx="11" cy="11" r="3" fill="#69707b" opacity="0.4"/>
             </svg>
             <span class="scan-label">Passive only</span>
             <span class="scan-desc dim">Non-intrusive analysis</span>
@@ -177,7 +177,7 @@
             on:click={() => scanType="active"}
           >
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style="margin-bottom:4px">
-              <path d="M11 3 L14 10 L20 10 L15 14 L17 21 L11 17 L5 21 L7 14 L2 10 L8 10 Z" stroke="#767676" stroke-width="1.3" fill="none"/>
+              <path d="M11 3 L14 10 L20 10 L15 14 L17 21 L11 17 L5 21 L7 14 L2 10 L8 10 Z" stroke="#69707b" stroke-width="1.3" fill="none"/>
             </svg>
             <span class="scan-label">Active only</span>
             <span class="scan-desc dim">Inject and probe</span>
@@ -270,12 +270,12 @@
       {#if queue.length === 0}
         <div class="empty-state">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <rect x="8" y="10" width="32" height="30" rx="3" stroke="#c8c8c8" stroke-width="1.5" fill="#f5f5f5"/>
-            <path d="M14 20 L34 20" stroke="#c8c8c8" stroke-width="1.2" stroke-linecap="round"/>
-            <path d="M14 26 L34 26" stroke="#c8c8c8" stroke-width="1.2" stroke-linecap="round"/>
-            <path d="M14 32 L26 32" stroke="#c8c8c8" stroke-width="1.2" stroke-linecap="round"/>
+            <rect x="8" y="10" width="32" height="30" rx="3" stroke="#d5dae1" stroke-width="1.5" fill="#f1f3f6"/>
+            <path d="M14 20 L34 20" stroke="#d5dae1" stroke-width="1.2" stroke-linecap="round"/>
+            <path d="M14 26 L34 26" stroke="#d5dae1" stroke-width="1.2" stroke-linecap="round"/>
+            <path d="M14 32 L26 32" stroke="#d5dae1" stroke-width="1.2" stroke-linecap="round"/>
           </svg>
-          <span style="font-weight:500;color:#444">No scans in queue</span>
+          <span style="font-weight:500;color:#434a54">No scans in queue</span>
           <span class="dim" style="font-size:12px">Go to "New scan" to start a scan</span>
         </div>
       {:else}
@@ -312,14 +312,14 @@
 
 <style>
   .card {
-    background: #fafafa; border: 1px solid #dedede;
+    background: var(--surface-1); border: 1px solid var(--border);
     border-radius: 4px; padding: 16px;
     max-width: 700px;
   }
   .card-title {
     font-size: 11px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
-    color: #767676; margin-bottom: 10px;
+    color: var(--text-muted); margin-bottom: 10px;
   }
   .url-row { display: flex; gap: 8px; }
 
@@ -327,33 +327,33 @@
   .scan-btn {
     flex: 1; display: flex; flex-direction: column; align-items: center;
     gap: 2px; padding: 14px 10px;
-    background: #ffffff; border: 1px solid #c8c8c8;
+    background: #ffffff; border: 1px solid var(--border-strong);
     border-radius: 4px; cursor: pointer;
     transition: border-color 0.1s, background 0.1s;
     text-align: center;
   }
-  .scan-btn:hover { background: #f5f5f5; border-color: #aaa; }
-  .scan-active { border-color: #e03a00 !important; background: #fce8e2 !important; }
-  .scan-label { font-size: 13px; font-weight: 600; color: #212121; }
+  .scan-btn:hover { background: var(--surface-2); border-color: var(--text-dim); }
+  .scan-active { border-color: var(--accent) !important; background: var(--accent-soft) !important; }
+  .scan-label { font-size: 13px; font-weight: 600; color: var(--text); }
   .scan-desc  { font-size: 11px; }
 
   .btn-orange {
-    background: #e03a00; color: #fff;
+    background: var(--accent); color: #fff;
     border: none; border-radius: 3px;
     padding: 5px 16px; font-size: 13px; cursor: pointer;
   }
-  .btn-orange:hover:not(:disabled) { background: #c73400; }
+  .btn-orange:hover:not(:disabled) { background: var(--accent-hover); }
   .btn-orange:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .tab-badge {
     display: inline-block;
-    background: #e03a00; color: #fff;
+    background: var(--accent); color: #fff;
     border-radius: 8px; font-size: 10px;
     padding: 0 5px; margin-left: 4px;
   }
 
   .scan-card {
-    background: #fafafa; border: 1px solid #dedede;
+    background: var(--surface-1); border: 1px solid var(--border);
     border-radius: 4px; padding: 12px 14px;
     margin-bottom: 8px;
   }
@@ -361,19 +361,19 @@
     display: flex; align-items: center; gap: 8px;
     flex-wrap: wrap; margin-bottom: 6px;
   }
-  .scan-url { font-size: 13px; color: #212121; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scan-url { font-size: 13px; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scan-type-badge {
     font-size: 10px; text-transform: uppercase;
-    background: #f0f0f0; color: #767676;
+    background: var(--surface-2); color: var(--text-muted);
     padding: 2px 6px; border-radius: 3px;
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border-strong);
   }
   .scan-status { font-size: 12px; font-weight: 600; }
   .status-done    { color: #1b8c1b; }
   .status-running { color: #c98a00; }
   .status-error   { color: #d42c2c; }
   .scan-issues { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
-  .iss-name { color: #444; }
+  .iss-name { color: var(--text-2); }
 
   .empty-state {
     flex: 1; display: flex; flex-direction: column;
@@ -381,22 +381,22 @@
     gap: 10px; padding: 60px; text-align: center;
   }
 
-  .preset-sel { padding: 5px 8px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 13px; min-width: 200px; }
+  .preset-sel { padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 13px; min-width: 200px; }
   .cfg-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
-  .cfg-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #767676; }
+  .cfg-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
   .cfg-row label.check { flex-direction: row; align-items: center; gap: 5px; }
-  .cfg-row input[type="number"] { width: 100px; padding: 4px 6px; border: 1px solid #c8c8c8; border-radius: 3px; }
+  .cfg-row input[type="number"] { width: 100px; padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: 3px; }
   .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 14px; }
-  .check-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #444; }
-  .btn-import { background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; padding: 5px 14px; font-size: 13px; cursor: pointer; margin-left: 8px; }
-  .btn-import:hover { background: #e4e4e4; }
-  .spec-area { width: 100%; box-sizing: border-box; min-height: 120px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid #c8c8c8; border-radius: 3px; resize: vertical; }
+  .check-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+  .btn-import { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; padding: 5px 14px; font-size: 13px; cursor: pointer; margin-left: 8px; }
+  .btn-import:hover { background: var(--surface-3); }
+  .spec-area { width: 100%; box-sizing: border-box; min-height: 120px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 3px; resize: vertical; }
   .import-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-  .import-row input { padding: 5px 9px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 13px; }
+  .import-row input { padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 13px; }
   .imp-err { color: #d42c2c; font-size: 12px; margin-top: 6px; }
-  .imp-results { margin-top: 10px; max-height: 240px; overflow: auto; border: 1px solid #eee; border-radius: 4px; }
+  .imp-results { margin-top: 10px; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
   .imp-req { display: flex; gap: 8px; align-items: center; padding: 3px 8px; border-bottom: 1px solid #f2f2f2; font-size: 12px; }
   .imp-method { font-weight: 700; color: #2e6fae; min-width: 52px; }
-  .imp-url { font-family: ui-monospace, Consolas, monospace; color: #333; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-url { font-family: ui-monospace, Consolas, monospace; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .imp-tags { font-size: 11px; }
 </style>

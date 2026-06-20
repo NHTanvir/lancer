@@ -74,20 +74,20 @@
 
 <style>
   .view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  .toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f5f5f5; border-bottom: 1px solid #dedede; flex-wrap: wrap; }
-  .search { flex: 0 0 280px; padding: 5px 9px; border: 1px solid #c8c8c8; border-radius: 3px; font-size: 13px; }
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .search { flex: 0 0 280px; padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 13px; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .chip { font-size: 10px; padding: 3px 9px; border: 1px solid #d0d0d0; border-radius: 12px; background: #fff; color: #555; cursor: pointer; }
-  .chip.active { background: #e03a00; color: #fff; border-color: #e03a00; }
+  .chip { font-size: 10px; padding: 3px 9px; border: 1px solid #d0d0d0; border-radius: 12px; background: #fff; color: var(--text-2); cursor: pointer; }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .table-wrap { flex: 1; overflow: auto; min-height: 0; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
-  .data-table thead th { background: #f5f5f5; color: #767676; font-size: 11px; font-weight: 600; position: sticky; top: 0; }
-  .row-even { background: #fafafa; }
+  .data-table th, .data-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .data-table thead th { background: var(--surface-2); color: var(--text-muted); font-size: 11px; font-weight: 600; position: sticky; top: 0; }
+  .row-even { background: var(--surface-1); }
   .cat { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #2e6fae; }
-  .pl { font-family: ui-monospace, Consolas, monospace; color: #c73400; word-break: break-all; }
-  .sm-btn { font-size: 11px; padding: 2px 7px; background: #f0f0f0; color: #333; border: 1px solid #c8c8c8; border-radius: 3px; cursor: pointer; margin-left: 2px; }
-  .sm-btn:hover { background: #e4e4e4; }
-  .empty { text-align: center; padding: 30px; color: #888; }
-  .dim { color: #888; }
+  .pl { font-family: ui-monospace, Consolas, monospace; color: var(--accent-hover); word-break: break-all; }
+  .sm-btn { font-size: 11px; padding: 2px 7px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; margin-left: 2px; }
+  .sm-btn:hover { background: var(--surface-3); }
+  .empty { text-align: center; padding: 30px; color: var(--text-muted); }
+  .dim { color: var(--text-muted); }
 </style>
