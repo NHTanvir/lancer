@@ -74,7 +74,9 @@ pub async fn simulate(
         }
         let delay = {
             let mut rng = rand::thread_rng();
-            rng.gen_range(config.min_delay_ms..=config.max_delay_ms)
+            let lo = config.min_delay_ms.min(config.max_delay_ms);
+            let hi = config.min_delay_ms.max(config.max_delay_ms);
+            rng.gen_range(lo..=hi)
         };
         tokio::time::sleep(Duration::from_millis(delay)).await;
 

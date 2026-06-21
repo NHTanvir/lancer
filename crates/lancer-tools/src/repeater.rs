@@ -133,12 +133,22 @@ impl Repeater {
                         }
                     }
                 };
-                let mut next = HttpRequest::builder("GET", target.as_str())?;
+                // 307/308 MUST preserve the original method AND body; 301/302/303
+                // are coerced to a body-less GET (conventional browser behavior).
+                let preserve = matches!(resp.status, 307 | 308);
+                let method = if preserve { req.method.as_str() } else { "GET" };
+                let mut next = HttpRequest::builder(method, target.as_str())?;
                 for h in &req.headers {
                     if h.name.eq_ignore_ascii_case("host") || h.name.eq_ignore_ascii_case("content-length") {
                         continue;
                     }
                     next.set_header(&h.name, h.value.clone());
+                }
+                if preserve {
+                    next.body = req.body.clone();
+                    if !next.body.is_empty() {
+                        next.set_header("Content-Length", next.body.len().to_string());
+                    }
                 }
                 resp = self.client.send(&next).await?;
                 req = next;

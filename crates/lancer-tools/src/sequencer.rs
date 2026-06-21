@@ -123,7 +123,7 @@ fn runs_p_value(tokens: &[Vec<u8>]) -> f64 {
     }
     let expected = 2.0 * total_bits as f64 * pi * (1.0 - pi);
     let z = (transitions as f64 - expected).abs()
-        / (2.0 * (total_bits as f64).sqrt() * pi * (1.0 - pi));
+        / (2.0 * (2.0 * total_bits as f64).sqrt() * pi * (1.0 - pi));
     erfc(z / 2f64.sqrt())
 }
 

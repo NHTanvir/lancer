@@ -105,34 +105,87 @@ pub fn generate_csrf_poc(req: &HttpRequest) -> CsrfPoc {
     use lancer_core::http_msg::MimeKind;
     let mut html = String::new();
     html.push_str("<!doctype html><html><body>\n");
-    html.push_str(&format!(
-        "<form name=\"csrf\" action=\"{}\" method=\"{}\" enctype=\"{}\">\n",
-        req.url(),
-        req.method.as_str(),
-        req.header("Content-Type").unwrap_or("application/x-www-form-urlencoded"),
-    ));
     let mime = req
         .header("Content-Type")
         .map(MimeKind::from_content_type)
         .unwrap_or(MimeKind::FormUrlEncoded);
-    if matches!(mime, MimeKind::FormUrlEncoded) {
-        if let Ok(body) = std::str::from_utf8(&req.body) {
-            for pair in body.split('&') {
-                if let Some((k, v)) = pair.split_once('=') {
-                    html.push_str(&format!(
-                        "  <input type=\"hidden\" name=\"{}\" value=\"{}\" />\n",
-                        html_escape(k),
-                        html_escape(v),
-                    ));
+    // Use a canonical enctype keyword — never the raw Content-Type header, whose
+    // `; boundary=...` suffix is an invalid HTML form enctype.
+    let enctype = match mime {
+        MimeKind::Multipart => "multipart/form-data",
+        _ => "application/x-www-form-urlencoded",
+    };
+    html.push_str(&format!(
+        "<form name=\"csrf\" action=\"{}\" method=\"{}\" enctype=\"{}\">\n",
+        req.url(),
+        req.method.as_str(),
+        enctype,
+    ));
+    match mime {
+        MimeKind::FormUrlEncoded => {
+            if let Ok(body) = std::str::from_utf8(&req.body) {
+                for pair in body.split('&') {
+                    if let Some((k, v)) = pair.split_once('=') {
+                        // Values in the wire body are percent-encoded; decode so the
+                        // browser re-encodes them back to the original form on submit.
+                        let dk = decode_form_component(k);
+                        let dv = decode_form_component(v);
+                        html.push_str(&format!(
+                            "  <input type=\"hidden\" name=\"{}\" value=\"{}\" />\n",
+                            html_escape(&dk),
+                            html_escape(&dv),
+                        ));
+                    }
                 }
             }
         }
+        MimeKind::Multipart => {
+            if let Some(boundary) = req
+                .header("Content-Type")
+                .and_then(|ct| ct.split("boundary=").nth(1))
+                .map(|b| b.trim().trim_matches('"').to_string())
+            {
+                if let Ok(body) = std::str::from_utf8(&req.body) {
+                    let delim = format!("--{}", boundary);
+                    for part in body.split(&delim) {
+                        let part = part.trim_start_matches("\r\n");
+                        // split headers / value on the first blank line
+                        if let Some((headers, value)) = part.split_once("\r\n\r\n") {
+                            // only simple form-data text parts (no filename)
+                            let lower = headers.to_ascii_lowercase();
+                            if lower.contains("filename=") {
+                                continue;
+                            }
+                            if let Some(name) = headers
+                                .split("name=")
+                                .nth(1)
+                                .and_then(|s| s.split('"').nth(1))
+                            {
+                                let value = value.trim_end_matches("\r\n");
+                                html.push_str(&format!(
+                                    "  <input type=\"hidden\" name=\"{}\" value=\"{}\" />\n",
+                                    html_escape(name),
+                                    html_escape(value),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
     }
     html.push_str("  <input type=\"submit\" value=\"Submit\" />\n");
     html.push_str("</form>\n");
     html.push_str("<script>document.forms.csrf.submit();</script>\n");
     html.push_str("</body></html>\n");
     CsrfPoc { html }
+}
+
+fn decode_form_component(s: &str) -> String {
+    // application/x-www-form-urlencoded uses '+' for space.
+    let s = s.replace('+', " ");
+    percent_encoding::percent_decode_str(&s).decode_utf8_lossy().into_owned()
 }
 
 fn html_escape(s: &str) -> String {
@@ -200,7 +253,10 @@ pub async fn discover_content(
     let sem = Arc::new(Semaphore::new(concurrency.max(1)));
     let mut handles = Vec::new();
     for word in wordlist {
-        let candidate = base_url.join(&word)?;
+        let candidate = match base_url.join(&word) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
         let permit = sem.clone().acquire_owned().await?;
         let client = client.clone();
         handles.push(tokio::spawn(async move {

@@ -88,57 +88,74 @@ impl Crawler {
         let sem = Arc::new(Semaphore::new(self.config.concurrency.max(1)));
         let mut count = 0usize;
 
-        while let Some((url, depth)) = queue.pop_front() {
-            if count >= self.config.max_pages {
-                break;
-            }
-            let req = match HttpRequest::builder("GET", &url) {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            if !self.scope.read().is_in_scope(&req) {
-                continue;
-            }
+        let limit = self.config.concurrency.max(1);
+        // Each task returns the source url+depth alongside (found, fingerprint)
+        // so the consumer can update state as tasks complete.
+        let mut tasks: tokio::task::JoinSet<Option<(String, usize, Vec<String>, String)>> =
+            tokio::task::JoinSet::new();
 
-            let permit = sem.clone().acquire_owned().await?;
-            let client = self.client.clone();
-            let throttle = self.config.throttle_ms;
-            let url_clone = url.clone();
-            let entry_host = url::Url::parse(entry_url)
-                .ok()
-                .and_then(|u| u.host_str().map(|s| s.to_string()));
-            let follow_subs = self.config.follow_subdomains;
-            let include_scripts = self.config.include_scripts;
-            let sink2 = sink.clone();
-            let handle = tokio::spawn(async move {
-                let _permit = permit;
-                if throttle > 0 {
-                    tokio::time::sleep(Duration::from_millis(throttle)).await;
+        loop {
+            // Fill up to `limit` in-flight fetches from the queue.
+            while tasks.len() < limit {
+                if count >= self.config.max_pages {
+                    break;
                 }
-                let resp = client.send(&req).await.ok()?;
-                let body = resp.body_text().unwrap_or("").to_string();
-                let fingerprint = location_fingerprint(&body, resp.status);
-                sink2.observed(&req, &resp).await;
-                let mut found = Vec::new();
-                for href in find_anchors(&body, &url_clone) {
-                    if same_host(&href, entry_host.as_deref(), follow_subs) {
-                        found.push(href);
+                let Some((url, depth)) = queue.pop_front() else {
+                    break;
+                };
+                let req = match HttpRequest::builder("GET", &url) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                };
+                if !self.scope.read().is_in_scope(&req) {
+                    continue;
+                }
+
+                let permit = sem.clone().acquire_owned().await?;
+                let client = self.client.clone();
+                let throttle = self.config.throttle_ms;
+                let url_clone = url.clone();
+                let entry_host = url::Url::parse(entry_url)
+                    .ok()
+                    .and_then(|u| u.host_str().map(|s| s.to_string()));
+                let follow_subs = self.config.follow_subdomains;
+                let include_scripts = self.config.include_scripts;
+                let sink2 = sink.clone();
+                count += 1;
+                tasks.spawn(async move {
+                    let _permit = permit;
+                    if throttle > 0 {
+                        tokio::time::sleep(Duration::from_millis(throttle)).await;
                     }
-                }
-                if include_scripts {
-                    for src in find_scripts(&body, &url_clone) {
-                        if same_host(&src, entry_host.as_deref(), follow_subs) {
-                            found.push(src);
+                    let resp = client.send(&req).await.ok()?;
+                    let body = resp.body_text().unwrap_or("").to_string();
+                    let fingerprint = location_fingerprint(&body, resp.status);
+                    sink2.observed(&req, &resp).await;
+                    let mut found = Vec::new();
+                    for href in find_anchors(&body, &url_clone) {
+                        if same_host(&href, entry_host.as_deref(), follow_subs) {
+                            found.push(href);
                         }
                     }
-                }
-                Some((found, fingerprint))
-            });
-            count += 1;
-            let (next, fingerprint) = match handle.await.ok().flatten() {
-                Some(x) => x,
-                None => continue,
+                    if include_scripts {
+                        for src in find_scripts(&body, &url_clone) {
+                            if same_host(&src, entry_host.as_deref(), follow_subs) {
+                                found.push(src);
+                            }
+                        }
+                    }
+                    Some((url_clone, depth, found, fingerprint))
+                });
+            }
+
+            // Nothing running and nothing queued (or page cap hit) -> done.
+            let Some(joined) = tasks.join_next().await else {
+                break;
             };
+            let Some((url, depth, next, fingerprint)) = joined.ok().flatten() else {
+                continue;
+            };
+
             // Skip queuing children if we've already seen the same response
             // shape under a different URL — this is the "Location
             // fingerprinting" item from plan.md §5.1.

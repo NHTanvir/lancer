@@ -49,6 +49,7 @@ pub async fn audit(
 
     if let Some(cookie) = &cfg.low_priv_cookie {
         let mut r = base.clone();
+        r.remove_header("Authorization");
         r.set_header("Cookie", cookie.clone());
         let resp = client.send(&r).await?;
         low_priv_status = Some(resp.status);

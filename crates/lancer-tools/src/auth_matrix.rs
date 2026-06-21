@@ -43,16 +43,18 @@ pub async fn run(
         let mut row: BTreeMap<String, MatrixCell> = BTreeMap::new();
         for id in identities {
             let mut r = req.clone();
-            match (&id.cookie, &id.authorization) {
-                (Some(c), _) if c.is_empty() => {
-                    r.remove_header("Cookie");
-                    r.remove_header("Authorization");
+            // Never inherit credentials from the captured request or a prior identity.
+            r.remove_header("Cookie");
+            r.remove_header("Authorization");
+            if let Some(c) = &id.cookie {
+                if !c.is_empty() {
+                    r.set_header("Cookie", c.clone());
                 }
-                (Some(c), _) => r.set_header("Cookie", c.clone()),
-                _ => {}
             }
             if let Some(a) = &id.authorization {
-                r.set_header("Authorization", a.clone());
+                if !a.is_empty() {
+                    r.set_header("Authorization", a.clone());
+                }
             }
             let resp = client.send(&r).await.unwrap_or_else(|_| HttpResponse::new(0));
             row.insert(id.name.clone(), MatrixCell { status: resp.status, length: resp.body.len() });

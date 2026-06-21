@@ -25,6 +25,7 @@ http-body-util.workspace = true
 parking_lot.workspace = true
 async-trait.workspace = true
 url.workspace = true
+percent-encoding.workspace = true
 sha2.workspace = true
 md-5.workspace = true
 hex.workspace = true

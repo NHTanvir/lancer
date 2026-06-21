@@ -169,25 +169,24 @@ impl Iterator for CharFrobberIter {
     type Item = String;
     fn next(&mut self) -> Option<String> {
         while self.pos < self.base.len() {
-            let mut out = self.base.clone();
-            let b = self.base[self.pos] as i16;
+            let target = self.pos;
+            let b = self.base[target] as i16;
             let n = b + self.delta;
+
+            // step delta -1 -> 1 -> reset, skipping the no-op 0
+            if self.delta < 1 {
+                self.delta = 1;
+            } else {
+                self.delta = -1;
+                self.pos += 1;
+            }
+
             if (0..=255).contains(&n) {
-                out[self.pos] = n as u8;
-                self.delta += 1;
-                if self.delta > 1 {
-                    self.delta = -1;
-                    self.pos += 1;
-                }
+                let mut out = self.base.clone();
+                out[target] = n as u8;
                 if let Ok(s) = String::from_utf8(out) {
                     return Some(s);
                 }
-                continue;
-            }
-            self.delta += 1;
-            if self.delta > 1 {
-                self.delta = -1;
-                self.pos += 1;
             }
         }
         None
@@ -566,8 +565,11 @@ mod tests {
 
     #[test]
     fn sniper_spreads_one_set() {
+        use crate::positions::DEFAULT_MARKER;
+        let req = HttpRequest::builder("GET", "https://x.com/§a§/§b§/§c§").unwrap();
+        let template = ParsedTemplate::parse(req, DEFAULT_MARKER);
         let sets = vec![PayloadSet::Simple(vec!["X".into(), "Y".into()])];
-        let s = sniper_combos(3, sets).unwrap();
+        let s = sniper_combos(&template, sets).unwrap();
         assert_eq!(s.len(), 6); // 3 positions × 2 payloads
     }
 }
