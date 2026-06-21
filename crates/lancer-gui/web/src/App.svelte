@@ -128,7 +128,7 @@
     "ctrl+shift+l": "logger", "ctrl+shift+d": "decoder", "ctrl+shift+m": "theme",
   };
   let hotkeys = { ...DEFAULT_HOTKEYS };
-  try { const s = localStorage.getItem("lancer.hotkeys"); if (s) hotkeys = JSON.parse(s); } catch {}
+  try { const s = localStorage.getItem("lancer.hotkeys"); if (s) hotkeys = { ...DEFAULT_HOTKEYS, ...JSON.parse(s) }; } catch {}
   let showHotkeys = false;
   let workspaces = [];
   try { workspaces = JSON.parse(localStorage.getItem("lancer.workspaces") || "[]"); } catch {}

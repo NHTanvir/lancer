@@ -522,7 +522,7 @@
     {#if rows[0].input}
       <div class="info-footer dim" style="font-size:12px;margin-top:6px">
         Input: {rows[0].input.length} chars
-        {#if rows[0].output && (rows[0].decodeOp || rows[0].encodeOp)} · Output: {rows[0].output.length} chars{/if}
+        {#if rows[0].output && rows[0].opLabel} · Output: {rows[0].output.length} chars{/if}
       </div>
     {/if}
   </div>

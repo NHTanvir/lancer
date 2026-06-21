@@ -95,18 +95,18 @@
 
   async function saveFinding() {
     saving = true;
-    const entry = {
-      id: "f" + Date.now(),
+    const payload = {
       title: nfTitle, severity: nfSeverity, cvss: nfCvss,
       program: nfProgram, endpoint: nfEndpoint, impact: nfImpact,
       repro: nfRepro, tags: nfTags, status: "draft",
       raw_request: nfRequest, raw_response: nfResponse,
-      created_at: new Date().toISOString(),
     };
+    let entry = { ...payload, created_at: new Date().toISOString() };
     try {
-      await fetch("/api/v1/findings", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(entry) });
+      const r = await fetch("/api/v1/findings", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(payload) });
+      if (r.ok) { const { id } = await r.json(); entry = { ...entry, id }; }
     } catch {}
-    findings = [entry, ...findings];
+    if (entry.id) findings = [entry, ...findings];
     showNewDialog = false;
     nfTitle=""; nfSeverity="High"; nfCvss=""; nfProgram=""; nfEndpoint="";
     nfImpact=""; nfRepro=""; nfTags=""; nfRequest=""; nfResponse="";
@@ -137,7 +137,8 @@
       if (r.ok) {
         const blob = await r.blob();
         const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-        a.download = `findings-${exportFmt}.${exportFmt === "json" ? "json" : "md"}`;
+        const ext = exportFmt === "json" ? "json" : "md";
+        a.download = `findings-${exportFmt}.${ext}`;
         a.click();
       } else {
         const data = JSON.stringify(filtered, null, 2);
@@ -203,7 +204,6 @@
             <option value="hackerone">HackerOne MD</option>
             <option value="bugcrowd">Bugcrowd MD</option>
             <option value="intigriti">Intigriti MD</option>
-            <option value="pdf">PDF</option>
             <option value="json">JSON</option>
           </select>
           <button class="btn-export" on:click={exportFindings}>Export</button>

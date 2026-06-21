@@ -92,10 +92,20 @@
     scanning = true;
     const endpoint = scanType === "full" ? "full" : scanType === "passive" ? "passive" : "active";
     try {
+      let body;
+      if (endpoint === "active") {
+        const u = new URL(url);
+        const path = (u.pathname || "/") + (u.search || "");
+        const wire = `GET ${path} HTTP/1.1\r\nHost: ${u.host}\r\n\r\n`;
+        const scheme = u.protocol.replace(":", "");
+        body = JSON.stringify({ request: wire, scheme });
+      } else {
+        body = JSON.stringify({ url });
+      }
       const r = await fetch(`/api/v1/scan/${endpoint}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
+        body,
       });
       const data = await r.json();
       queue = [

@@ -67,22 +67,6 @@
     selectedIndex = Math.min(selectedIndex, plugins.length - 1);
   }
 
-  function moveUp() {
-    if (selectedIndex <= 0) return;
-    const arr = [...plugins];
-    [arr[selectedIndex - 1], arr[selectedIndex]] = [arr[selectedIndex], arr[selectedIndex - 1]];
-    plugins = arr;
-    selectedIndex = selectedIndex - 1;
-  }
-
-  function moveDown() {
-    if (selectedIndex < 0 || selectedIndex >= plugins.length - 1) return;
-    const arr = [...plugins];
-    [arr[selectedIndex], arr[selectedIndex + 1]] = [arr[selectedIndex + 1], arr[selectedIndex]];
-    plugins = arr;
-    selectedIndex = selectedIndex + 1;
-  }
-
   function triggerAdd() {
     if (fileInput) fileInput.click();
   }
@@ -208,8 +192,6 @@
         <div class="side-btns">
           <button class="side-btn" on:click={triggerAdd}>Add</button>
           <button class="side-btn" on:click={removePlugin} disabled={selectedIndex < 0}>Remove</button>
-          <button class="side-btn" on:click={moveUp}   disabled={selectedIndex <= 0}>Up</button>
-          <button class="side-btn" on:click={moveDown} disabled={selectedIndex < 0 || selectedIndex >= plugins.length - 1}>Down</button>
         </div>
 
         <!-- Plugin table -->
@@ -535,7 +517,7 @@
   bind:this={fileInput}
   type="file"
   style="display:none"
-  accept=".rhai,.wasm,.lua,.py,.dll,.so,.dylib,.jar,.zip"
+  accept=".toml"
   on:change={onFileSelected}
 />
 

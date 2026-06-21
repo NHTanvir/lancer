@@ -47,7 +47,7 @@
   }
   function clearMarkers() { requestTemplate = requestTemplate.replace(/§/g,""); }
   function autoMarkers()  {
-    requestTemplate = requestTemplate.replace(/=([^&\r\n§]+)/g, (_,val) => `=§${val.replace(/§/g,"")}§`);
+    requestTemplate = requestTemplate.replace(/=([^&\s§]+)/g, (_,val) => `=§${val.replace(/§/g,"")}§`);
   }
 
   // Payloads
@@ -66,7 +66,7 @@
   // Null payloads
   let nullMode="count"; let nullCount="10";
   // Case modification
-  let caseMod="Uppercase first letter";
+  let caseMod="Uppercase first letter"; let caseModBase="admin";
   // Dates
   let dateFrom="2024-01-01"; let dateTo="2024-12-31"; let dateFmt="yyyy-MM-dd";
   // Username / char sub
@@ -204,6 +204,7 @@
         const p = JSON.parse(raw);
         if (p.scheme) scheme=p.scheme; if (p.host) host=p.host;
         if (p.port) port=String(p.port); if (p.raw) { requestTemplate=p.raw; originalTemplate=p.raw; }
+        if (p.payloadText != null) payloadText=p.payloadText;
         requestLoaded=true; localStorage.removeItem("lancer.send.intruder"); subtab="positions";
       }
     } catch {}
@@ -227,7 +228,7 @@
         const lasts =userGenLasts.split("\n").map(s=>s.trim()).filter(Boolean);
         return { type:"usernamegenerator", firsts:firsts.length?firsts:[""], lasts:lasts.length?lasts:[""], sep:userGenSep||"." };
       }
-      case "Case modification": return { type:"casemodification", base:charSubBase||"" };
+      case "Case modification": return { type:"casemodification", base:caseModBase||"" };
       case "Character frobber": return { type:"charfrobber", base:frobberBase||"" };
       case "Bit flipper": return { type:"bitflipper", base:bitFlipBase||"" };
       default: return null;
@@ -527,6 +528,10 @@
                   <option>Initial caps, lowercase rest</option>
                   <option>Toggle case</option>
                 </select>
+              </div>
+              <div class="ps-row" style="margin-top:8px">
+                <label class="ps-label">Base string:</label>
+                <input type="text" class="add-item-input" style="flex:1" bind:value={caseModBase} placeholder="e.g. admin" />
               </div>
 
             {:else if payloadType === "Username generator"}

@@ -20,15 +20,19 @@
   function copy(p) { navigator.clipboard.writeText(p.payload).catch(() => {}); }
   function sendToRepeater(p) {
     try {
-      localStorage.setItem("lancer.send.repeater", JSON.stringify({
-        raw: `GET /?q=${encodeURIComponent(p.payload)} HTTP/1.1\r\nHost: target.com\r\n\r\n`,
-      }));
+      const request = `GET /?q=${encodeURIComponent(p.payload)} HTTP/1.1\r\nHost: target.com\r\n\r\n`;
+      const payload = { request, raw: request, scheme: "http", host: "target.com", port: 80 };
+      localStorage.setItem("lancer.send.repeater", JSON.stringify(payload));
+      localStorage.setItem("repeater_prefill", JSON.stringify(payload));
       window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "repeater" }));
     } catch {}
   }
   function sendToIntruder(p) {
     try {
-      localStorage.setItem("lancer.send.intruder", JSON.stringify({ payload: p.payload }));
+      localStorage.setItem("lancer.send.intruder", JSON.stringify({
+        raw: `GET /?q=§${p.payload}§ HTTP/1.1\r\nHost: target.com\r\n\r\n`,
+        payloadText: p.payload,
+      }));
       window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "intruder" }));
     } catch {}
   }

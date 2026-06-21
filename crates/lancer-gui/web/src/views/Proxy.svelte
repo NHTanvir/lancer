@@ -16,6 +16,11 @@
       const existing = JSON.parse(localStorage.getItem("lancer.send.comparer") || "{}");
       if (!existing.item1) existing.item1 = raw; else existing.item2 = raw;
       localStorage.setItem("lancer.send.comparer", JSON.stringify(existing));
+    } else if (tab === "repeater") {
+      const host = selectedPaused?.request?.meta?.host || selectedPaused?.host;
+      const payload = { request: raw, raw, host };
+      localStorage.setItem("repeater_prefill", JSON.stringify(payload));
+      localStorage.setItem("lancer.send.repeater", JSON.stringify(payload)); // keep for consistency
     } else {
       localStorage.setItem(`lancer.send.${tab}`, JSON.stringify({ raw }));
     }
@@ -191,7 +196,8 @@
 
   function ctxSendToRepeater() {
     if (!ctxMenu) return;
-    const payload = payloadFromRow(ctxMenu.row);
+    const base = payloadFromRow(ctxMenu.row);
+    const payload = { ...base, request: base.raw };
     localStorage.setItem("repeater_prefill", JSON.stringify(payload));
     localStorage.setItem("lancer.send.repeater", JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "repeater" }));

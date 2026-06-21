@@ -65,7 +65,7 @@
     if (hideErrorsF) out = out.filter(r => { const s = parseInt(r.status, 10) || 0; return s < 400; });
     if (noteF) {
       const nf = noteF.toLowerCase();
-      out = out.filter(r => (r.notes || "").toLowerCase().includes(nf));
+      out = out.filter(r => (r.comment || "").toLowerCase().includes(nf));
     }
     if (mimeShowF && MIME_GROUPS.some(g => !mimeShowF[g])) {
       out = out.filter(r => mimeShowF[mimeGroupOf(r)] !== false);
@@ -90,8 +90,8 @@
       case "length": return responseLength(e);
       case "mime":   return mimeOf(e) || "";
       case "title":  return titleOf(e) || "";
-      case "time":   return e.ts || e.timestamp || 0;
-      case "notes":  return e.notes || "";
+      case "time":   return e.captured_at || 0;
+      case "notes":  return e.comment || "";
       default:       return "";
     }
   }
@@ -130,13 +130,13 @@
     if (typeof e.length === "number") return e.length;
     const cl = findHeader(e.response?.headers, "content-length");
     if (cl) return parseInt(cl, 10) || 0;
-    const body = bytesToText(e.body || e.response_body);
+    const body = bytesToText(e.response?.body);
     return body ? body.length : 0;
   }
 
   function titleOf(e) {
     if (e.title) return e.title;
-    const body = bytesToText(e.body || e.response_body);
+    const body = bytesToText(e.response?.body);
     if (!body) return "";
     const m = body.match(/<title[^>]*>([^<]*)<\/title>/i);
     return m ? m[1].trim() : "";
@@ -304,7 +304,7 @@
   function ctxSendToDecoder() {
     if (!ctxMenu) return;
     const e = ctxMenu.entry;
-    const text = e.body || e.response_body || formatResponse(e);
+    const text = bytesToText(e.response?.body) || formatResponse(e);
     localStorage.setItem("lancer.send.decoder", JSON.stringify({ input: text }));
     window.dispatchEvent(new CustomEvent("lancer:navigate", { detail: "decoder" }));
     closeCtx();
@@ -459,7 +459,7 @@
 
   function ctxFindComments() {
     const e = engEntry(); if (!e) return;
-    const body = bytesToText(e.body || e.response_body), url = engUrl(e);
+    const body = bytesToText(e.response?.body), url = engUrl(e);
     eng("HTML/JS comments", async () => {
       const r = await fetch("/api/v1/engagement/find-comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, body }) });
       return { kind: "list", data: await r.json() };
@@ -467,7 +467,7 @@
   }
   function ctxFindScripts() {
     const e = engEntry(); if (!e) return;
-    const body = bytesToText(e.body || e.response_body), base_url = engUrl(e);
+    const body = bytesToText(e.response?.body), base_url = engUrl(e);
     eng("Referenced scripts", async () => {
       const r = await fetch("/api/v1/engagement/find-scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ base_url, body }) });
       return { kind: "list", data: await r.json() };
@@ -523,6 +523,22 @@
 
   function formatRequest(e) {
     if (e.raw_request) return e.raw_request;
+    const req = e.request;
+    if (req && Array.isArray(req.headers)) {
+      const method = e.method || req.method || "GET";
+      const path = req.path || e.path || "/";
+      const version = req.version === "Http10" ? "HTTP/1.0" : "HTTP/1.1";
+      let out = `${method} ${path} ${version}\r\n`;
+      let hasHost = false;
+      for (const h of req.headers) {
+        if ((h.name || "").toLowerCase() === "host") hasHost = true;
+        out += `${h.name}: ${h.value}\r\n`;
+      }
+      if (!hasHost && (e.host || req.host)) out += `Host: ${e.host || req.host}\r\n`;
+      out += "\r\n";
+      out += bytesToText(req.body);
+      return out;
+    }
     const method = e.method || "GET";
     const path = e.path || "/";
     const host = e.host || "";
@@ -532,7 +548,7 @@
   function formatResponse(e) {
     if (e.raw_response) return e.raw_response;
     const status = e.status || "?";
-    const body = e.body || e.response_body || "";
+    const body = bytesToText(e.response?.body) || "";
     return `HTTP/1.1 ${status}\r\n\r\n${body}`;
   }
 
@@ -1006,8 +1022,8 @@
                       <td class="cell-num">{responseLength(e) || ""}</td>
                       <td class="cell-mime dim">{mimeOf(e)}</td>
                       <td class="cell-title dim" title={titleOf(e)}>{titleOf(e)}</td>
-                      <td class="cell-time dim">{fmtTime(e.ts || e.timestamp)}</td>
-                      <td class="cell-notes dim">{e.notes || ""}</td>
+                      <td class="cell-time dim">{fmtTime(e.captured_at)}</td>
+                      <td class="cell-notes dim">{e.comment || ""}</td>
                     </tr>
                   {/each}
                 </tbody>
@@ -1056,7 +1072,7 @@
                     title="Rendered response"
                     sandbox=""
                     class="render-frame"
-                    srcdoc={bytesToText(selectedEntry.body || selectedEntry.response_body) || ""}
+                    srcdoc={bytesToText(selectedEntry.response?.body) || ""}
                   ></iframe>
                 {:else}
                   <pre class="editor">{formatResponse(selectedEntry)}</pre>

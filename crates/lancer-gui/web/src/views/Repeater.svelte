@@ -167,6 +167,8 @@
   }
 
   // ── Parsers ───────────────────────────────────────────────────────────────────
+  const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+
   function parseInspector(raw) {
     const lines = raw.split(/\r?\n/);
     const firstLine = lines[0] || "";
@@ -183,8 +185,10 @@
     if (fullPath.includes("?")) {
       const qs = fullPath.split("?")[1] || "";
       for (const pair of qs.split("&")) {
-        const [k, v] = pair.split("=");
-        if (k) queryParams.push({ name: decodeURIComponent(k || ""), value: decodeURIComponent(v || "") });
+        const eq = pair.indexOf("=");
+        const k = eq < 0 ? pair : pair.slice(0, eq);
+        const v = eq < 0 ? "" : pair.slice(eq + 1);
+        if (k) queryParams.push({ name: safeDecode(k), value: safeDecode(v) });
       }
     }
 
@@ -212,8 +216,10 @@
     const bodyParams = [];
     if (body && headers.some(h => h.name.toLowerCase() === "content-type" && h.value.includes("urlencoded"))) {
       for (const pair of body.split("&")) {
-        const [k, v] = pair.split("=");
-        if (k) bodyParams.push({ name: decodeURIComponent(k || ""), value: decodeURIComponent(v || "") });
+        const eq = pair.indexOf("=");
+        const k = eq < 0 ? pair : pair.slice(0, eq);
+        const v = eq < 0 ? "" : pair.slice(eq + 1);
+        if (k) bodyParams.push({ name: safeDecode(k), value: safeDecode(v) });
       }
     }
 
@@ -477,7 +483,7 @@
       tabs = tabs;
       tabStates = tabStates;
     } catch (e) {
-      tabStates[activeTab].response = cancelled ? "(request cancelled)" : `Error: ${e.message || e}`;
+      s.response = cancelled ? "(request cancelled)" : `Error: ${e.message || e}`;
       tabStates = tabStates;
     } finally {
       sending = false;
@@ -625,8 +631,10 @@
       // Fall back to url-encoded pairs.
       if (!params.length && trimmed.includes("=")) {
         for (const pair of trimmed.split("&")) {
-          const [k, v] = pair.split("=");
-          if (k) params.push({ name: decodeURIComponent(k), value: decodeURIComponent(v || "") });
+          const eq = pair.indexOf("=");
+          const k = eq < 0 ? pair : pair.slice(0, eq);
+          const v = eq < 0 ? "" : pair.slice(eq + 1);
+          if (k) params.push({ name: safeDecode(k), value: safeDecode(v) });
         }
       }
     }

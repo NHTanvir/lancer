@@ -127,11 +127,6 @@ fn locate_api() -> Result<PathBuf> {
     if candidate.exists() {
         return Ok(candidate);
     }
-    // Dev fallback: target/debug or target/release sibling
-    let dev = dir.join(exe_name);
-    if dev.exists() {
-        return Ok(dev);
-    }
     // Last resort: search PATH
     Ok(PathBuf::from(exe_name))
 }

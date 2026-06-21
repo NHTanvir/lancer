@@ -62,15 +62,19 @@
     return String(b);
   }
 
+  function wireVersion(v) {
+    return ({ Http09: "HTTP/0.9", Http10: "HTTP/1.0", Http11: "HTTP/1.1", Http2: "HTTP/2", Http3: "HTTP/3" })[v] || v || "HTTP/1.1";
+  }
+
   function formatRequest(req) {
     if (!req) return "";
-    const ver = req.version === "Http2" ? "HTTP/2" : "HTTP/1.1";
+    const ver = wireVersion(req.version);
     const hdrs = (req.headers || []).map(h => `${h.name}: ${h.value}`).join("\n");
     return `${req.method || "GET"} ${req.path || "/"} ${ver}\n${hdrs}\n\n${bytesToText(req.body)}`;
   }
   function formatResponse(resp) {
     if (!resp) return "";
-    const ver = resp.version === "Http2" ? "HTTP/2" : "HTTP/1.1";
+    const ver = wireVersion(resp.version);
     const hdrs = (resp.headers || []).map(h => `${h.name}: ${h.value}`).join("\n");
     return `${ver} ${resp.status || ""} ${resp.reason || ""}\n${hdrs}\n\n${bytesToText(resp.body)}`;
   }
@@ -237,14 +241,21 @@
   function renderMarkdown(src) {
     if (!src) return "";
     let s = escapeHtml(src);
-    // Fenced code blocks ```...```
-    s = s.replace(/```([\s\S]*?)```/g, (_, code) => `<pre class="md-pre">${code.replace(/\n$/, "")}</pre>`);
+    // Fenced code blocks ```...``` -> stash behind a placeholder so the
+    // per-line loop never splits or re-processes their (multi-line) content.
+    const blocks = [];
+    s = s.replace(/```([\s\S]*?)```/g, (_, code) => {
+      const token = `  MDPRE${blocks.length}  `;
+      blocks.push(`<pre class="md-pre">${code.replace(/^\n/, "").replace(/\n$/, "")}</pre>`);
+      return token;
+    });
     const lines = s.split(/\r?\n/);
     const out = [];
     let inList = false;
     for (let line of lines) {
       const h = /^(#{1,4})\s+(.*)$/.exec(line);
       const li = /^\s*[-*]\s+(.*)$/.exec(line);
+      const preTok = /^  MDPRE(\d+)  $/.exec(line);
       if (h) {
         if (inList) { out.push("</ul>"); inList = false; }
         const lvl = h[1].length;
@@ -255,9 +266,9 @@
       } else if (line.trim() === "") {
         if (inList) { out.push("</ul>"); inList = false; }
         out.push("");
-      } else if (/<pre class="md-pre">/.test(line)) {
+      } else if (preTok) {
         if (inList) { out.push("</ul>"); inList = false; }
-        out.push(line);
+        out.push(blocks[Number(preTok[1])]);
       } else {
         if (inList) { out.push("</ul>"); inList = false; }
         out.push(`<p class="md-p">${inline(line)}</p>`);

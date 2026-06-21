@@ -119,7 +119,9 @@
 
     // Display
     try {
-      theme = localStorage.getItem("lancer.theme") || "light";
+      // Prefer the raw choice sidecar ("system"/"dark"/"light"); fall back to
+      // the resolved value stored under "lancer.theme".
+      theme = localStorage.getItem("lancer.theme.mode") || localStorage.getItem("lancer.theme") || "light";
       fontSize = localStorage.getItem("lancer.fontSize") || "13px";
       fontFamily = localStorage.getItem("lancer.fontFamily") || "system";
       density = localStorage.getItem("lancer.density") || "comfortable";
@@ -329,7 +331,13 @@
   function applyTheme() {
     try {
       document.body.setAttribute("data-theme", resolveTheme(theme));
-      localStorage.setItem("lancer.theme", theme);
+      // App.svelte's initial-load only understands "dark"/"light" (it forces
+      // light for anything else), so persist the RESOLVED value under the key
+      // it reads to avoid a forced-light flash on full reload. The raw choice
+      // (which may be "system") is kept in a sidecar key so this view can
+      // restore the picker and re-attach the follow-OS listener on remount.
+      localStorage.setItem("lancer.theme", resolveTheme(theme));
+      localStorage.setItem("lancer.theme.mode", theme);
       // Track OS changes while in "system" mode.
       if (_mqlDark) {
         try { _mqlDark.removeEventListener("change", onSystemThemeChange); } catch {}

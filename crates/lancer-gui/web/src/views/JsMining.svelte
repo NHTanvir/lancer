@@ -14,20 +14,20 @@
   let filterFile = "";
   let filterSearch = "";
 
-  const TYPES = ["secret","endpoint","sink","source-map"];
+  const TYPES = ["secret","endpoint","sink","source_map"];
   const SEVS  = ["Critical","High","Medium","Low","Info"];
 
   const TYPE_COLOR = {
     secret:     "#d42c2c",
     endpoint:   "#1a75c4",
     sink:       "#e86c00",
-    "source-map": "#7b5ea7",
+    source_map: "#7b5ea7",
   };
   const TYPE_BG = {
     secret:     "#fde8e8",
     endpoint:   "#e6f0fb",
     sink:       "#fef0e6",
-    "source-map": "#f0ebfb",
+    source_map: "#f0ebfb",
   };
 
   function sevClass(s) {
@@ -64,7 +64,7 @@
         { id:"j4", type:"endpoint",  severity:"Info",     file:"https://target.com/static/app.bundle.js", line:2140, snippet:'axios.post("/api/internal/payments",p)', endpoint:"/api/internal/payments", method:"POST", found_at: new Date(Date.now()-60000*2).toISOString() },
         { id:"j5", type:"sink",      severity:"High",     file:"https://target.com/static/app.bundle.js", line:987,  snippet:'document.getElementById("msg").innerHTML=u', sink:"innerHTML", source:"url param", found_at: new Date(Date.now()-60000).toISOString() },
         { id:"j6", type:"sink",      severity:"Medium",   file:"https://target.com/static/chunk.3f8a.js",  line:128,  snippet:'eval(data.userScript)', sink:"eval", source:"response data", found_at: new Date().toISOString() },
-        { id:"j7", type:"source-map",severity:"Info",     file:"https://target.com/static/app.bundle.js.map", line:1, snippet:"webpack source map — 2847 modules recovered", found_at: new Date().toISOString() },
+        { id:"j7", type:"source_map",severity:"Info",     file:"https://target.com/static/app.bundle.js.map", line:1, snippet:"webpack source map — 2847 modules recovered", found_at: new Date().toISOString() },
         { id:"j8", type:"secret",    severity:"High",     file:"https://target.com/static/chunk.9d2b.js",  line:56,  snippet:'const STRIPE_KEY = "pk_live_51Abc…"', secret_type:"Stripe API Key", confidence:0.97, found_at: new Date().toISOString() },
       ];
       files = [
@@ -234,7 +234,7 @@
             <p>An API endpoint was extracted from JS call sites. Send to Scanner to test for authentication, authorization, and injection vulnerabilities. Check if the endpoint is in scope before testing.</p>
           {:else if selected.type === "sink"}
             <p>A dangerous DOM sink was detected. Trace the data source to determine if user-controlled input can reach this sink. If so, this is a potential DOM XSS. Use DOM Invader to confirm.</p>
-          {:else if selected.type === "source-map"}
+          {:else if selected.type === "source_map"}
             <p>A source map was detected and parsed. The recovered source code may reveal additional endpoints, secrets, and logic not visible in the minified bundle. Review the recovered sources carefully.</p>
           {/if}
         </div>
