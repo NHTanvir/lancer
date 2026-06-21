@@ -111,7 +111,7 @@ Each issue has a checkbox; check it off as it is fixed. `cargo check` after each
 
 ### CRITICAL
 
-#### [ ] #1 · `crates/lancer-ebpf/src/lib.rs:130` · CRITICAL · parsing
+#### [x] #1 · `crates/lancer-ebpf/src/lib.rs:130` · CRITICAL · parsing
 **Perf events parsed as JSON but the BPF probe emits a raw #[repr(C)] struct — every captured flow is silently dropped**
 
 **Problem:** The kernel side (crates/lancer-ebpf-probe/src/main.rs lines 13-43) writes a raw little-endian `#[repr(C)] FlowEvent { pid:u32, direction:u32, payload_bytes:u32, comm:[u8;16] }` into the perf-event array via `EVENTS.output(&ctx, &ev, 0)`. The consumer here calls `serde_json::from_slice::<CapturedFlow>(b)` on those raw struct bytes. Raw C-struct bytes are not valid JSON, so `from_slice` returns `Err` for every single event and the `if let Ok(f)` branch is never taken. The result: the eBPF capturer attaches its kprobes, spawns reader tasks, and consumes events, but `drain()` always returns an empty Vec — the feature produces zero output while appearing to work. Beyond the encoding mismatch, the structs are also shape-incompatible: `FlowEvent` has `direction: u32` and `comm: [u8;16]` and no `src`/`dst`, whereas `CapturedFlow` expects `comm: String`, `src: String`, `dst: String`, and `direction: Direction` (Tx/Rx enum). Even a corrected binary decode must map these fields explicitly.
@@ -159,7 +159,7 @@ _Verified (high): Verified both sides. Producer crates/lancer-ebpf-probe/src/mai
 
 ### HIGH
 
-#### [ ] #2 · `crates/lancer-bulkprobe/src/lib.rs:124-129` · HIGH · panic
+#### [x] #2 · `crates/lancer-bulkprobe/src/lib.rs:124-129` · HIGH · panic
 **extract_title can panic on a non-UTF-8-boundary slice of attacker-controlled body**
 
 **Problem:** `start` and `end` are byte offsets located in `lower` (the result of `body.to_lowercase()`), but the final slice `body[start..end]` is taken from the ORIGINAL `body`. `to_lowercase()` is not length-preserving: some code points lowercase to a different UTF-8 byte length (e.g. 'İ' U+0130 = 2 bytes lowercases to 'i̇' = 3 bytes). When such a character appears in the response body before the `<title>` marker, the offsets computed on `lower` no longer correspond to the same positions in `body`, so `body[start..end]` can land in the middle of a multi-byte UTF-8 sequence. Slicing a `&str` at a non-char-boundary panics. The body here is fully attacker/remote-server-controlled (the probed host's HTTP response), so a malicious or merely unusual server can crash the probe task / thread.
@@ -217,7 +217,7 @@ _Verified (high): The cited code at lines 124-129 is present exactly as reported
 
 ---
 
-#### [ ] #3 · `crates/lancer-cli/src/commands/repeater.rs:49-51` · HIGH · logic-error
+#### [x] #3 · `crates/lancer-cli/src/commands/repeater.rs:49-51` · HIGH · logic-error
 **HTTPS repeater connects to port 80 when Host header has no explicit port**
 
 **Problem:** When `--target` is not given, the port is taken from `HttpRequest::parse_wire`. That parser resolves the port from the Host header via `split_host_port(&host, 80)`, which hardcodes a default of 80 when the Host header has no `:port` (see crates/lancer-core/src/http_msg.rs:301 and :422-429). It NEVER returns 0. Therefore the `else if req.meta.port == 0` branch here is effectively dead code, and the scheme-based default (443) is never applied. Result: `lancer repeater --request req.http --scheme https` against a request whose Host header is just `example.com` (no port) sets `req.meta.scheme = "https"` but leaves `req.meta.port = 80`. HttpClient::send (crates/lancer-tools/src/client.rs:40-48) then opens a TCP connection to port 80 and performs a TLS handshake on it, so the request fails (or talks TLS to a cleartext port).
@@ -259,7 +259,7 @@ _Verified (high): Verified against the actual source. repeater.rs lines 49-51 ar
 
 ---
 
-#### [ ] #4 · `crates/lancer-cli/src/commands/scan.rs:97-102` · HIGH · logic-error
+#### [x] #4 · `crates/lancer-cli/src/commands/scan.rs:97-102` · HIGH · logic-error
 **`scan active --scheme https` connects to port 80 (port never derived from scheme)**
 
 **Problem:** The Active branch parses the request with `HttpRequest::parse_wire`, which sets `req.meta.port` to 80 whenever the Host header has no explicit port (crates/lancer-core/src/http_msg.rs:301, split_host_port default 80). The code then overrides only `req.meta.scheme = scheme` and never adjusts the port. So `lancer scan active req.http --scheme https` runs active checks over TLS against port 80, causing every probe request to fail to connect (TLS on a port the server serves in cleartext, or the wrong port entirely). Same root cause as the repeater bug, but here there is no port-correction logic at all.
@@ -286,7 +286,7 @@ _Verified (high): Verified end-to-end. crates/lancer-cli/src/commands/scan.rs:96
 
 ---
 
-#### [ ] #5 · `crates/lancer-gui/web/src/views/Findings.svelte:96-114` · HIGH · api-contract
+#### [x] #5 · `crates/lancer-gui/web/src/views/Findings.svelte:96-114` · HIGH · api-contract
 **New findings are never persisted server-side: GUI sends a non-UUID `id`, backend rejects the whole POST**
 
 **Problem:** saveFinding() builds the entry with `id: "f" + Date.now()` (e.g. "f1718000000000") and POSTs it to /api/v1/findings. The backend's `Incoming` struct types `id` as `Option<uuid::Uuid>` (lancer-api/src/main.rs:1035). serde fails to parse "f1718..." as a UUID, so deserialization of the ENTIRE body fails and the handler returns 400 "bad json" (main.rs:1049-1051) — the finding is never stored. The GUI ignores the fetch result (the call is wrapped in try/catch with an empty catch) and unconditionally prepends the entry to the local `findings` array, so the UI looks successful, but the finding vanishes on the next loadFindings()/reload. Worse, every later action keyed on that id — runTriage (POST /findings/{id}/triage), updateStatus (PUT /findings/{id}) — also requires `id.parse::<uuid::Uuid>()` server-side (main.rs:1170, 1198) and silently no-ops/404s for these GUI-minted ids.
@@ -325,7 +325,7 @@ _Verified (high): Verified against the real code. Findings.svelte:99 mints `id: 
 
 ---
 
-#### [ ] #6 · `crates/lancer-gui/web/src/views/Intruder.svelte:49-51` · HIGH · correctness
+#### [x] #6 · `crates/lancer-gui/web/src/views/Intruder.svelte:49-51` · HIGH · correctness
 **Auto-§ regex captures the HTTP version into the payload position on the request line**
 
 **Problem:** autoMarkers() wraps each `=value` with §…§ using the character class `[^&\r\n§]+`, which does NOT exclude the space character. On an HTTP request line such as `GET /users?id=1 HTTP/1.1`, the value match therefore runs from after `=` to the end of the line, i.e. `1 HTTP/1.1`, producing `GET /users?id=§1 HTTP/1.1§`. The payload position now spans the parameter value AND ` HTTP/1.1`, so when Intruder substitutes a payload it destroys the HTTP version, sending a malformed request line. This misfires on the tool's own default template (line 15: `GET /users?id=§1§ HTTP/1.1`) after Clear §/Auto §.
@@ -350,7 +350,7 @@ _Verified (high): Verified the cited code at crates/lancer-gui/web/src/views/Int
 
 ---
 
-#### [ ] #7 · `crates/lancer-gui/web/src/views/JsMining.svelte:17, 24, 30, 143, 237` · HIGH · api-contract
+#### [x] #7 · `crates/lancer-gui/web/src/views/JsMining.svelte:17, 24, 30, 143, 237` · HIGH · api-contract
 **Frontend uses "source-map" but backend serializes the type as "source_map"**
 
 **Problem:** The JS-mining FindingType enum in lancer-jsmining uses `#[serde(rename_all = "snake_case")]`, so `FindingType::SourceMap` (produced by `analyse()` at lib.rs:161) serializes to the JSON string "source_map" (underscore). This view consistently uses the hyphenated "source-map" everywhere: in the TYPES filter list, the TYPE_COLOR / TYPE_BG lookup maps, the filter-type <option value>, and the guidance switch. With real backend data (f.type === "source_map"): (a) the type filter `<option value="source-map">` can never match, so source-map findings can't be filtered; (b) `TYPE_COLOR[f.type]` and `TYPE_BG[f.type]` return undefined, so the type tag renders with no color/background in both the list and detail header; (c) the detail `{:else if selected.type === "source-map"}` branch never fires, so source maps show no guidance text. The bug is masked by the demo/fallback data (lines 67) which fabricates "source-map", but disappears the moment the live backend supplies findings. The other three types (secret/endpoint/sink) happen to be single words so they match.
@@ -370,7 +370,7 @@ _Verified (high): Confirmed against the real code. lancer-jsmining/src/lib.rs:13
 
 ---
 
-#### [ ] #8 · `crates/lancer-gui/web/src/views/Payloads.svelte:21-28` · HIGH · api-contract
+#### [x] #8 · `crates/lancer-gui/web/src/views/Payloads.svelte:21-28` · HIGH · api-contract
 **Payloads 'Send to Repeater' writes a key/shape Repeater never reads — payload silently dropped**
 
 **Problem:** sendToRepeater stores its raw request under localStorage key 'lancer.send.repeater' with a field named 'raw'. But Repeater.svelte's onMount only reads the key 'repeater_prefill' and only honors a field named 'request' (Repeater.svelte lines 703-714); it never reads 'lancer.send.repeater' nor any 'raw' field. As a result, clicking '→ R' navigates to the Repeater tab but prefills nothing — the chosen payload is lost. (Compare Organizer.svelte, which correctly writes BOTH 'lancer.send.repeater' and 'repeater_prefill' with a 'request' field.)
@@ -404,7 +404,7 @@ _Verified (high): Verified in the actual files. Payloads.svelte lines 21-28 writ
 
 ---
 
-#### [ ] #9 · `crates/lancer-gui/web/src/views/Payloads.svelte:29-34` · HIGH · api-contract
+#### [x] #9 · `crates/lancer-gui/web/src/views/Payloads.svelte:29-34` · HIGH · api-contract
 **Payloads 'Use in Intruder' sends {payload} but Intruder onMount only reads {raw/scheme/host/port} — payload silently dropped**
 
 **Problem:** sendToIntruder stores { payload: p.payload } under 'lancer.send.intruder'. Intruder.svelte's onMount (lines 200-209) reads that same key but only consumes p.scheme/p.host/p.port/p.raw and sets requestTemplate from p.raw; it never reads p.payload and never populates the payload list (payloadText). The result: clicking '→ I' navigates to Intruder, sets requestLoaded=true and switches to the positions subtab, but neither the request template nor the payload list contains the selected payload — the payload is silently discarded.
@@ -443,7 +443,7 @@ _Verified (high): Verified against the real code. Payloads.svelte:29-34 stores o
 
 ---
 
-#### [ ] #10 · `crates/lancer-gui/web/src/views/Proxy.svelte:13-24` · HIGH · api-contract
+#### [x] #10 · `crates/lancer-gui/web/src/views/Proxy.svelte:13-24` · HIGH · api-contract
 **Intercept "Action → Send to Repeater" is a no-op (writes a key Repeater never reads, and not repeater_prefill)**
 
 **Problem:** actionSend("repeater") stores the paused request only under `lancer.send.repeater` (JSON `{ raw }`) and dispatches navigate to the repeater tab. Repeater.svelte never reads `lancer.send.repeater` — its onMount only consults `repeater_prefill` (Repeater.svelte:703). It also does not set `repeater_prefill`. As a result, sending an intercepted/paused request to Repeater from the intercept Action menu does nothing: the Repeater tab opens unchanged. (Note actionSend("intruder") happens to work only because Intruder.svelte:202-206 does read `lancer.send.intruder` and uses the `raw` key.)
@@ -486,7 +486,7 @@ _Verified (high): Confirmed against the real code. Proxy.svelte actionSend (line
 
 ---
 
-#### [ ] #11 · `crates/lancer-gui/web/src/views/Proxy.svelte:181-196` · HIGH · api-contract
+#### [x] #11 · `crates/lancer-gui/web/src/views/Proxy.svelte:181-196` · HIGH · api-contract
 **"Send to Repeater" from HTTP history never transfers the request (wrong localStorage key)**
 
 **Problem:** ctxSendToRepeater writes the prefill object produced by payloadFromRow() into localStorage under "repeater_prefill". payloadFromRow() emits the request wire under the key `raw` ({method,scheme,host,port,path,raw}). But Repeater.svelte's onMount reads `repeater_prefill` and applies `data.request` (Repeater.svelte:707-712: `if (data.request) { tabStates[...].request = data.request; ... }`) and never looks at `data.raw`. Because there is no `request` key, the whole `if (data.request)` block is skipped: scheme/host/port are also inside that block, so NOTHING is applied — the Repeater tab opens with its blank default template. The history request the user picked is silently lost. (Organizer.svelte:176 documents the correct shape and writes `{ request: raw, ... }`; Proxy is the broken outlier.)
@@ -524,7 +524,7 @@ _Verified (high): Verified against actual code. Proxy.svelte:181-196: payloadFro
 
 ---
 
-#### [ ] #12 · `crates/lancer-gui/web/src/views/Repeater.svelte:187` · HIGH · parsing
+#### [x] #12 · `crates/lancer-gui/web/src/views/Repeater.svelte:187` · HIGH · parsing
 **Malformed percent-escape in request URL throws URIError in reactive parser, breaking the Inspector**
 
 **Problem:** parseInspector() runs reactively on every keystroke in the request editor ($: inspectorData = parseInspector(state?.request || ""), line 161). For each query-string pair it calls decodeURIComponent(k) / decodeURIComponent(v) with no try/catch. decodeURIComponent throws a URIError on any malformed percent sequence (e.g. a lone '%' or '%zz'). As soon as a user types '%' into the request line's query string, the reactive statement throws, the assignment to inspectorData fails, and the whole Inspector / derived rendering for that tab breaks until the text is fixed. Same unguarded calls exist at line 216 (body params) and line 629 (ctxChangeBodyEncoding fallback).
@@ -550,7 +550,7 @@ _Verified (high): Verified against the actual file. Lines 187 and 216 call decod
 
 ---
 
-#### [ ] #13 · `crates/lancer-gui/web/src/views/Scanner.svelte:91-99` · HIGH · api-contract
+#### [x] #13 · `crates/lancer-gui/web/src/views/Scanner.svelte:91-99` · HIGH · api-contract
 **"Active only" scan sends wrong request body — backend always rejects it with 400**
 
 **Problem:** startScan() builds the body as JSON.stringify({ url }) for every scan type, including the active path. But the backend's POST /v1/scan/active handler (scan_active in lancer-api/src/main.rs:2240-2244) deserializes `struct R { request: String, scheme: Option<String> }` and parses `r.request` as a raw HTTP wire request — it does NOT accept a `url` field. Sending `{ "url": "..." }` makes serde fail on the missing required `request` field, so the endpoint returns `400 "bad json"`. The frontend then calls `await r.json()` on the plain-text "bad json" body, which throws, lands in the catch block, and pushes a queue entry with status "error". Result: the GUI's "Active only" scan never works. (Full and Passive both POST `{ url }` and match their handlers, so only the active path is broken.)
@@ -612,7 +612,7 @@ _Verified (high): Verified both sides of the contract. Frontend Scanner.svelte:9
 
 ---
 
-#### [ ] #14 · `crates/lancer-gui/web/src/views/Target.svelte:1054-1060` · HIGH · api-contract
+#### [x] #14 · `crates/lancer-gui/web/src/views/Target.svelte:1054-1060` · HIGH · api-contract
 **Response 'Render' tab reads selectedEntry.body/response_body, which don't exist; iframe is always blank**
 
 **Problem:** The response body in the /v1/history JSON lives at `selectedEntry.response.body` (a byte array, serialized via bytes_serde on HttpResponse.body). There is no top-level `body` or `response_body` field on the record. The Render tab feeds `bytesToText(selectedEntry.body || selectedEntry.response_body)` to the iframe srcdoc, both undefined, so bytesToText returns "" and the rendered-response view is permanently empty regardless of the captured HTML.
@@ -633,7 +633,7 @@ _Verified (high): Confirmed by reading the real code. Target.svelte line 1059 se
 
 ---
 
-#### [ ] #15 · `crates/lancer-gui/web/src/views/Target.svelte:68, 94, 1010` · HIGH · api-contract
+#### [x] #15 · `crates/lancer-gui/web/src/views/Target.svelte:68, 94, 1010` · HIGH · api-contract
 **Notes column and annotation filter read e.notes, but the record field is `comment`**
 
 **Problem:** HistoryRecord exposes the analyst annotation as `comment` (HistoryRecord.comment / MessageMeta.comment); there is no `notes` field on the JSON returned by /v1/history. The Notes table column (line 1010 `{e.notes || ""}`) is therefore always blank, sorting by Notes (line 94) always returns empty, and most importantly the annotation/note filter (line 68 `out = out.filter(r => (r.notes || "").toLowerCase().includes(nf))`) filters on an always-undefined field, so typing any text in the 'Filter by annotation/note' box removes every row even when matching comments exist.
@@ -654,7 +654,7 @@ _Verified (high): Verified all three cited lines exist exactly as described in T
 
 ---
 
-#### [ ] #16 · `crates/lancer-gui/web/src/views/Target.svelte:93, 1009` · HIGH · api-contract
+#### [x] #16 · `crates/lancer-gui/web/src/views/Target.svelte:93, 1009` · HIGH · api-contract
 **Time column and time-sort read a non-existent field (e.ts/e.timestamp) instead of e.captured_at**
 
 **Problem:** The /v1/history endpoint serializes lancer-storage HistoryRecord directly (lancer-api history_list -> json(&rows)). The timestamp field on each record is captured_at (DateTime serialized as an ISO string), and there is no `ts` or `timestamp` field anywhere on the record or its MessageMeta. The site-map table's Time column (line 1009 `fmtTime(e.ts || e.timestamp)`) therefore always renders empty, and sorting by the Time column (line 93 `case "time": return e.ts || e.timestamp || 0;`) always returns 0 for every row, so the default `sortKey="time"` ordering is a no-op (rows keep arbitrary order rather than newest-first).
@@ -673,7 +673,7 @@ _Verified (high): Verified against real code. crates/lancer-storage/src/history.
 
 ---
 
-#### [ ] #17 · `crates/lancer-llm-scan/src/lib.rs:351` · HIGH · resource-leak
+#### [x] #17 · `crates/lancer-llm-scan/src/lib.rs:351` · HIGH · resource-leak
 **concurrency == 0 makes run_scan hang forever (buffer_unordered(0) never makes progress)**
 
 **Problem:** `concurrency` comes straight from the deserialized ScanRequest. The serde default (`default_concurrency` = 4) only applies when the field is ABSENT from the JSON body. A client that POSTs `{"concurrency": 0, ...}` to /v1/llm-scan/run (req: LlmScanRequest = serde_json::from_slice(&body), lancer-api/src/main.rs:1439), or runs the CLI with `--concurrency 0` (clap accepts 0 for usize, lancer-cli/src/commands/llm_scan.rs:64/95), passes 0 straight into `.buffer_unordered(concurrency)`. With max == 0, futures-util 0.3.32 BufferUnordered::poll_next never spawns any future (the `while in_progress_queue.len() < max` loop with max=0 never executes) and therefore never polls the underlying probe stream, so `stream.is_done()` stays false and poll_next returns Poll::Pending with no waker registered. The `.collect().await` future deadlocks: run_scan never returns, no probes run, and the awaiting task (an API request handler or CLI invocation) hangs indefinitely.
@@ -692,7 +692,7 @@ _Verified (high): Verified against the real code. crates/lancer-llm-scan/src/lib
 
 ---
 
-#### [ ] #18 · `crates/lancer-mcp-scan/src/lib.rs:199-214` · HIGH · api-contract
+#### [x] #18 · `crates/lancer-mcp-scan/src/lib.rs:199-214` · HIGH · api-contract
 **SSE transport calls plain HTTP JSON-RPC and parses response as JSON, silently returning no tools for real SSE servers**
 
 **Problem:** enumerate_tools (and enumerate_resources) route Transport::Sse into http_rpc, which does client.post(server).json(&body).send() then resp.json().await. A real MCP SSE endpoint replies with a text/event-stream (lines prefixed `event:`/`data:`), not a single JSON object. resp.json() will fail to parse the event-stream body and return None, so enumerate_tools returns an empty Vec. The scanner therefore reports zero tools and zero findings for any genuine SSE server while appearing to succeed (no error surfaced), producing a false-clean scan result.
@@ -747,7 +747,7 @@ _Verified (medium): Verified against the real file (crates/lancer-mcp-scan/src/l
 
 ---
 
-#### [ ] #19 · `crates/lancer-proxy/src/listener.rs:433-440, 464-477, 516` · HIGH · logic-error
+#### [x] #19 · `crates/lancer-proxy/src/listener.rs:433-440, 464-477, 516` · HIGH · logic-error
 **Outbound TLS advertises ALPN h2 but the origin connection always uses an HTTP/1-only handshake**
 
 **Problem:** build_default_client_config sets alpn_protocols = ["h2", "http/1.1"], so during the outbound TLS handshake to the origin (dispatch, scheme=="https") the server may negotiate ALPN "h2". However send_via_hyper unconditionally performs hyper::client::conn::http1::handshake on the resulting stream and sends HTTP/1.1 framing. When an origin selects h2 (many modern servers prefer it, and some are h2-only), the proxy writes HTTP/1.1 bytes onto an HTTP/2-negotiated TLS connection. The origin rejects/garbles it, so dispatch returns an error and the client gets no/failed response for those hosts. The advertised protocol set and the actual client implementation are inconsistent.
@@ -775,7 +775,7 @@ _Verified (high): Verified against the real code. build_default_client_config() 
 
 ---
 
-#### [ ] #20 · `crates/lancer-replay/src/id_mutate.rs:93` · HIGH · logic-error
+#### [x] #20 · `crates/lancer-replay/src/id_mutate.rs:93` · HIGH · logic-error
 **URL ID mutation does a raw substring replace over the entire URL, can corrupt host/scheme instead of the ID**
 
 **Problem:** For a URL-located candidate, the mutation is applied with `base.url().replacen(&c.value, mutated, 1)` — an unanchored substring replace over the whole reconstructed URL. Integer candidates can be as short as one digit (the detector uses `\b\d{1,12}\b`), so the first textual occurrence of that digit string anywhere in the URL is replaced, including inside the scheme, host, or port. Example: for `https://api2.example.com/users/5` with candidate `2`, `replacen("2", mutated, 1)` rewrites `api2` → e.g. `api3`, producing a request to a different (likely non-existent) host while leaving the real `/users/5` ID untouched. The IDOR fuzzer then silently tests the wrong thing (errors/connection failures) instead of mutating the resource ID, yielding false negatives.
@@ -802,7 +802,7 @@ _Verified (high): Verified against crates/lancer-replay/src/id_mutate.rs line 93
 
 ---
 
-#### [ ] #21 · `crates/lancer-scanner/src/active/upload.rs:22` · HIGH · correctness
+#### [x] #21 · `crates/lancer-scanner/src/active/upload.rs:22` · HIGH · correctness
 **PHP_MARKER_HASH is md5 of the empty string, so server-side-execution detection can never fire**
 
 **Problem:** PHP_MARKER injects `<?php echo 'LANCER_UP_'.md5('lancer'); ?>`. If the server actually executes this, the reflected output is `LANCER_UP_b81a9dfa2a3ea350de88cac98594e40d` (md5('lancer') = b81a9dfa2a3ea350de88cac98594e40d). But PHP_MARKER_HASH is hard-coded to `LANCER_UP_d41d8cd98f00b204e9800998ecf8427e`, and d41d8cd98f00b204e9800998ecf8427e is the md5 of the EMPTY string, not of 'lancer'. The detection at line 235 (`body_text.contains(PHP_MARKER_HASH)`) therefore never matches a genuinely executed payload, so the Critical 'Upload led to server-side execution' finding is dead code for the PHP path. The inline comment even admits 'placeholder — real md5 in body'. Confirmed: `printf 'lancer'|md5sum` = b81a9dfa2a3ea350de88cac98594e40d; `printf ''|md5sum` = d41d8cd98f00b204e9800998ecf8427e.
@@ -823,7 +823,7 @@ _Verified (high): Verified the actual code. Line 21 injects PHP `md5('lancer')` 
 
 ---
 
-#### [ ] #22 · `crates/lancer-scanner/src/passive/info_disclosure.rs:89` · HIGH · panic
+#### [x] #22 · `crates/lancer-scanner/src/passive/info_disclosure.rs:89` · HIGH · panic
 **Snippet slicing can panic on a non-UTF-8-char-boundary**
 
 **Problem:** The passive Information-Disclosure check truncates each regex match to 120 bytes with `body[m.start()..(m.end().min(m.start() + 120))]`. `m.start()` is a valid char boundary, but `m.start() + 120` is an arbitrary byte offset that may land in the middle of a multibyte UTF-8 character. Several patterns match unbounded, non-ASCII content longer than 120 bytes: the Python-traceback pattern `^\s*File ".+", line \d+,` (`.+` matches any non-newline chars, including multibyte file-path chars) and the .NET stack-trace pattern `at [\w.]+\.\w+\([^)]*\)\s+in\s+[A-Za-z]:\\` (`[^)]*` matches any chars except `)`). If such a match exceeds 120 bytes and contains a multibyte character spanning the byte-120 position, `&str` indexing panics (`byte index ... is not a char boundary`). Because the response body is fully attacker-controlled, a malicious/instrumented server can crash the passive scanner by returning a response that triggers one of these patterns with non-ASCII bytes around offset start+120.
@@ -853,7 +853,7 @@ _Verified (high): Confirmed at crates/lancer-scanner/src/passive/info_disclosure
 
 ---
 
-#### [ ] #23 · `crates/lancer-secrets/src/lib.rs:250-254` · HIGH · panic
+#### [x] #23 · `crates/lancer-secrets/src/lib.rs:250-254` · HIGH · panic
 **snippet_around byte-slices a &str at non-char-boundary offsets → panic on multi-byte UTF-8 response bodies**
 
 **Problem:** `snippet_around` builds the slice `body[start..end]` where `start = pos.saturating_sub(30)` and `end = (pos + max_len).min(body.len())`. These are raw byte offsets. `pos` (a regex match start) is a char boundary, but subtracting 30 bytes or adding 120 bytes can land inside a multi-byte UTF-8 codepoint. Indexing a &str at a non-char-boundary byte offset panics ('byte index N is not a char boundary'). `scan_response` runs on EVERY HTTP response body (external, attacker/server-controlled input), so any response containing a non-ASCII character within ~30 bytes before, or ~120 bytes after, a secret match will panic the scanner (and whatever passive-scan task drives it). The `.min(body.len())` only guards the upper length bound, not codepoint alignment.
@@ -888,7 +888,7 @@ _Verified (high): Confirmed in real code (lines 250-254). `snippet_around(body, 
 
 ---
 
-#### [ ] #24 · `crates/lancer-setup/src/main.rs:51-64` · HIGH · security
+#### [x] #24 · `crates/lancer-setup/src/main.rs:51-64` · HIGH · security
 **Zip Slip: archive entry name used unsanitized allows path traversal outside the temp dir**
 
 **Problem:** In extract_payload(), each entry's name is taken verbatim from the archive (`file.name()`) and joined onto the temp dir with `tmp.join(&name)`. The zip crate does NOT sanitize entry names, so an entry named with `..` components (e.g. `..\..\Windows\System32\evil.dll`) or an absolute path causes `out` to resolve OUTSIDE `tmp`. The parent dirs are then created (line 58-60) and the file written (line 63) at the attacker-chosen location. Because this installer typically runs with elevated/installer privileges, a tampered or maliciously-crafted payload zip yields arbitrary file write anywhere on disk (classic Zip Slip / CVE-class). This is a real exploitable hole in a security tool, not theoretical: nothing constrains `name` to stay within `tmp`.
@@ -940,7 +940,7 @@ _Verified (high): The cited code (crates/lancer-setup/src/main.rs:51-64) is pres
 
 ---
 
-#### [ ] #25 · `crates/lancer-storage/src/snapshot.rs:36` · HIGH · correctness
+#### [x] #25 · `crates/lancer-storage/src/snapshot.rs:36` · HIGH · correctness
 **Snapshot copies only the main DB file while WAL mode is active, losing recent committed transactions**
 
 **Problem:** Storage::open() opens every project (including auto-snapshotted on-disk projects) with journal_mode(Wal) (crates/lancer-storage/src/lib.rs:52). In WAL mode, committed-but-not-yet-checkpointed transactions live in the `<db>-wal` sidecar file, not the main `.lancer` file. take_snapshot() performs a plain `tokio::fs::copy(db_path, &dest)` of ONLY the main DB file, with no `PRAGMA wal_checkpoint(TRUNCATE)` first and without copying the `-wal`/`-shm` files. The resulting `.bak` is therefore a stale snapshot missing all history/issues/etc. committed since the last automatic checkpoint, and if it is ever restored the most recent data is silently gone. The whole point of the auto-snapshot feature (data-loss protection) is defeated for exactly the recent data most likely to matter.
@@ -981,7 +981,7 @@ _Verified (high): Verified against the real code. snapshot.rs:36 does `tokio::fs
 
 ---
 
-#### [ ] #26 · `crates/lancer-templates/src/lib.rs:277-287` · HIGH · logic-error
+#### [x] #26 · `crates/lancer-templates/src/lib.rs:277-287` · HIGH · logic-error
 **DSL contains() helper never works: trailing ')' stripped before the contains() branch can match it**
 
 **Problem:** Line 277 normalizes the term with `.trim_end_matches(')')`, which removes the trailing ')' of any `contains(part, "literal")` expression, turning e.g. `contains(body, "admin")` into `contains(body, "admin"`. The contains() branch at line 282 still matches `.strip_prefix("contains(")` but its `.and_then(|s| s.strip_suffix(')'))` now fails because the closing ')' is gone, so the whole `if let Some(inner)` is skipped. The expression then falls through to the comparison loop (lines 290-311), finds no operator, and `eval_dsl_term` returns `false`. Result: every Nuclei DSL matcher using the documented `contains(part, "x")` helper silently evaluates to false, so templates relying on `contains()` never report a match (false negatives in the scanner).
@@ -1024,7 +1024,7 @@ _Verified (high): Verified in crates/lancer-templates/src/lib.rs:276-312. Line 2
 
 ---
 
-#### [ ] #27 · `crates/lancer-tools/src/autorize.rs:50-60` · HIGH · logic-error
+#### [x] #27 · `crates/lancer-tools/src/autorize.rs:50-60` · HIGH · logic-error
 **Low-privilege authz replay does not strip the original Authorization header**
 
 **Problem:** `audit()` builds the low-privilege request by cloning `base` (the captured authenticated request) and only calling `set_header("Cookie", ...)`. `set_header` replaces by name, so any `Authorization` header present on the original privileged request survives. The low-privilege replay is therefore still sent with the original (high-privilege) bearer/token, so it almost always returns a 200 with the same body length as the original — producing a false `BypassWithLowPriv` verdict (or masking a real one). Note the anon branch (lines 61-68) correctly removes both Cookie and Authorization when the cookie is empty, but the low-priv branch never does.
@@ -1054,7 +1054,7 @@ _Verified (high): Verified at crates/lancer-tools/src/autorize.rs:50-60. The low
 
 ---
 
-#### [ ] #28 · `crates/lancer-tools/src/intruder.rs:570` · HIGH · compile-error
+#### [x] #28 · `crates/lancer-tools/src/intruder.rs:570` · HIGH · compile-error
 **sniper_combos test calls function with wrong argument type (won't compile under cfg(test))**
 
 **Problem:** The test `sniper_spreads_one_set` calls `sniper_combos(3, sets)` passing the integer `3`, but `sniper_combos` is declared at line 464 as `fn sniper_combos(template: &ParsedTemplate, sets: Vec<PayloadSet>)`. An `i32`/`usize` literal does not coerce to `&ParsedTemplate`, so the test module fails to compile, which breaks `cargo test -p lancer-tools` for the entire crate. (The sibling tests for pitchfork/cluster pass `(2, sets)` correctly because those functions take `pos_count: usize`; sniper is the odd one whose signature was changed without updating the test.)
@@ -1087,7 +1087,7 @@ _Verified (high): Verified in the actual file. Line 464 declares `fn sniper_comb
 
 ### MEDIUM
 
-#### [ ] #29 · `crates/lancer-api-routes/src/lib.rs:272` · MEDIUM · panic
+#### [x] #29 · `crates/lancer-api-routes/src/lib.rs:272` · MEDIUM · panic
 **buffer_unordered(0) hangs/panics when concurrency is 0 from external input**
 
 **Problem:** `concurrency` is deserialized from the external `DiscoveryRequest` JSON and used directly as the argument to `buffer_unordered(concurrency)`. A client can send `"concurrency": 0` (it is a plain `usize` with no validation; the `#[serde(default)]` only applies when the key is absent). With an in-flight limit of 0, `buffer_unordered` can never start any of the queued futures, so the stream makes no progress and `.collect().await` never completes — `run_discovery` hangs forever on that request (and in some futures versions the zero-capacity buffer panics). Either way a single malformed API request stalls or kills the discovery task.
@@ -1107,7 +1107,7 @@ _Verified (high): Verified against the real code. `DiscoveryRequest.concurrency`
 
 ---
 
-#### [ ] #30 · `crates/lancer-api/src/main.rs:1247-1258` · MEDIUM · api-contract
+#### [x] #30 · `crates/lancer-api/src/main.rs:1247-1258` · MEDIUM · api-contract
 **DELETE /v1/templates/{id} returns ok:true but never deletes the template**
 
 **Problem:** The DELETE /v1/templates/{id} handler computes the kept set but then discards it (`let _ = kept;`) and unconditionally returns {"ok": true}. The template is never removed from state.templates, so the GUI/CLI believes the delete succeeded while the template remains in the library and continues to appear in GET /v1/templates. This is a broken API contract (silent no-op masquerading as success).
@@ -1146,7 +1146,7 @@ _Verified (high): Verified the cited code at crates/lancer-api/src/main.rs:1247-
 
 ---
 
-#### [ ] #31 · `crates/lancer-bulkprobe/src/lib.rs:219-227` · MEDIUM · correctness
+#### [x] #31 · `crates/lancer-bulkprobe/src/lib.rs:219-227` · MEDIUM · correctness
 **Client-supplied concurrency:0 makes run_probes silently probe nothing**
 
 **Problem:** `concurrency` comes from `ProbeRequest`, which is deserialized from external/API input. The `#[serde(default = "default_concurrency")]` only supplies 50 when the field is ABSENT; an explicit `"concurrency": 0` is accepted and passed straight to `buffer_unordered(0)`. With a limit of 0, `buffer_unordered` never polls any of the underlying probe futures, so `collect().await` resolves immediately to an empty Vec — every host is silently dropped and the caller gets zero results with no error. (In some futures versions a 0 buffer can instead stall.) Either way a single bad/zero value produces wrong behavior for the whole request.
@@ -1181,7 +1181,7 @@ _Verified (high): Confirmed by reading the actual code. crates/lancer-bulkprobe/
 
 ---
 
-#### [ ] #32 · `crates/lancer-cli/src/commands/intruder.rs:19-20, 110-113` · MEDIUM · parsing
+#### [x] #32 · `crates/lancer-cli/src/commands/intruder.rs:19-20, 110-113` · MEDIUM · parsing
 **`--payloads list:a,b,c` is broken: comma value_delimiter splits it, and the list parser uses `|` not `,`**
 
 **Problem:** The `payloads` arg declares `#[arg(long = "payloads", value_delimiter = ',')]`, so clap splits each `--payloads` value on commas before it reaches `parse_set`. The documented example on line 19 is `list:a,b,c`. When a user runs `--payloads "list:a,b,c"`, clap produces three separate values: `"list:a"`, `"b"`, `"c"`. `parse_set("b")` and `parse_set("c")` have no recognized prefix and hit the final `anyhow::bail!("unrecognized payload set: {s}")`, so the command errors out. Compounding this, even the surviving `"list:a"` token is split by the internal list parser on `'|'` (line 112: `rest.split('|')`), not on commas — so the only way to get a multi-item list is `list:a|b|c`, which the help text never documents and which the comma delimiter does not interfere with. Net effect: the exact documented `list:a,b,c` invocation fails, and the real list syntax is undocumented.
@@ -1216,7 +1216,7 @@ _Verified (high): Confirmed by reading the actual file. Line 20 declares `#[arg(
 
 ---
 
-#### [ ] #33 · `crates/lancer-cli/src/commands/urls.rs:181-184` · MEDIUM · logic-error
+#### [x] #33 · `crates/lancer-cli/src/commands/urls.rs:181-184` · MEDIUM · logic-error
 **uro trailing-slash normalization fails (and breaks dedup) whenever a query/fragment is present**
 
 **Problem:** The trailing-slash strip operates on the full serialized URL `s` via `s.strip_suffix('/')`. The URL string only ends in `/` when there is no query and no fragment. For a URL like `https://x.com/a/?q=1`, `s` ends in `1`, so `strip_suffix('/')` returns None and the trailing slash on the path is never removed. Consequently `https://x.com/a/?q=1` and `https://x.com/a?q=1` normalize to DIFFERENT strings and are not deduplicated, defeating uro's purpose. The included unit test `uro_dedups` (line 226-228) asserts `uro_one("https://X.COM/a/?utm_source=g&q=1") == "https://x.com/a?q=1"`, which this code does not produce — it yields `https://x.com/a/?q=1`, so the test fails.
@@ -1245,7 +1245,7 @@ _Verified (high): Code at lines 181-184 matches the evidence exactly. `uro_one` 
 
 ---
 
-#### [ ] #34 · `crates/lancer-dom/src/message.rs:34-67` · MEDIUM · logic-error
+#### [x] #34 · `crates/lancer-dom/src/message.rs:34-67` · MEDIUM · logic-error
 **Closely-spaced postMessage listeners are silently dropped (single-slot buffer overwritten)**
 
 **Problem:** `listener_buffer` is a single `Option`. When a `message` listener is found at line L, it is not emitted until the loop reaches line L+8 (the flush condition `line_idx + 1 == *l + 8`). If a second `addEventListener("message", ...)` appears within those 8 following lines, line 37 overwrites `listener_buffer` with the new listener and the FIRST listener is never pushed to `out`. JS bundles (especially minified or several handlers registered together) routinely have multiple message listeners within 8 lines of each other, so real listeners are silently lost from the report — a false-negative in a security tool. Sender endpoints are unaffected; only Listener findings are dropped.
@@ -1331,7 +1331,7 @@ _Verified (high): Verified against the actual code in crates/lancer-dom/src/mess
 
 ---
 
-#### [ ] #35 · `crates/lancer-gui/web/src/views/Findings.svelte:136-141` · MEDIUM · api-contract
+#### [x] #35 · `crates/lancer-gui/web/src/views/Findings.svelte:136-141` · MEDIUM · api-contract
 **"PDF" export option downloads JSON content saved with a .md extension**
 
 **Problem:** The export dropdown offers a `pdf` option (line 206), but the backend /v1/findings/export only handles markdown/hackerone/bugcrowd/intigriti and falls through to `_ => json(&list)` for everything else (lancer-api/src/main.rs:1103-1113) — i.e. for `format=pdf` it returns JSON with content-type application/json. The GUI then saves the blob as `findings-pdf.md` (the filename builder only special-cases `json`, everything else gets `.md`). Result: selecting PDF yields a file named `findings-pdf.md` whose bytes are actually JSON — wrong extension and wrong content for the advertised format.
@@ -1350,7 +1350,7 @@ _Verified (high): Verified both cited locations against the real code. In crates
 
 ---
 
-#### [ ] #36 · `crates/lancer-gui/web/src/views/Intruder.svelte:230` · MEDIUM · api-contract
+#### [x] #36 · `crates/lancer-gui/web/src/views/Intruder.svelte:230` · MEDIUM · api-contract
 **Case modification payload spec sends the wrong base string (charSubBase instead of a Case-modification input)**
 
 **Problem:** buildPayloadSpec()'s `Case modification` arm sends `base: charSubBase`. `charSubBase` is bound exclusively to the Character substitution UI's base-string input (line 553, default "admin"); the Case modification UI (lines 517-530) exposes only the `caseMod` dropdown and has NO field that edits the value sent as the base. As a result, when the user selects payload type "Case modification" the backend (PayloadSet::CaseModification { base }, which generates lower/upper/capitalized/swapcase variants of `base`) operates on "admin" or whatever was last typed under the unrelated Character-substitution payload type, and there is no way for the user to set the Case-modification base. The user's selected case transformation (`caseMod`) is also never sent.
@@ -1374,7 +1374,7 @@ _Verified (high): Verified in the actual source. Intruder.svelte line 230 sends 
 
 ---
 
-#### [ ] #37 · `crates/lancer-gui/web/src/views/Plugins.svelte:90-103, 538` · MEDIUM · api-contract
+#### [x] #37 · `crates/lancer-gui/web/src/views/Plugins.svelte:90-103, 538` · MEDIUM · api-contract
 **Binary plugin uploads are read with file.text() and corrupted (and the backend only accepts a TOML manifest)**
 
 **Problem:** The hidden file input advertises binary plugin types: accept=".rhai,.wasm,.lua,.py,.dll,.so,.dylib,.jar,.zip". onFileSelected() reads ANY selected file with `await file.text()`, which UTF-8-decodes the bytes and irreversibly corrupts non-text files (wasm/dll/so/dylib/jar/zip). It then POSTs that decoded string as `content`. The backend (/v1/plugins/upload in lancer-api/src/main.rs:1270-1292) writes `content` verbatim into `plugin.toml` and calls load_one(), which does `toml::from_str` on it. So for every binary runtime advertised in `accept`, the upload either fails (binary bytes are not valid TOML) or silently writes garbage. Only a plain plugin.toml manifest can ever succeed, so the WASM/Lua/Python/Native/JVM upload paths the UI offers are non-functional. This is the documented 'binary read with .text() corrupts' bug class.
@@ -1396,7 +1396,7 @@ _Verified (high): Verified against actual code. Plugins.svelte:90-103 reads any 
 
 ---
 
-#### [ ] #38 · `crates/lancer-gui/web/src/views/Repeater.svelte:186-187` · MEDIUM · parsing
+#### [x] #38 · `crates/lancer-gui/web/src/views/Repeater.svelte:186-187` · MEDIUM · parsing
 **Query/body param parsing splits on '=' once via destructuring, truncating values that contain '='**
 
 **Problem:** `const [k, v] = pair.split("=")` keeps only the segment up to the first '='; any '=' inside the value (common in base64 padding, JWTs, signatures) is dropped, so `v` is truncated. Because the Inspector round-trips through parseInspector -> edit -> rebuildRequest, editing any unrelated field re-encodes the truncated value back into the raw request, silently corrupting the user's payload. Same pattern at line 215 (body params) and line 628 (ctxChangeBodyEncoding).
@@ -1446,7 +1446,7 @@ _Verified (high): Confirmed in the actual file. At lines 186-187 (query params),
 
 ---
 
-#### [ ] #39 · `crates/lancer-gui/web/src/views/Repeater.svelte:480` · MEDIUM · correctness
+#### [x] #39 · `crates/lancer-gui/web/src/views/Repeater.svelte:480` · MEDIUM · correctness
 **Error/cancel result is written to the wrong tab when the user switches tabs during an in-flight request**
 
 **Problem:** send() captures `const s = tabStates[activeTab]` at the start (line 442) and the success path writes the response into `s` (lines 468-471), so it correctly targets the originating tab. The catch block instead writes to `tabStates[activeTab]` using the live activeTab. If the user switches to a different Repeater tab while a request is in flight and that request then errors or is cancelled, the error/'(request cancelled)' text is written into whatever tab is currently active, corrupting an unrelated tab's response and leaving the originating tab stuck on an empty response.
@@ -1473,7 +1473,7 @@ _Verified (high): Verified at crates/lancer-gui/web/src/views/Repeater.svelte. s
 
 ---
 
-#### [ ] #40 · `crates/lancer-gui/web/src/views/Target.svelte:139, 462, 470, 307` · MEDIUM · api-contract
+#### [x] #40 · `crates/lancer-gui/web/src/views/Target.svelte:139, 462, 470, 307` · MEDIUM · api-contract
 **Title extraction and engagement tools read non-existent e.body/e.response_body, sending empty bodies**
 
 **Problem:** Same shape mismatch as the Render tab: the response body is at e.response.body, not e.body/e.response_body. titleOf (line 139) therefore never derives a <title> from the response, so the Title column is blank for every entry that lacks a (non-existent) e.title field. ctxFindComments (line 462) and ctxFindScripts (line 470) POST `body: bytesToText(e.body || e.response_body)` to /v1/engagement/find-comments and /find-scripts — always an empty string, so these engagement tools analyze nothing. ctxSendToDecoder (line 307) likewise loses the real body and falls back to a synthetic formatResponse.
@@ -1501,7 +1501,7 @@ _Verified (high): Confirmed against actual code. The backend HistoryRecord (crat
 
 ---
 
-#### [ ] #41 · `crates/lancer-gui/web/src/views/Target.svelte:524-530` · MEDIUM · correctness
+#### [x] #41 · `crates/lancer-gui/web/src/views/Target.svelte:524-530` · MEDIUM · correctness
 **formatRequest discards captured headers/body; Send-to-Repeater/Intruder/Comparer/CSRF get a stripped synthetic request**
 
 **Problem:** formatRequest only checks `e.raw_request` (which does not exist on the /v1/history record) and otherwise emits a hardcoded template containing just Host/User-Agent/Accept/Connection and no body, even though the full request is available at e.request.headers and e.request.body (ctxCopyAsCurl on line 332 already reads e.request.headers, proving the data is present). Consequently entryToSendPayload (used by Send to Repeater/Intruder), ctxSendToComparer('request') and ctxCsrfPoc all transmit a request missing the captured method-specific headers, cookies, auth, and POST/PUT body — so resending a captured POST loses its body and a session cookie is dropped.
@@ -1551,7 +1551,7 @@ _Verified (high): Confirmed by reading the real code. Target.svelte:524-530 has 
 
 ---
 
-#### [ ] #42 · `crates/lancer-llm-redteam/src/lib.rs:275` · MEDIUM · security
+#### [x] #42 · `crates/lancer-llm-redteam/src/lib.rs:275` · MEDIUM · security
 **TLS certificate validation disabled while sending the LLM API key as a bearer token**
 
 **Problem:** The reqwest client used for ALL outbound LLM calls is built with `.danger_accept_invalid_certs(true)`, unconditionally disabling TLS certificate and hostname validation. Every `chat_call` then attaches the configured API key via `req.header("Authorization", format!("Bearer {k}"))` (line 82). Because the connection accepts any certificate, an active network man-in-the-middle can present a forged cert, terminate the TLS session, and capture the plaintext Authorization header — leaking the user's target/attacker LLM API key (e.g. an OpenAI/Anthropic secret). This affects the real network behaviour of the tool, not a theoretical edge case: any non-loopback endpoint becomes vulnerable to credential theft.
@@ -1591,7 +1591,7 @@ _Verified (high): Verified in crates/lancer-llm-redteam/src/lib.rs. Line 273-277
 
 ---
 
-#### [ ] #43 · `crates/lancer-proxy/src/ca_import.rs:21-28` · MEDIUM · correctness
+#### [x] #43 · `crates/lancer-proxy/src/ca_import.rs:21-28` · MEDIUM · correctness
 **import_from_pem does not actually verify the imported cert and key match**
 
 **Problem:** The comment-bearing call `params.self_signed(&kp)` does not check that `kp` is the private key corresponding to the imported certificate. `CertificateParams::from_ca_cert_pem` extracts only the subject/extensions from the cert, and `self_signed(&kp)` then mints a brand-new self-signed certificate from those params using whatever key is passed — it succeeds for any valid keypair. So a mismatched cert+key pair passes the `imported cert + key don't pair` guard. The mismatched pair is then written to disk; load_or_create serves the imported cert_pem to clients while signing leaf certs with the imported ca_key. If they truly don't pair, every minted leaf fails signature validation in the browser and all MITM TLS breaks, with no error at import time.
@@ -1635,7 +1635,7 @@ _Verified (high): Confirmed by reading the actual code. ca_import.rs:20-25 is ex
 
 ---
 
-#### [ ] #44 · `crates/lancer-proxy/src/sse.rs:52` · MEDIUM · parsing
+#### [x] #44 · `crates/lancer-proxy/src/sse.rs:52` · MEDIUM · parsing
 **SSE chunk tail drops already-parsed fields of an in-progress event**
 
 **Problem:** When a chunk ends mid-event after one or more complete field lines, `tail_start = last_blank.max(line_start)` advances past those completed lines instead of back to the start of the in-progress event (`last_blank`). Because `line_start` (start of the final incomplete line) is greater than `last_blank` (end of the last blank-line/event boundary), the returned tail begins at the last partial line and SILENTLY DISCARDS every complete field line of the current event. Example: feeding "data: x\n\nid: 7\ndata: tail" returns tail="data: tail" and the "id: 7" line is lost forever; when the next chunk arrives the event will be missing its id. The unit test only asserts tail.contains("tail"), so it does not catch the loss. This corrupts streamed SSE events whose fields straddle a network read boundary.
@@ -1658,7 +1658,7 @@ _Verified (high): The cited code at crates/lancer-proxy/src/sse.rs:52 (`tail_sta
 
 ---
 
-#### [ ] #45 · `crates/lancer-replay/src/id_mutate.rs:103` · MEDIUM · correctness
+#### [x] #45 · `crates/lancer-replay/src/id_mutate.rs:103` · MEDIUM · correctness
 **Body ID mutation lossily round-trips through UTF-8, corrupting non-UTF-8 request bodies**
 
 **Problem:** For body-located candidates the request body is decoded with `String::from_utf8_lossy` and re-encoded with `into_bytes()`. Any non-UTF-8 bytes in the original body (binary uploads, multipart payloads with binary parts, gzip/protobuf bodies) are replaced by the U+FFFD replacement sequence on decode and that corruption is persisted back into `req.body`. The replayed request is then a corrupted version of the original, breaking the comparison against the baseline and potentially causing the server to reject every mutated request. ID candidates are ASCII, so a byte-level replacement avoids the corruption entirely.
@@ -1699,7 +1699,7 @@ _Verified (high): Confirmed at crates/lancer-replay/src/id_mutate.rs:103-104. `m
 
 ---
 
-#### [ ] #46 · `crates/lancer-scanner/src/active/host_header.rs:65-69` · MEDIUM · logic-error
+#### [x] #46 · `crates/lancer-scanner/src/active/host_header.rs:65-69` · MEDIUM · logic-error
 **is_first_point() throttle is effectively always-true, so Host-header probes fire for every insertion point**
 
 **Problem:** The check is documented as "Only run once per request" and the gate is is_first_point(). But is_first_point returns `point.name == "Host" || point.original_value.is_empty() == false`. The second clause is true for essentially every insertion point the engine offers (any query param, body param, cookie, etc. that has a non-empty value). As a result the throttle never throttles: the two Host-header probe requests (evil.example.com and evil.example.com:443) are re-sent for every insertion point on the request. This multiplies outbound traffic by the number of insertion points and can emit duplicate "Host-header injection" issues for the same finding, defeating the stated single-run intent.
@@ -1728,7 +1728,7 @@ _Verified (high): Verified in crates/lancer-scanner/src/active/host_header.rs:65
 
 ---
 
-#### [ ] #47 · `crates/lancer-scanner/src/active/race.rs:23-51` · MEDIUM · resource-leak
+#### [x] #47 · `crates/lancer-scanner/src/active/race.rs:23-51` · MEDIUM · resource-leak
 **Point-agnostic active check fires once per insertion point, multiplying concurrent state-changing requests and emitting duplicate issues**
 
 **Problem:** The scan engine invokes every active check once for EVERY insertion point of a request (engine.rs lines 67-85: `for point in points { for ck in active_checks { ... ck.run(&client,&base,&point) } }`), and there is no dedup of resulting issues (engine.rs collects and persists all of them; IssueStore::insert always inserts a fresh row). RaceConditionCheck ignores `_point` and, for any POST/PUT/PATCH/DELETE, fires PARALLEL=12 concurrent copies of the SAME request. A request with N insertion points (query params, JSON fields, headers, cookies) therefore triggers 12*N concurrent state-changing requests against the live target instead of 12, and emits up to N identical 'Race condition candidate' issues. The same once-per-point amplification/duplication affects every check in this batch that ignores `_point`: oauth.rs, proto_pollution.rs, react2shell.rs, smuggling.rs, subdomain_takeover.rs.
@@ -1758,7 +1758,7 @@ _Verified (high): Verified against the actual code. engine.rs run_active (lines 
 
 ---
 
-#### [ ] #48 · `crates/lancer-scanner/src/passive/cookies.rs:34-36` · MEDIUM · correctness
+#### [x] #48 · `crates/lancer-scanner/src/passive/cookies.rs:34-36` · MEDIUM · correctness
 **Cookie security-flag detection uses substring match over the whole header (false negatives)**
 
 **Problem:** `secure`, `http_only`, and `same_site_present` are derived by `lower.contains(...)` over the entire lowercased Set-Cookie header value, which includes the cookie name and value, not just the attributes. Any cookie whose name or value contains the substring `secure`, `httponly`, or `samesite=` will be treated as having that attribute set, silently suppressing the corresponding finding. For example `Set-Cookie: insecure_pref=1; Path=/` sent over HTTPS contains `secure`, so the 'Cookie without Secure flag' issue is never raised even though the Secure attribute is absent; likewise a value like `token=httponly_disabled` suppresses the HttpOnly check. This produces false negatives in a security tool.
@@ -1799,7 +1799,7 @@ _Verified (high): Code at crates/lancer-scanner/src/passive/cookies.rs:34-36 mat
 
 ---
 
-#### [ ] #49 · `crates/lancer-stateful-fuzz/src/lib.rs:191-192` · MEDIUM · panic
+#### [x] #49 · `crates/lancer-stateful-fuzz/src/lib.rs:191-192` · MEDIUM · panic
 **replace_range can panic on a spec path where '}' precedes '{'**
 
 **Problem:** `path.find('{')` and `path.find('}')` are computed independently. For a path string sourced from the (attacker/third-party-controlled) OpenAPI spec that contains a '}' before the first '{' — e.g. `/a}b/{id}` — `s` (index of '{') will be greater than `e` (index of the first '}'). The inclusive range `s..=e` is then a backwards range, and `String::replace_range` panics with "slice index starts at N but ends at M". Because `run_sequence` is awaited inside `run_fuzz`, this panic propagates up through the async task and aborts the fuzz run on a single malformed path.
@@ -1829,7 +1829,7 @@ _Verified (high): Code at crates/lancer-stateful-fuzz/src/lib.rs:191-192 matches
 
 ---
 
-#### [ ] #50 · `crates/lancer-tools/src/auth_matrix.rs:46-56` · MEDIUM · logic-error
+#### [x] #50 · `crates/lancer-tools/src/auth_matrix.rs:46-56` · MEDIUM · logic-error
 **Matrix replay leaks the original request's Authorization for cookie-only identities**
 
 **Problem:** For an identity with `cookie: Some(non_empty)` and `authorization: None`, the match arm only calls `set_header("Cookie", c)` and the `if let Some(a) = &id.authorization` block is skipped, so any `Authorization` header carried on the captured `req` is left intact. The cell is then computed as if that identity were authenticated via the original token, corrupting the access-control grid (a low-priv/cookie-only identity appears to have privileged access). Only the empty-cookie arm removes Authorization.
@@ -1874,7 +1874,7 @@ _Verified (high): Code at crates/lancer-tools/src/auth_matrix.rs:45-56 matches t
 
 ---
 
-#### [ ] #51 · `crates/lancer-tools/src/crawler.rs:103-138` · MEDIUM · logic-error
+#### [x] #51 · `crates/lancer-tools/src/crawler.rs:103-138` · MEDIUM · logic-error
 **Crawler is serial: `concurrency` config is silently ignored**
 
 **Problem:** The crawl loop acquires a semaphore permit, spawns the fetch task, then immediately blocks on `handle.await` in the same loop iteration before popping the next URL. As a result only one request is ever in flight regardless of `config.concurrency`; the `Semaphore::new(self.config.concurrency.max(1))` and `tokio::spawn` add overhead but provide no parallelism. The advertised `concurrency` setting has no effect.
@@ -1958,7 +1958,7 @@ _Verified (high): Confirmed by reading crates/lancer-tools/src/crawler.rs lines 
 
 ---
 
-#### [ ] #52 · `crates/lancer-tools/src/engagement.rs:118-129` · MEDIUM · correctness
+#### [x] #52 · `crates/lancer-tools/src/engagement.rs:118-129` · MEDIUM · correctness
 **CSRF PoC double-encodes form values from urlencoded bodies**
 
 **Problem:** generate_csrf_poc parses the request body's name=value pairs straight out of an application/x-www-form-urlencoded body and places the raw (still percent-encoded) value into the HTML input's value attribute after only html_escape. The values in a urlencoded body are percent-encoded (e.g. body `q=a%20b` or `pass=hunter%2B2`). When the generated form auto-submits, the browser percent-encodes the field value AGAIN, so `a%20b` is sent as `a%2520b`. The reproduced request therefore does not match the original captured request, making the CSRF PoC invalid for any parameter whose value contains an encoded character (spaces, +, &, =, non-ASCII, etc.).
@@ -2000,7 +2000,7 @@ _Verified (high): The cited code at crates/lancer-tools/src/engagement.rs:118-12
 
 ---
 
-#### [ ] #53 · `crates/lancer-tools/src/repeater.rs:123-144` · MEDIUM · correctness
+#### [x] #53 · `crates/lancer-tools/src/repeater.rs:123-144` · MEDIUM · correctness
 **Repeater redirect-following downgrades 307/308 to GET and drops the request body**
 
 **Problem:** The redirect loop matches 301/302/303/307/308 uniformly and always builds the next hop as `HttpRequest::builder("GET", target)` with an empty body. HTTP semantics require 307 (Temporary Redirect) and 308 (Permanent Redirect) to preserve the original method AND body. By rewriting them to a body-less GET, the Repeater silently changes the request method and discards the POST/PUT payload, so following a 307/308 produces an incorrect, non-reproducible request and a misleading final response in the tool's send history.
@@ -2050,7 +2050,7 @@ _Verified (high): Cited code at crates/lancer-tools/src/repeater.rs:123-145 matc
 
 ---
 
-#### [ ] #54 · `crates/lancer-tools/src/simulate_browse.rs:75-78` · MEDIUM · panic
+#### [x] #54 · `crates/lancer-tools/src/simulate_browse.rs:75-78` · MEDIUM · panic
 **gen_range panics when min_delay_ms > max_delay_ms (attacker/operator-supplied config)**
 
 **Problem:** BrowseConfig is a Deserialize struct supplied from the API/GUI/CLI. simulate() builds a delay with rng.gen_range(config.min_delay_ms..=config.max_delay_ms). rand's gen_range panics ('cannot sample empty range', i.e. low > high) whenever min_delay_ms > max_delay_ms. A config with, e.g., min_delay_ms=2000, max_delay_ms=500 (easy to send through the JSON config) panics the async task / brings down the worker rather than returning an error.
@@ -2082,7 +2082,7 @@ _Verified (medium): Code at lines 75-78 of crates/lancer-tools/src/simulate_brow
 
 ### LOW
 
-#### [ ] #55 · `crates/lancer-api/src/main.rs:2599-2601` · LOW · parsing
+#### [x] #55 · `crates/lancer-api/src/main.rs:2599-2601` · LOW · parsing
 **parse_query does not URL-decode values, corrupting encoded query parameters**
 
 **Problem:** parse_query splits on '&' and strips the `key=` prefix but never percent-decodes the value. Several handlers pass these values straight through where encoding matters: GET /v1/mobile/ios-install-steps reads ca_url (URLs are commonly percent-encoded), and GET /v1/report reads host (the ReportFilter host_filter) and project. A caller sending e.g. ?host=foo%2Ebar or a percent-encoded ca_url will get the literal encoded string, so the host filter will not match and the iOS steps will embed a corrupted URL. Values containing '&' are also truncated.
@@ -2116,7 +2116,7 @@ _Verified (high): Confirmed in the real code at crates/lancer-api/src/main.rs:25
 
 ---
 
-#### [ ] #56 · `crates/lancer-api/src/main.rs:399-407` · LOW · correctness
+#### [x] #56 · `crates/lancer-api/src/main.rs:399-407` · LOW · correctness
 **Passive JS-file entry always records findings: 0 even when findings were mined**
 
 **Problem:** In the passive analysis consumer, when a JS response is processed, mined findings are pushed into js_findings, but the per-file JsFile entry that is created for the GUI's "files" view hardcodes findings: 0. The GET /v1/jsmining/files view therefore always reports 0 findings per file even when the same response produced findings (which ARE visible under /v1/jsmining/findings). Contrast with the /v1/jsmining/rescan handler (line 1022) which correctly sets findings: count. This is a display/correctness inconsistency between the two ingest paths.
@@ -2167,7 +2167,7 @@ _Verified (high): Confirmed by reading crates/lancer-api/src/main.rs:399-407. In
 
 ---
 
-#### [ ] #57 · `crates/lancer-authbypass/src/lib.rs:168-178` · LOW · logic-error
+#### [x] #57 · `crates/lancer-authbypass/src/lib.rs:168-178` · LOW · logic-error
 **Trailing-dot probe places the dot after the port, producing an invalid URL**
 
 **Problem:** find_host_end returns the index after the host AND any port (rest.find(['/','?','#']) stops at the first path delimiter, so the port is included in `host`). For a URL like http://example.com:8080/secret, the trailing-dot probe builds http://example.com:8080./secret -- the dot lands after the port number, which is not a valid authority. The intended bypass (a trailing dot on the hostname, e.g. http://example.com.:8080/secret) is never generated, and the malformed URL fails to parse/connect at send time, silently wasting the probe. URLs without a port are handled correctly.
@@ -2211,7 +2211,7 @@ _Verified (high): Confirmed by reading the actual code (lines 168-193). find_hos
 
 ---
 
-#### [ ] #58 · `crates/lancer-cli/src/commands/mcp_scan.rs:109-111` · LOW · logic-error
+#### [x] #58 · `crates/lancer-cli/src/commands/mcp_scan.rs:109-111` · LOW · logic-error
 **sse:// always forced to plaintext http://, cannot reach a TLS-secured SSE MCP server**
 
 **Problem:** The `sse://` scheme is unconditionally rewritten to `http://{rest}`. Production MCP SSE endpoints are almost always served over HTTPS. Because there is no `sses://` branch and no way to opt into TLS, any attempt to scan an HTTPS-served SSE MCP server will dial plaintext HTTP and fail to connect (or get a protocol error). The user has no CLI lever to fix it.
@@ -2243,7 +2243,7 @@ _Verified (high): The cited code at lines 109-111 of crates/lancer-cli/src/comma
 
 ---
 
-#### [ ] #59 · `crates/lancer-core/src/inspector.rs:210-221` · LOW · parsing
+#### [x] #59 · `crates/lancer-core/src/inspector.rs:210-221` · LOW · parsing
 **Multipart name extraction matches "filename=" when a part has no name= attribute**
 
 **Problem:** In parse_multipart, the part name is extracted via rest.find("name="). The substring "name=" is also contained inside "filename=". For a Content-Disposition that only carries a filename (a file part without an explicit name=, which is malformed but occurs in real-world/attacker-crafted multipart bodies, or simply for any part where the filename attribute precedes name), .find("name=") will match the f-i-l-e-name= occurrence and capture the file name as if it were the field name. This yields an incorrectly-named insertion point in the Inspector/Intruder/Scanner, so payload positions can target the wrong parameter.
@@ -2274,7 +2274,7 @@ _Verified (high): Code at crates/lancer-core/src/inspector.rs:210-221 is present
 
 ---
 
-#### [ ] #60 · `crates/lancer-core/src/scope.rs:152-161` · LOW · parsing
+#### [x] #60 · `crates/lancer-core/src/scope.rs:152-161` · LOW · parsing
 **ScopeRule::from_str misparses bracketed IPv6 hosts, rejecting valid input**
 
 **Problem:** from_str splits the optional port using host_port.rfind(':'). For a bracketed IPv6 literal without a port (e.g. "https://[::1]" or "[fe80::1]/api"), rfind(':') lands on a colon *inside* the IPv6 address rather than a real port separator. The text after that colon (e.g. "1]") is then parse::<u16>()'d, fails, and the whole rule is rejected with Error::InvalidScope("bad port"). Even when an IPv6 host DOES have a port, the host is split at the wrong colon, producing a corrupted host like "[fe80::1". So any IPv6 scope shorthand is parsed incorrectly or rejected outright, silently dropping a scope rule the user intended.
@@ -2333,7 +2333,7 @@ _Verified (high): The cited code at crates/lancer-core/src/scope.rs:152-161 is p
 
 ---
 
-#### [ ] #61 · `crates/lancer-deser/src/lib.rs:137` · LOW · logic-error
+#### [x] #61 · `crates/lancer-deser/src/lib.rs:137` · LOW · logic-error
 **TC_STRING length prefix silently truncated by u16 cast for cmd > 65535 bytes**
 
 **Problem:** java_envelope writes the command length as a 2-byte big-endian prefix via `(cmd.len() as u16)`, then appends the full `cmd.as_bytes()`. If `cmd` is longer than 65535 bytes the `as u16` cast wraps (e.g. 65536 -> 0), so the declared length no longer matches the actual appended bytes, producing a corrupted/non-deserializable envelope rather than an error. The command string is external/user-supplied input.
@@ -2375,7 +2375,7 @@ _Verified (high): Cited code at crates/lancer-deser/src/lib.rs:137 is present ve
 
 ---
 
-#### [ ] #62 · `crates/lancer-dom/src/message.rs:50-66` · LOW · logic-error
+#### [x] #62 · `crates/lancer-dom/src/message.rs:50-66` · LOW · logic-error
 **Listener within the last 8 lines of the file uses a shorter validation window than intended**
 
 **Problem:** The main flush path only fires when the file extends to line `*l + 8`; a listener near EOF is instead flushed by the fallback at line 70 which uses `body.lines().skip(l - 1)` (all remaining lines, no `.take(9)` cap) and checks only `block.contains("event.origin")` — it omits the `.contains(".origin ==")` check that the main path uses (line 57). So an EOF-proximate listener that validates origin via `.origin ==` (but not the literal `event.origin`) is reported as `origin_validated: false`, producing an inconsistent/false-positive 'unvalidated origin' result depending solely on how close the handler sits to end-of-file.
@@ -2400,7 +2400,7 @@ _Verified (high): Confirmed against the actual file crates/lancer-dom/src/messag
 
 ---
 
-#### [ ] #63 · `crates/lancer-gui/src/main.rs:130-136` · LOW · logic-error
+#### [x] #63 · `crates/lancer-gui/src/main.rs:130-136` · LOW · logic-error
 **Dead/duplicated 'dev fallback' branch in locate_api never executes**
 
 **Problem:** The 'dev fallback' recomputes the identical path that the previous branch already tested. `candidate` (line 126) and `dev` (line 131) are both `dir.join(exe_name)` with the same `dir` and `exe_name`, so if `candidate.exists()` was false on line 127 then `dev.exists()` is necessarily false on line 132. The branch is unreachable and the comment ('target/debug or target/release sibling') is misleading — it does not actually look in any sibling target directory. The function silently falls through to bare `PathBuf::from(exe_name)` (PATH lookup) in dev builds where lancer-api lives in the same target dir but under a different layout, instead of the intended sibling-target search.
@@ -2430,7 +2430,7 @@ _Verified (high): Confirmed in crates/lancer-gui/src/main.rs lines 122-137. `can
 
 ---
 
-#### [ ] #64 · `crates/lancer-gui/web/src/App.svelte:131` · LOW · logic-error
+#### [x] #64 · `crates/lancer-gui/web/src/App.svelte:131` · LOW · logic-error
 **Persisted hotkeys can fully shadow new defaults, leaving rebound actions unreachable**
 
 **Problem:** On load, if localStorage "lancer.hotkeys" exists it REPLACES the defaults wholesale (hotkeys = JSON.parse(s)) rather than merging over DEFAULT_HOTKEYS. If a user (or a future release that adds new default hotkeys) has an older/partial persisted map, the newly-added default bindings are silently absent and those actions become unreachable by keyboard until the user manually resets. This is a real behavior regression across versions, not a style nit.
@@ -2453,7 +2453,7 @@ _Verified (high): Code at crates/lancer-gui/web/src/App.svelte:131 is exactly as
 
 ---
 
-#### [ ] #65 · `crates/lancer-gui/web/src/views/Decoder.svelte:525` · LOW · logic-error
+#### [x] #65 · `crates/lancer-gui/web/src/views/Decoder.svelte:525` · LOW · logic-error
 **Output char-count footer references non-existent row properties, so it never renders**
 
 **Problem:** The info footer tries to show the output length conditionally on `rows[0].decodeOp || rows[0].encodeOp`. Row objects are only ever created with the shape `{ input, output, opLabel, mode, viewMode }` (lines 9, 350, 355) — there is no `decodeOp` or `encodeOp` property anywhere. Both are therefore always `undefined`, the `&&` guard is always falsy, and the ` · Output: N chars` segment is dead code that never displays even after a successful decode/encode. The intended behavior (show output length once a transform has run) is silently broken.
@@ -2478,7 +2478,7 @@ _Verified (high): Verified against the real file. Line 525 reads exactly `{#if r
 
 ---
 
-#### [ ] #66 · `crates/lancer-gui/web/src/views/Organizer.svelte:237-268` · LOW · parsing
+#### [x] #66 · `crates/lancer-gui/web/src/views/Organizer.svelte:237-268` · LOW · parsing
 **renderMarkdown corrupts multi-line fenced code blocks in the Notes preview**
 
 **Problem:** Fenced code blocks are converted to a single '<pre class="md-pre">...</pre>' string at line 241 (with embedded newlines preserved). The source is then split on newlines at line 242 and processed line-by-line. The guard at line 258 (/<pre class="md-pre">/.test(line)) matches only the FIRST line of a multi-line code block. Every subsequent line of the code block, and the line containing the closing </pre>, fails that test and falls into the final else branch (lines 261-263), getting wrapped in <p class="md-p"> and run through inline() (which applies bold/italic/code/link substitutions). A multi-line code block therefore renders with broken/duplicated tags and stray Markdown processing inside the code. (Single-line code blocks happen to render correctly because the whole <pre>...</pre> stays on one line.)
@@ -2548,7 +2548,7 @@ _Verified (high): Confirmed against the actual file (crates/lancer-gui/web/src/v
 
 ---
 
-#### [ ] #67 · `crates/lancer-gui/web/src/views/Organizer.svelte:67` · LOW · correctness
+#### [x] #67 · `crates/lancer-gui/web/src/views/Organizer.svelte:67` · LOW · correctness
 **formatRequest/formatResponse mislabel HTTP/1.0 and HTTP/3 as HTTP/1.1**
 
 **Problem:** Both formatters map only version==="Http2" to "HTTP/2" and treat every other enum string as "HTTP/1.1". The HttpVersion enum (lancer-core/src/http_msg.rs) serializes as Http10/Http11/Http2/Http3. A stored request or response captured over HTTP/1.0 or HTTP/3 is therefore displayed in the Request/Response panes (and in deriveRaw -> Send-to-Repeater) with the wrong version line "HTTP/1.1". Comparer.svelte's wireVersion() already maps all four correctly, so the Organizer is the outlier.
@@ -2565,7 +2565,7 @@ _Verified (high): Code is present verbatim at lines 67 and 73 of Organizer.svelt
 
 ---
 
-#### [ ] #68 · `crates/lancer-gui/web/src/views/Plugins.svelte:70-84, 32-42, 167` · LOW · logic-error
+#### [x] #68 · `crates/lancer-gui/web/src/views/Plugins.svelte:70-84, 32-42, 167` · LOW · logic-error
 **moveUp/moveDown reorder only local state and are silently reverted by the 8s poll**
 
 **Problem:** moveUp/moveDown mutate the local `plugins` array only; there is no API call to persist the new order. The onMount poll runs load() every 8000ms, which unconditionally reassigns `plugins` from GET /v1/plugins (PluginRegistry.list() returns load order). Any user reordering is therefore discarded within at most 8 seconds, and selectedIndex (adjusted by moveUp/moveDown) can then point at a different plugin than the one the user moved. The Up/Down buttons appear functional but have no durable effect.
@@ -2597,7 +2597,7 @@ _Verified (high): Verified in crates/lancer-gui/web/src/views/Plugins.svelte: mo
 
 ---
 
-#### [ ] #69 · `crates/lancer-gui/web/src/views/Settings.svelte:332` · LOW · api-contract
+#### [x] #69 · `crates/lancer-gui/web/src/views/Settings.svelte:332` · LOW · api-contract
 **Persisting theme="system" breaks theme on next app load (App.svelte forces light)**
 
 **Problem:** applyTheme() writes the raw `theme` value (which can be "system") to localStorage key "lancer.theme". On the next full app load, App.svelte's onMount only honors stored values "dark" or "light" and otherwise calls applyTheme("light") (App.svelte lines 254-256). So a user who selects "System" and reloads is silently forced to Light until the Settings view happens to mount and re-run its own onMount system-theme branch. The stored "system" sentinel is not understood by the component that owns initial theme application.
@@ -2638,7 +2638,7 @@ _Verified (high): Confirmed in the real code. Settings.svelte applyTheme (line 3
 
 ---
 
-#### [ ] #70 · `crates/lancer-iac/src/lib.rs:126` · LOW · correctness
+#### [x] #70 · `crates/lancer-iac/src/lib.rs:126` · LOW · correctness
 **Kubernetes service port truncated via `as u16` instead of range-checked, producing wrong ports**
 
 **Problem:** `p.get("port").and_then(|x| x.as_u64())` returns a u64, which is then narrowed with `port as u16`. For any port value outside 0..=65535 (e.g. a malformed manifest with `port: 65536` or `port: 70000`), the `as` cast silently wraps/truncates rather than rejecting the value, so a wrong port number is recorded in `exposed_ports`. Every other parser in this file (parse_dockerfile line 39, parse_compose line 74, parse_terraform line 153) uses a checked `cap[..].parse::<u16>()` whose `Ok` guard drops out-of-range values instead of corrupting them, so this path is inconsistent and yields incorrect attack-surface output on out-of-range input.
@@ -2667,7 +2667,7 @@ _Verified (high): Confirmed against the actual file. Line 125-126 reads `if let 
 
 ---
 
-#### [ ] #71 · `crates/lancer-jvm/src/lib.rs:63` · LOW · logic-error
+#### [x] #71 · `crates/lancer-jvm/src/lib.rs:63` · LOW · logic-error
 **JAVA_HOME set one directory too deep — points at <JDK>/bin (or <JDK>/lib) instead of <JDK>**
 
 **Problem:** The doc comment on the `libjvm` field (lines 21-22) states the path is `<JDK>/bin/server/jvm.dll` (Windows) or `<JDK>/lib/server/libjvm.{so,dylib}` (Linux/macOS). Stripping only two path components with `.parent().and_then(|p| p.parent())` yields `<JDK>/bin` (Windows) or `<JDK>/lib` (Linux/macOS), NOT `<JDK>`. JAVA_HOME is conventionally the JDK root; setting it to the `bin`/`lib` subdirectory is wrong and can break JVM startup or any Java code that resolves resources relative to JAVA_HOME (e.g. `jvm.cfg`, modules, security policy). For `jvm.dll`: jvm.dll -> server -> bin (needs one more `.parent()` to reach the JDK root).
@@ -2691,7 +2691,7 @@ _Verified (high): The cited code at crates/lancer-jvm/src/lib.rs:63 matches the 
 
 ---
 
-#### [ ] #72 · `crates/lancer-mobile/src/android.rs:64` · LOW · panic
+#### [x] #72 · `crates/lancer-mobile/src/android.rs:64` · LOW · panic
 **install_user_ca panics on non-UTF-8 cert path**
 
 **Problem:** der_path.to_str() returns None for any path containing non-UTF-8 bytes, and .unwrap() then panics, aborting the async task instead of returning an error. The other use of der_path.to_str() in this file (line 105, openssl_subject_hash_old) correctly uses `?` to return None, so this is an inconsistency that turns a recoverable bad-input condition into a crash.
@@ -2717,7 +2717,7 @@ _Verified (high): Confirmed by reading crates/lancer-mobile/src/android.rs. Line
 
 ---
 
-#### [ ] #73 · `crates/lancer-proxy/src/intercept.rs:57-62` · LOW · logic-error
+#### [x] #73 · `crates/lancer-proxy/src/intercept.rs:57-62` · LOW · logic-error
 **Invalid url_regex silently broadens an intercept rule instead of failing it**
 
 **Problem:** In matches_request, when url_regex is set but fails to compile, the `if let Ok(r) = Regex::new(rx)` arm is skipped entirely, so the regex constraint is simply ignored. A rule the user authored to narrowly Pause/Drop only URLs matching a regex will instead match every URL that passes the other (possibly empty) filters. With action=Drop this can silently drop all proxied traffic; with Pause it can stall every request. The mistyped regex produces a more permissive rule, the opposite of the user's intent, with no error surfaced. (The regex is also recompiled on every request in the hot path.)
@@ -2751,7 +2751,7 @@ _Verified (high): The cited code at intercept.rs:57-62 is present exactly as des
 
 ---
 
-#### [ ] #74 · `crates/lancer-proxy/src/match_replace.rs:111-126` · LOW · logic-error
+#### [x] #74 · `crates/lancer-proxy/src/match_replace.rs:111-126` · LOW · logic-error
 **RequestFirstLine match/replace ignores any edit to the HTTP version segment**
 
 **Problem:** The request first line is built as "{method} {path} {version}" and the rule may match/replace against the version token, but after replacement only parts.next() for method and path are consumed; the third segment (version) is never parsed back and req.version is never updated. A match/replace rule that targets RequestFirstLine to change the protocol version (e.g. HTTP/1.1 -> HTTP/1.0) silently has no effect, while a method/path edit on the same line works. This is an inconsistency between what the rule matches against and what it can actually change.
@@ -2794,7 +2794,7 @@ _Verified (high): Code at match_replace.rs:111-126 is exactly as cited. The requ
 
 ---
 
-#### [ ] #75 · `crates/lancer-proxy/src/platform_auth.rs:89-121` · LOW · logic-error
+#### [x] #75 · `crates/lancer-proxy/src/platform_auth.rs:89-121` · LOW · logic-error
 **Digest non-MD5 algorithm branch is unreachable dead code**
 
 **Problem:** Line 89 returns `None` for any algorithm other than "MD5", so the later block at line 119 `if algorithm != "MD5" { header.push_str(... algorithm=...) }` can never execute. The Digest header therefore never carries an `algorithm=` directive even when the server explicitly negotiated one (e.g. `algorithm=MD5-sess`), and any non-MD5 challenge silently yields no Authorization header at all. This is a real (if narrow) correctness gap in Digest auth handling.
@@ -2833,7 +2833,7 @@ _Verified (high): The cited code is present verbatim. At line 89 the function re
 
 ---
 
-#### [ ] #76 · `crates/lancer-proxy/src/upstream.rs:92-109` · LOW · parsing
+#### [x] #76 · `crates/lancer-proxy/src/upstream.rs:92-109` · LOW · parsing
 **SOCKS5 username/password length cast can truncate, producing a malformed/auth-bypassing frame**
 
 **Problem:** `methods.len() as u8`, `u.len() as u8` and `p.len() as u8` cast lengths to u8 without bounds checking. A username or password longer than 255 bytes wraps modulo 256, writing a wrong length byte while still appending the full credential bytes. The upstream SOCKS5 server then reads a truncated/garbled credential, so authentication fails confusingly or the frame desynchronizes the stream. While 255+ char proxy passwords are uncommon, this is unvalidated external/config input written into a length-prefixed wire protocol.
@@ -2878,7 +2878,7 @@ _Verified (high): The cited code at crates/lancer-proxy/src/upstream.rs lines 10
 
 ---
 
-#### [ ] #77 · `crates/lancer-replay/src/id_mutate.rs:53-58` · LOW · parsing
+#### [x] #77 · `crates/lancer-replay/src/id_mutate.rs:53-58` · LOW · parsing
 **Integer detector matches digit runs inside UUIDs, creating spurious int candidates**
 
 **Problem:** `detect` first collects UUID candidates, then runs the integer regex `\b\d{1,12}\b` over the same text. A UUID such as `12345678-1234-1234-1234-123456789012` contains digit runs that the integer regex matches (e.g. `12345678`, `123456789012`), so each UUID can spawn several bogus `int` candidates. The `seen` set keys on the matched string value only (`format!("{loc}:{v}")`), not on position, so it does not suppress these; they are then mutated and replayed against the URL/body, wasting the replay budget and replacing the wrong substring (e.g. `replacen` will hit the digits inside the UUID).
@@ -2923,7 +2923,7 @@ _Verified (high): Cited code at lines 53-58 is present exactly as described. The
 
 ---
 
-#### [ ] #78 · `crates/lancer-report/src/exporters.rs:185-191` · LOW · parsing
+#### [x] #78 · `crates/lancer-report/src/exporters.rs:185-191` · LOW · parsing
 **faraday_csv field-quoting omits carriage return, can corrupt CSV records**
 
 **Problem:** csv_field() only quotes a field when it contains ',', '"', or '\n'. A field value containing a bare carriage return ('\r') without a following '\n' is emitted unquoted. Per RFC 4180 and most CSV parsers (including spreadsheet importers), an unquoted '\r' is treated as a record terminator, so an issue name/description/url/remediation that contains a lone '\r' (common when text was captured from HTTP responses, which use CRLF) splits one logical row into two malformed rows, shifting every subsequent column and producing a corrupt export.
@@ -2954,7 +2954,7 @@ _Verified (high): Code at crates/lancer-report/src/exporters.rs:185-191 matches 
 
 ---
 
-#### [ ] #79 · `crates/lancer-scanner/src/active/mass_assignment.rs:45-62` · LOW · logic-error
+#### [x] #79 · `crates/lancer-scanner/src/active/mass_assignment.rs:45-62` · LOW · logic-error
 **Mass-assignment dedup still matches two insertion points (JsonKey + JsonValue) with the same name, producing duplicate issues**
 
 **Problem:** Inspector::walk_json (lancer-core/src/inspector.rs lines 157-184) emits, for each top-level JSON field, BOTH a `ParamLocation::JsonKey` param and a `ParamLocation::JsonValue` param that share the identical `name`. The check accepts either location (line 45-50) and then dedups by requiring `point.name == first_object_key` (line 51-62). Because the chosen first key is present as two insertion points with the same name, the check passes the guard twice and emits the same 'Mass assignment' issue twice for a single triggering request. Additionally `m.keys().next()` returns the BTreeMap (alphabetically) first key, not the first-observed key as the comment on line 60 claims, so 'first JSON key we observe' is misleading and the chosen field is order-dependent.
@@ -2990,7 +2990,7 @@ _Verified (high): Verified against real code. inspector.rs walk_json (lines 162 
 
 ---
 
-#### [ ] #80 · `crates/lancer-scanner/src/active/xss.rs:60-67` · LOW · api-contract
+#### [x] #80 · `crates/lancer-scanner/src/active/xss.rs:60-67` · LOW · api-contract
 **Canary-reflection XSS issue is created without check_id (and without notes)**
 
 **Problem:** In the main `body.contains(&payload)` branch the issue gets `i.check_id = Some(self.id().to_string())` (line 56). The `else if body.contains(&canary)` branch builds an Issue via Issue::new and pushes it directly, never setting check_id. The active scan engine (engine.rs run_active) does NOT backfill check_id for active issues (unlike run_passive which sets it), so this issue is persisted with check_id = None. That breaks per-check filtering/deduplication/false-positive grouping for the 'Canary reflection (possible filtered XSS)' finding, and is inconsistent with every other active check in this directory which all set check_id.
@@ -3030,7 +3030,7 @@ _Verified (high): Verified against the actual code. In crates/lancer-scanner/src
 
 ---
 
-#### [ ] #81 · `crates/lancer-scanner/src/collaborator.rs:108` · LOW · correctness
+#### [x] #81 · `crates/lancer-scanner/src/collaborator.rs:108` · LOW · correctness
 **Collaborator poll cursor advances to post-response time, dropping interactions that arrive during the request**
 
 **Problem:** poll() reads `since` (line 96), issues the HTTP request for interactions newer than `since`, and only after the response sets `last_poll = Utc::now()` (line 108). Any out-of-band interaction recorded on the collaborator server between the moment the poll request was sent and `Utc::now()` (the in-flight window) is excluded from this response (server filtered by the older `since`) AND excluded from the next poll (next `since` = the later `Utc::now()`). Such interactions are silently lost, which for an OOB detector means missed vulnerabilities (false negatives).
@@ -3069,7 +3069,7 @@ _Verified (high): Code at crates/lancer-scanner/src/collaborator.rs is present e
 
 ---
 
-#### [ ] #82 · `crates/lancer-session/src/cookie_jar.rs:71` · LOW · correctness
+#### [x] #82 · `crates/lancer-session/src/cookie_jar.rs:71` · LOW · correctness
 **Cookie path matching lacks a path-boundary check (RFC 6265 path-match)**
 
 **Problem:** `for_request` decides whether a stored cookie applies to a request using `path.starts_with(&c.path)`. A bare prefix test matches across path-segment boundaries: a cookie scoped to path `/api` is incorrectly attached to requests for `/apifoo` or `/apixyz`, and a cookie scoped to `/app` leaks onto `/application`. RFC 6265 §5.1.4 requires the request-path to either equal the cookie-path, or have the cookie-path as a prefix where the cookie-path ends in `/`, or where the next character of the request-path is `/`. The current logic over-attaches cookies to unintended sibling paths, which in a session-handling tool can leak a path-scoped session/CSRF cookie to a request it should not accompany.
@@ -3093,7 +3093,7 @@ _Verified (high): The cited code is present verbatim at crates/lancer-session/sr
 
 ---
 
-#### [ ] #83 · `crates/lancer-shadow/src/lib.rs:161-164` · LOW · parsing
+#### [x] #83 · `crates/lancer-shadow/src/lib.rs:161-164` · LOW · parsing
 **url_encode_body produces invalid percent-encoding for non-ASCII (multibyte) body characters**
 
 **Problem:** The encoder iterates over `chars()` and emits `%{:02X}` of `c as u32 & 0xff`. For any non-ASCII Unicode scalar (e.g. 'é' = U+00E9, or any char above U+00FF), `c as u32 & 0xff` truncates the codepoint to its low byte, so the emitted percent-escape neither matches the UTF-8 byte sequence of that character nor is a valid round-trippable encoding. A body containing UTF-8 multibyte text is therefore corrupted/wrongly encoded (e.g. '€' U+20AC becomes '%AC' instead of '%E2%82%AC'). The resulting variant request carries a body that does not decode back to the original, so the 'URL-encode body' and 'Double URL-encode' mutations send semantically wrong payloads for any non-ASCII input.
@@ -3120,7 +3120,7 @@ _Verified (high): Confirmed the exact code at crates/lancer-shadow/src/lib.rs li
 
 ---
 
-#### [ ] #84 · `crates/lancer-stateful-fuzz/src/lib.rs:170` · LOW · off-by-one
+#### [x] #84 · `crates/lancer-stateful-fuzz/src/lib.rs:170` · LOW · off-by-one
 **infer_sequences returns one sequence even when max is 0**
 
 **Problem:** The cap is checked with `if sequences.len() >= max { return sequences; }` only *after* a push. When `max == 0`, the function still pushes the first matching sequence (len becomes 1) before the check `1 >= 0` triggers, returning 1 sequence despite a requested limit of 0. A caller passing `max_sequences: 0` (a deserializable value, since the field accepts any usize) expects zero sequences executed but gets one HTTP request fired against the target.
@@ -3145,7 +3145,7 @@ _Verified (high): Code at crates/lancer-stateful-fuzz/src/lib.rs:166-170 matches
 
 ---
 
-#### [ ] #85 · `crates/lancer-storage/src/history.rs:156-185` · LOW · api-contract
+#### [x] #85 · `crates/lancer-storage/src/history.rs:156-185` · LOW · api-contract
 **HistoryFilter.mime is a declared public filter field that list() never applies**
 
 **Problem:** HistoryFilter exposes a public `mime: Option<MimeKind>` field (line 36) documented as a history filter, but HistoryStore::list() builds its WHERE clause only from host/method/status/search/only_in_scope and never references `filter.mime`. Any caller that sets `mime` to constrain results will silently get unfiltered rows back. It does not currently misbehave only because every present caller uses `..Default::default()` (mime = None), but the field is part of the struct's public contract and is a latent silent no-op.
@@ -3187,7 +3187,7 @@ _Verified (high): Confirmed against the actual source. HistoryFilter declares a 
 
 ---
 
-#### [ ] #86 · `crates/lancer-templates/src/lib.rs:304-309` · LOW · correctness
+#### [x] #86 · `crates/lancer-templates/src/lib.rs:304-309` · LOW · correctness
 **Numeric DSL variable compared against non-numeric RHS falls through to a wrong string comparison**
 
 **Problem:** When LHS is a numeric variable (`status_code`, `content_length`, or `len(...)`) but the RHS does not parse as i64 (e.g. `status_code == foo` or a quoted non-numeric), the `if let (Some(l), Ok(r))` guard fails and execution falls to the string-comparison path at line 308. There `dsl_part(lhs, ...)` is called with lhs = "status_code"/"content_length"/"len(...)", none of which are header names, so dsl_part returns the response body. The code then compares the entire body against the RHS literal, producing a meaningless/incorrect result instead of failing the term. This yields wrong matcher verdicts for malformed or unusual DSL.
@@ -3225,7 +3225,7 @@ _Verified (high): Code at lines 304-309 is exactly as cited. When LHS is a numer
 
 ---
 
-#### [ ] #87 · `crates/lancer-tools/src/engagement.rs:108-117` · LOW · correctness
+#### [x] #87 · `crates/lancer-tools/src/engagement.rs:108-117` · LOW · correctness
 **CSRF PoC emits invalid enctype and empty form for multipart requests**
 
 **Problem:** The doc comment states multipart/form-data is supported, but the code only populates fields when the MIME is FormUrlEncoded (line 118). For a multipart request the form's enctype attribute is set verbatim to the request's Content-Type header, which is `multipart/form-data; boundary=...`. Including the boundary parameter in an HTML form enctype is invalid, and no <input> fields are emitted, so the generated PoC submits an empty multipart form that does not reproduce the original request.
@@ -3317,7 +3317,7 @@ _Verified (high): Verified the cited code in crates/lancer-tools/src/engagement.
 
 ---
 
-#### [ ] #88 · `crates/lancer-tools/src/engagement.rs:202-204` · LOW · resource-leak
+#### [x] #88 · `crates/lancer-tools/src/engagement.rs:202-204` · LOW · resource-leak
 **discover_content aborts entire run if any single wordlist entry fails URL join**
 
 **Problem:** Inside the per-word loop, base_url.join(&word)? propagates an error out of discover_content. A single malformed wordlist entry (e.g. one containing a space or other char that makes join fail) causes the whole function to return Err, discarding all already-spawned tasks and the results collected so far; the owned permits acquired for in-flight tasks are dropped without those tasks being awaited. One bad line in a large wordlist kills the entire discovery scan.
@@ -3349,7 +3349,7 @@ _Verified (high): Code at crates/lancer-tools/src/engagement.rs:202-204 matches 
 
 ---
 
-#### [ ] #89 · `crates/lancer-tools/src/intruder.rs:168-195` · LOW · logic-error
+#### [x] #89 · `crates/lancer-tools/src/intruder.rs:168-195` · LOW · logic-error
 **CharFrobberIter emits the unchanged base string once per position (delta == 0 case)**
 
 **Problem:** `delta` cycles -1, 0, 1 for each position (it is reset to -1 only after exceeding 1). When `delta == 0`, `n = b + 0 = b`, so the byte is replaced with itself and the iterator yields a string identical to `base`. For an N-character base this produces N copies of the original payload, contradicting the doc comment 'All single-character substitutions of base' and wasting one Intruder request per position re-testing the unmodified value.
@@ -3435,7 +3435,7 @@ _Verified (high): Code at crates/lancer-tools/src/intruder.rs:156-195 matches th
 
 ---
 
-#### [ ] #90 · `crates/lancer-tools/src/sequencer.rs:124-127` · LOW · correctness
+#### [x] #90 · `crates/lancer-tools/src/sequencer.rs:124-127` · LOW · correctness
 **Runs-test statistic uses wrong denominator (2*sqrt(n) instead of 2*sqrt(2n))**
 
 **Problem:** The NIST runs-test z statistic is |V - 2*n*pi*(1-pi)| / (2*sqrt(2n)*pi*(1-pi)). The code uses 2.0 * (total_bits).sqrt() in the denominator, i.e. 2*sqrt(n) instead of 2*sqrt(2n). This inflates z by a factor of sqrt(2), systematically pushing runs_p_value too low and causing tokens to be judged 'non-random' (pass=false) more often than the test warrants.
