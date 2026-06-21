@@ -97,6 +97,9 @@ pub async fn run(args: ScanArgs) -> Result<()> {
             let raw = read_or_stdin(&request)?;
             let mut req = HttpRequest::parse_wire(&raw)?;
             req.meta.scheme = scheme;
+            if req.meta.scheme == "https" && req.meta.port == 80 {
+                req.meta.port = 443;
+            }
             let engine = build_engine(preset, project).await?;
             let issues = engine.run_active(&req).await?;
             print_issues(&issues);

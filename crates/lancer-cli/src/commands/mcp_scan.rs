@@ -107,8 +107,11 @@ fn parse_server(uri: &str) -> Result<(Transport, String)> {
     if let Some(rest) = uri.strip_prefix("stdio://") {
         Ok((Transport::Stdio, rest.to_string()))
     } else if let Some(rest) = uri.strip_prefix("sse://") {
-        // Hand the underlying JSON-RPC client an http(s) URL.
+        // Hand the underlying JSON-RPC client an http URL.
         Ok((Transport::Sse, format!("http://{rest}")))
+    } else if let Some(rest) = uri.strip_prefix("sses://") {
+        // TLS-secured SSE endpoint.
+        Ok((Transport::Sse, format!("https://{rest}")))
     } else if let Some(rest) = uri.strip_prefix("ws://") {
         Ok((Transport::WebSocket, format!("ws://{rest}")))
     } else if let Some(rest) = uri.strip_prefix("wss://") {
@@ -117,7 +120,7 @@ fn parse_server(uri: &str) -> Result<(Transport, String)> {
         Ok((Transport::Http, uri.to_string()))
     } else {
         anyhow::bail!(
-            "unsupported server scheme in `{uri}` — expected one of stdio://, sse://, ws://, http://, https://"
+            "unsupported server scheme in `{uri}` — expected one of stdio://, sse://, sses://, ws://, wss://, http://, https://"
         )
     }
 }

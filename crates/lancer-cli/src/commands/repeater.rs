@@ -46,8 +46,23 @@ pub async fn run(args: RepeaterArgs) -> Result<()> {
         };
         req.meta.host = h;
         req.meta.port = p;
-    } else if req.meta.port == 0 {
-        req.meta.port = if args.scheme == "https" { 443 } else { 80 };
+    } else {
+        // parse_wire defaults a port-less Host header to 80; honor an explicit
+        // Host-header port, but otherwise pick the scheme's default port.
+        let host_had_explicit_port = req
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("host"))
+            .map(|h| {
+                // a trailing ":<digits>" means an explicit port (ignore "[::1]" IPv6 w/o port)
+                h.value
+                    .rsplit_once(':')
+                    .map_or(false, |(_, p)| p.parse::<u16>().is_ok())
+            })
+            .unwrap_or(false);
+        if !host_had_explicit_port {
+            req.meta.port = if args.scheme == "https" { 443 } else { 80 };
+        }
     }
     let client = HttpClient::new();
     let resp = client.send(&req).await?;

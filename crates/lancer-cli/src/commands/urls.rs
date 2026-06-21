@@ -178,11 +178,11 @@ fn uro_one(url: &str) -> String {
         let qs = sorted.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&");
         u.set_query(Some(&qs));
     }
-    let mut s = u.to_string();
-    if let Some(stripped) = s.strip_suffix('/') {
-        if u.path().len() > 1 { s = stripped.to_string(); }
+    let p = u.path().to_string();
+    if p.len() > 1 && p.ends_with('/') {
+        let _ = u.set_path(p.trim_end_matches('/'));
     }
-    s
+    u.to_string()
 }
 
 // ── unfurl ───────────────────────────────────────────────────────────────────

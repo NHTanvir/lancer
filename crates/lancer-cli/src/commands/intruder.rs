@@ -17,7 +17,7 @@ pub struct IntruderArgs {
     request: String,
     /// One or more payload sources. Use `file:path/to/list.txt`,
     /// `list:a,b,c`, `num:1-10[:step]`, `brute:abc:1:3`, `null:50`.
-    #[arg(long = "payloads", value_delimiter = ',')]
+    #[arg(long = "payloads")]
     payloads: Vec<String>,
     /// Attack type.
     #[arg(long, value_enum, default_value_t = Kind::Sniper)]
@@ -109,7 +109,7 @@ fn parse_set(s: &str) -> Result<PayloadSet> {
     }
     if let Some(rest) = s.strip_prefix("list:") {
         return Ok(PayloadSet::Simple(
-            rest.split('|').map(|x| x.to_string()).collect(),
+            rest.split(',').map(|x| x.to_string()).collect(),
         ));
     }
     if let Some(rest) = s.strip_prefix("num:") {
