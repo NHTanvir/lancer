@@ -55,10 +55,9 @@ impl InterceptRule {
             }
         }
         if let Some(rx) = &self.url_regex {
-            if let Ok(r) = Regex::new(rx) {
-                if !r.is_match(&url) {
-                    return false;
-                }
+            match Regex::new(rx) {
+                Ok(r) if r.is_match(&url) => {}
+                _ => return false,
             }
         }
         true

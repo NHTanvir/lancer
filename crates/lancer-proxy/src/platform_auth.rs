@@ -84,7 +84,8 @@ fn digest(challenge: &str, cred: &AuthCredential, method: &str, uri: &str) -> Op
     let realm = extract(challenge, "realm")?;
     let nonce = extract(challenge, "nonce")?;
     let qop = extract(challenge, "qop");
-    let algorithm = extract(challenge, "algorithm").unwrap_or_else(|| "MD5".to_string());
+    let algorithm_supplied = extract(challenge, "algorithm");
+    let algorithm = algorithm_supplied.clone().unwrap_or_else(|| "MD5".to_string());
     let opaque = extract(challenge, "opaque");
     if algorithm != "MD5" {
         // SHA-256 etc. would require swapping the hasher — left for a follow-up.
@@ -116,8 +117,8 @@ fn digest(challenge: &str, cred: &AuthCredential, method: &str, uri: &str) -> Op
     if let Some(o) = opaque {
         header.push_str(&format!(", opaque=\"{o}\""));
     }
-    if algorithm != "MD5" {
-        header.push_str(&format!(", algorithm={algorithm}"));
+    if algorithm_supplied.is_some() {
+        header.push_str(", algorithm=MD5");
     }
     Some(header)
 }

@@ -120,6 +120,16 @@ impl MatchReplaceEngine {
                         if let (Some(m), Some(p)) = (parts.next(), parts.next()) {
                             req.method = lancer_core::SerializableMethod::from(m);
                             req.path = p.to_string();
+                            if let Some(v) = parts.next() {
+                                match v.trim() {
+                                    "HTTP/0.9" => req.version = lancer_core::HttpVersion::Http09,
+                                    "HTTP/1.0" => req.version = lancer_core::HttpVersion::Http10,
+                                    "HTTP/1.1" => req.version = lancer_core::HttpVersion::Http11,
+                                    "HTTP/2" | "HTTP/2.0" => req.version = lancer_core::HttpVersion::Http2,
+                                    "HTTP/3" => req.version = lancer_core::HttpVersion::Http3,
+                                    _ => {}
+                                }
+                            }
                             hits += 1;
                         }
                     }

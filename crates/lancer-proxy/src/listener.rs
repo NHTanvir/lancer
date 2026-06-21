@@ -513,6 +513,6 @@ fn build_default_client_config() -> Arc<ClientConfig> {
     let mut cfg = ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth();
-    cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
     Arc::new(cfg)
 }

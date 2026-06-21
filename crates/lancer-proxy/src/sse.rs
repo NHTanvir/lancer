@@ -19,7 +19,6 @@ pub struct SseEvent {
 pub fn parse_chunk(input: &str) -> (Vec<SseEvent>, String) {
     let mut events = Vec::new();
     let mut cur = SseEvent::default();
-    let mut tail_start = 0;
     let bytes = input.as_bytes();
 
     let mut line_start = 0;
@@ -49,7 +48,7 @@ pub fn parse_chunk(input: &str) -> (Vec<SseEvent>, String) {
         }
         i += 1;
     }
-    tail_start = last_blank.max(line_start);
+    let tail_start = last_blank;
     let tail = std::str::from_utf8(&bytes[tail_start..]).unwrap_or("").to_string();
     (events, tail)
 }

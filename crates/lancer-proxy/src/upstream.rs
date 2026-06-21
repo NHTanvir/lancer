@@ -103,6 +103,9 @@ async fn dial_socks5(host: &str, port: u16, up: &UpstreamProxy) -> Result<TcpStr
         0x02 if auth => {
             let u = up.username.as_ref().unwrap();
             let p = up.password.as_ref().unwrap();
+            if u.len() > 255 || p.len() > 255 {
+                return Err(anyhow!("socks5 username/password exceeds 255 bytes"));
+            }
             let mut frame = vec![0x01u8, u.len() as u8];
             frame.extend_from_slice(u.as_bytes());
             frame.push(p.len() as u8);
@@ -126,6 +129,9 @@ async fn dial_socks5(host: &str, port: u16, up: &UpstreamProxy) -> Result<TcpStr
         req.push(0x04);
         req.extend_from_slice(&v6.octets());
     } else {
+        if host.len() > 255 {
+            return Err(anyhow!("socks5 destination hostname exceeds 255 bytes"));
+        }
         req.push(0x03);
         req.push(host.len() as u8);
         req.extend_from_slice(host.as_bytes());
