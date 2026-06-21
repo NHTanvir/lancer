@@ -388,6 +388,7 @@ async fn main() -> Result<()> {
                         let is_js = url.ends_with(".js") || ct.contains("javascript") || ct.contains("ecmascript");
                         if is_js {
                             let mined = lancer_jsmining::analyse(&url, body);
+                            let count = mined.len();
                             if !mined.is_empty() {
                                 let mut store = js_findings.write();
                                 for f in mined {
@@ -401,7 +402,7 @@ async fn main() -> Result<()> {
                                 files.push(lancer_jsmining::JsFile {
                                     url: url.clone(),
                                     size_kb: (body.len() / 1024) as u64,
-                                    findings: 0,
+                                    findings: count,
                                     last_seen: chrono::Utc::now(),
                                 });
                             }
@@ -1247,13 +1248,8 @@ async fn dynamic_route(
     // DELETE /v1/templates/{id}
     if method == Method::DELETE {
         if let Some(id) = path.strip_prefix("/v1/templates/") {
-            // Re-build the library without the chosen ID
-            let kept: Vec<_> = state.templates.list().into_iter().filter(|t| t.id != id).collect();
-            // Drain current, repopulate (TemplateLibrary doesn't expose remove; rebuild is simplest)
-            // Build a fresh library and swap-style — but here we just clear and re-add.
-            // (Library uses internal Vec; we expose only add — so emulate by re-allocating a fresh wrapper.)
-            let _ = kept; // placeholder: full delete needs library API change
-            return json(&serde_json::json!({ "ok": true }));
+            let removed = state.templates.remove(id);
+            return json(&serde_json::json!({ "ok": removed }));
         }
     }
 
@@ -2597,7 +2593,16 @@ async fn find_free_proxy_addr(preferred: SocketAddr) -> SocketAddr {
 }
 
 fn parse_query(query: &str, key: &str) -> Option<String> {
-    query.split('&').find_map(|pair| pair.strip_prefix(&format!("{key}=")).map(|v| v.to_string()))
+    let prefix = format!("{key}=");
+    query.split('&').find_map(|pair| {
+        pair.strip_prefix(&prefix).map(|v| {
+            // x-www-form-urlencoded: '+' means space
+            let v = v.replace('+', " ");
+            percent_encoding::percent_decode_str(&v)
+                .decode_utf8_lossy()
+                .into_owned()
+        })
+    })
 }
 
 fn default_true() -> bool { true }

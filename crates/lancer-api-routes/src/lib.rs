@@ -252,7 +252,7 @@ pub async fn run_discovery(req: DiscoveryRequest) -> Vec<RouteResult> {
     let methods = req.methods.clone();
     let auth = req.auth_header.clone();
     let base = req.base_url.clone();
-    let concurrency = req.concurrency;
+    let concurrency = req.concurrency.max(1);
 
     let mut jobs = Vec::new();
     for r in &routes {
