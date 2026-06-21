@@ -19,7 +19,7 @@ pub struct UploadCheck;
 
 /// PHP marker — server-side execution proof if reflected.
 const PHP_MARKER: &str = "<?php echo 'LANCER_UP_'.md5('lancer'); ?>";
-const PHP_MARKER_HASH: &str = "LANCER_UP_d41d8cd98f00b204e9800998ecf8427e"; // placeholder — real md5 in body
+const PHP_MARKER_HASH: &str = "LANCER_UP_b81a9dfa2a3ea350de88cac98594e40d"; // md5('lancer')
 const JPEG_MAGIC: &[u8] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01";
 const GIF_MAGIC: &[u8]  = b"GIF89a";
 const SVG_XSS: &str = r#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" onload="alert('LANCER_SVG')"/>"#;

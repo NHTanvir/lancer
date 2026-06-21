@@ -42,10 +42,7 @@ impl ActiveCheck for MassAssignmentCheck {
         if !ct.contains("json") {
             return issues;
         }
-        if !matches!(
-            point.location,
-            lancer_core::ParamLocation::JsonValue | lancer_core::ParamLocation::JsonKey
-        ) {
+        if !matches!(point.location, lancer_core::ParamLocation::JsonKey) {
             return issues;
         }
         if point.name != base

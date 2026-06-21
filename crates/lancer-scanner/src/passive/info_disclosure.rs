@@ -86,7 +86,11 @@ impl PassiveCheck for InfoDisclosureCheck {
         let mut issues = Vec::new();
         for (name, rx, sev) in PATTERNS.iter() {
             if let Some(m) = rx.find(body) {
-                let snippet = body[m.start()..(m.end().min(m.start() + 120))].to_string();
+                let mut end = m.end().min(m.start() + 120);
+                while end > m.start() && !body.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let snippet = body[m.start()..end].to_string();
                 issues.push(super::issue(
                     name,
                     *sev,

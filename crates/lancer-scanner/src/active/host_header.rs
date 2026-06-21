@@ -63,7 +63,8 @@ impl ActiveCheck for HostHeaderCheck {
 }
 
 fn is_first_point(point: &InsertionPoint) -> bool {
-    // Cheap sentinel — there's no shared state, so we just consult the point
-    // name. Run on the very first param the engine offers.
-    point.name == "Host" || point.original_value.is_empty() == false
+    // The Host header is offered as exactly one insertion point per HTTP/1.1
+    // request, so use it as the stable single-run sentinel for this
+    // request-level check (it does not depend on the insertion point).
+    point.name.eq_ignore_ascii_case("Host")
 }

@@ -20,7 +20,13 @@ const PARALLEL: usize = 12;
 impl ActiveCheck for RaceConditionCheck {
     fn id(&self) -> &'static str { "active.race_condition" }
     fn name(&self) -> &'static str { "Race condition candidate" }
-    async fn run(&self, client: &HttpClient, base: &HttpRequest, _point: &InsertionPoint) -> Vec<Issue> {
+    async fn run(&self, client: &HttpClient, base: &HttpRequest, point: &InsertionPoint) -> Vec<Issue> {
+        // Point-agnostic check: run a single time per request, not once per insertion point.
+        if let Some(first) = crate::insertion::find_insertion_points(base).first() {
+            if first.name != point.name || first.location != point.location {
+                return Vec::new();
+            }
+        }
         // Only fire on state-changing verbs.
         if !matches!(base.method.as_str(), "POST" | "PUT" | "PATCH" | "DELETE") {
             return Vec::new();

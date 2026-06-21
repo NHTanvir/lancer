@@ -98,6 +98,7 @@ impl Collaborator for HttpCollaborator {
             Some(t) => format!("{}/interactions?since={}", self.base_url, t.to_rfc3339()),
             None => format!("{}/interactions", self.base_url),
         };
+        let cursor = Utc::now(); // capture BEFORE sending so no interaction can slip between windows
         let req = lancer_core::HttpRequest::builder("GET", &url)?;
         let resp = self.client.send(&req).await?;
         if !(200..300).contains(&resp.status) {
@@ -105,7 +106,7 @@ impl Collaborator for HttpCollaborator {
         }
         let body = resp.body_text().unwrap_or("[]");
         let items: Vec<Interaction> = serde_json::from_str(body)?;
-        self.state.write().last_poll = Some(Utc::now());
+        self.state.write().last_poll = Some(cursor);
         Ok(items)
     }
 }

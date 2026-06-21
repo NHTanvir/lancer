@@ -24,16 +24,31 @@ impl PassiveCheck for CookieFlagCheck {
                 continue;
             }
             let value = &h.value;
-            let lower = value.to_ascii_lowercase();
             let cookie_name = value
                 .split(';')
                 .next()
                 .and_then(|s| s.split_once('='))
                 .map(|(n, _)| n.trim().to_string())
                 .unwrap_or_default();
-            let secure = lower.contains("secure");
-            let http_only = lower.contains("httponly");
-            let same_site_present = lower.contains("samesite=");
+            let mut secure = false;
+            let mut http_only = false;
+            let mut same_site_present = false;
+            for attr in value.split(';').skip(1) {
+                let attr = attr.trim();
+                if attr.eq_ignore_ascii_case("secure") {
+                    secure = true;
+                } else if attr.eq_ignore_ascii_case("httponly") {
+                    http_only = true;
+                } else if let Some(head) = attr.get(..8) {
+                    // matches `SameSite` or `SameSite=Lax`
+                    if head.eq_ignore_ascii_case("samesite") {
+                        let rest = &attr[8..];
+                        if rest.is_empty() || rest.starts_with('=') {
+                            same_site_present = true;
+                        }
+                    }
+                }
+            }
             if !secure && is_https {
                 issues.push(super::issue(
                     "Cookie without Secure flag",

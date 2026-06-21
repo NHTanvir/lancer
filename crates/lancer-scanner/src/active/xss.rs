@@ -57,14 +57,17 @@ impl ActiveCheck for XssCheck {
                 i.notes = Some(format!("insertion point: {} ({:?})", point.name, point.location));
                 issues.push(i);
             } else if body.contains(&canary) {
-                issues.push(Issue::new(
+                let mut i = Issue::new(
                     base.meta.host.clone(),
                     base.url(),
                     "Canary reflection (possible filtered XSS)",
                     Severity::Medium,
                     Confidence::Tentative,
                     format!("canary `{canary}` reflected but full payload was not — partial filtering"),
-                ));
+                );
+                i.check_id = Some(self.id().to_string());
+                i.notes = Some(format!("insertion point: {} ({:?})", point.name, point.location));
+                issues.push(i);
             }
         }
         issues
