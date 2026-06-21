@@ -208,16 +208,12 @@ fn parse_multipart(body: &str, boundary: &str, out: &mut Vec<Param>) {
         let mut name = None;
         for line in headers.split("\r\n") {
             if let Some(rest) = line.strip_prefix("Content-Disposition:") {
-                if let Some(i) = rest.find("name=") {
-                    let after = &rest[i + 5..];
-                    let n: String = after
-                        .trim_matches('"')
-                        .split(';')
-                        .next()
-                        .unwrap_or("")
-                        .trim_matches('"')
-                        .to_string();
-                    name = Some(n);
+                for attr in rest.split(';') {
+                    let attr = attr.trim();
+                    if let Some(v) = attr.strip_prefix("name=") {
+                        name = Some(v.trim_matches('"').to_string());
+                        break;
+                    }
                 }
             }
         }

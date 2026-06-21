@@ -68,7 +68,10 @@ impl CookieJar {
             .filter(|c| {
                 let domain_ok = host == c.domain
                     || (c.domain.starts_with('.') && host.ends_with(&c.domain[1..]));
-                let path_ok = path.starts_with(&c.path);
+                let path_ok = path == c.path
+                    || (path.starts_with(&c.path)
+                        && (c.path.ends_with('/')
+                            || path.as_bytes().get(c.path.len()) == Some(&b'/')));
                 let secure_ok = !c.secure || is_https;
                 let not_expired = c
                     .expires

@@ -177,11 +177,17 @@ impl HistoryStore {
             sql.push_str(" AND in_scope = 1");
         }
         sql.push_str(" ORDER BY captured_at DESC");
-        if let Some(limit) = filter.limit {
-            sql.push_str(&format!(" LIMIT {limit}"));
-        }
-        if let Some(offset) = filter.offset {
-            sql.push_str(&format!(" OFFSET {offset}"));
+        // When a mime filter is present it is applied in Rust (after deserialization)
+        // because the stored `mime` column holds the raw Content-Type string, and one
+        // MimeKind can map from several content-types. Defer LIMIT/OFFSET to Rust too so
+        // paging counts post-filtered rows; otherwise apply them in SQL as before.
+        if filter.mime.is_none() {
+            if let Some(limit) = filter.limit {
+                sql.push_str(&format!(" LIMIT {limit}"));
+            }
+            if let Some(offset) = filter.offset {
+                sql.push_str(&format!(" OFFSET {offset}"));
+            }
         }
         let mut q = sqlx::query(&sql);
         for b in binds {
@@ -190,7 +196,29 @@ impl HistoryStore {
         let rows = q.fetch_all(&self.pool).await?;
         let mut out = Vec::with_capacity(rows.len());
         for r in rows {
-            out.push(record_from_row(&r)?);
+            let rec = record_from_row(&r)?;
+            if let Some(want) = filter.mime {
+                let got = rec
+                    .mime
+                    .as_deref()
+                    .map(MimeKind::from_content_type)
+                    .unwrap_or(MimeKind::Unknown);
+                if got != want {
+                    continue;
+                }
+            }
+            out.push(rec);
+        }
+        if filter.mime.is_some() {
+            let offset = filter.offset.unwrap_or(0).max(0) as usize;
+            if offset > 0 {
+                out.drain(0..offset.min(out.len()));
+            }
+            if let Some(limit) = filter.limit {
+                if limit >= 0 {
+                    out.truncate(limit as usize);
+                }
+            }
         }
         Ok(out)
     }

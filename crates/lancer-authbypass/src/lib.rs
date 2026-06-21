@@ -166,9 +166,18 @@ pub fn generate_probes(req: &BypassRequest) -> Vec<BypassProbe> {
     // ── Trailing dot on hostname ──────────────────────────────────────────────
     // Simple string replacement — no URL parsing dep needed.
     if let Some(host_end) = find_host_end(url) {
-        let host = &url[..host_end];
+        let after_scheme = url.find("://").map(|i| i + 3).unwrap_or(0);
+        let authority = &url[after_scheme..host_end]; // host[:port], may be [ipv6][:port]
+        // Find the port-delimiting ':' only after any IPv6 closing bracket.
+        let search_from = authority.rfind(']').map(|i| i + 1).unwrap_or(0);
+        let port_colon = authority[search_from..].find(':').map(|i| search_from + i);
+        let (hostname, port) = match port_colon {
+            Some(c) => (&authority[..c], &authority[c..]), // port includes leading ':'
+            None => (authority, ""),
+        };
+        let scheme = &url[..after_scheme];
         let rest = &url[host_end..];
-        let dotted = format!("{host}.{rest}");
+        let dotted = format!("{scheme}{hostname}.{port}{rest}");
         probes.push(probe(
             BypassCategory::TrailingDot,
             "Trailing dot on hostname",

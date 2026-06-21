@@ -321,7 +321,7 @@ pub async fn run_scan(req: ScanRequest) -> Vec<ProbeResult> {
         .collect();
     let api_key = req.api_key.clone();
     let target = req.target.clone();
-    let concurrency = req.concurrency;
+    let concurrency = req.concurrency.max(1);
 
     let client = std::sync::Arc::new(client);
     futures::stream::iter(probes.into_iter())

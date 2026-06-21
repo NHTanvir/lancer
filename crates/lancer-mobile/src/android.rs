@@ -61,7 +61,10 @@ impl Adb {
         let hash = openssl_subject_hash_old(der_path)
             .unwrap_or_else(|| "lancerca".to_string());
         let on_device = format!("/sdcard/{hash}.0");
-        self.cmd(&["push", der_path.to_str().unwrap(), &on_device]).await?;
+        let der_str = der_path
+            .to_str()
+            .ok_or_else(|| anyhow!("cert path is not valid UTF-8: {}", der_path.display()))?;
+        self.cmd(&["push", der_str, &on_device]).await?;
         // Move into /data/misc/user/0/cacerts-added/ (requires su on most stock builds).
         self.cmd(&[
             "shell",

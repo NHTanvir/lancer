@@ -185,8 +185,29 @@ async fn http_rpc(server: &str, method: &str, params: serde_json::Value) -> Opti
         "method": method,
         "params": params,
     });
-    let resp = client.post(server).json(&body).send().await.ok()?;
-    let v: serde_json::Value = resp.json().await.ok()?;
+    let resp = client
+        .post(server)
+        .header(reqwest::header::ACCEPT, "application/json, text/event-stream")
+        .json(&body)
+        .send()
+        .await
+        .ok()?;
+    let ct = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let text = resp.text().await.ok()?;
+    let v: serde_json::Value = if ct.contains("text/event-stream") || text.trim_start().starts_with("event:") {
+        // Parse SSE: find the last `data:` line that is valid JSON-RPC.
+        text.lines()
+            .filter_map(|l| l.strip_prefix("data:").map(str::trim))
+            .filter_map(|d| serde_json::from_str::<serde_json::Value>(d).ok())
+            .last()?
+    } else {
+        serde_json::from_str(&text).ok()?
+    };
     v.get("result").cloned()
 }
 

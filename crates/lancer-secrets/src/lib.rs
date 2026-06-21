@@ -248,8 +248,14 @@ fn looks_placeholder(v: &str) -> bool {
 }
 
 fn snippet_around(body: &str, pos: usize, max_len: usize) -> String {
-    let start = pos.saturating_sub(30);
-    let end = (pos + max_len).min(body.len());
+    let mut start = pos.saturating_sub(30);
+    while start > 0 && !body.is_char_boundary(start) {
+        start -= 1;
+    }
+    let mut end = (pos + max_len).min(body.len());
+    while end < body.len() && !body.is_char_boundary(end) {
+        end += 1;
+    }
     body[start..end].replace('\n', " ").replace('\r', "")
 }
 

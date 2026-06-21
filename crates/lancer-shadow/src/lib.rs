@@ -158,9 +158,9 @@ fn url_encode_body(raw: &str) -> String {
     if let Some(idx) = raw.find("\r\n\r\n").or_else(|| raw.find("\n\n")) {
         let (head, body) = raw.split_at(idx);
         let body_text = body.trim_start_matches("\r\n").trim_start_matches("\n");
-        let encoded: String = body_text.chars().map(|c| {
-            if c.is_ascii_alphanumeric() { c.to_string() }
-            else { format!("%{:02X}", c as u32 & 0xff) }
+        let encoded: String = body_text.bytes().map(|b| {
+            if b.is_ascii_alphanumeric() { (b as char).to_string() }
+            else { format!("%{:02X}", b) }
         }).collect();
         return format!("{head}\r\n\r\n{encoded}");
     }

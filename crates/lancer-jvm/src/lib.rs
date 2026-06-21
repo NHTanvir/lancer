@@ -60,7 +60,14 @@ pub mod runtime {
             // jni::JavaVM::with_libjvm lets us point at a custom libjvm path —
             // important on Windows where the OS won't auto-resolve `jvm.dll`.
             let libjvm = config.libjvm.clone();
-            std::env::set_var("JAVA_HOME", libjvm.parent().and_then(|p| p.parent()).unwrap_or(&libjvm));
+            // libjvm is `<JDK>/{bin,lib}/server/<jvm-lib>`; strip three components
+            // (file -> server -> bin/lib -> JDK root) so JAVA_HOME is the JDK root.
+            let java_home = libjvm
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+                .unwrap_or(&libjvm);
+            std::env::set_var("JAVA_HOME", java_home);
             let cp = config
                 .classpath
                 .iter()

@@ -151,6 +151,14 @@ impl TemplateLibrary {
         self.templates.read().unwrap().iter().find(|t| t.id == id).cloned()
     }
 
+    /// Remove a template by id. Returns true if one was removed.
+    pub fn remove(&self, id: &str) -> bool {
+        let mut g = self.templates.write().unwrap();
+        let before = g.len();
+        g.retain(|t| t.id != id);
+        before != g.len()
+    }
+
     pub fn len(&self) -> usize {
         self.templates.read().unwrap().len()
     }
@@ -274,17 +282,21 @@ fn dsl_part<'a>(name: &str, body: &'a str, headers: &'a str) -> &'a str {
 }
 
 fn eval_dsl_term(term: &str, status: u16, body: &str, headers: &str) -> bool {
-    let term = term.trim().trim_start_matches('(').trim_end_matches(')').trim();
+    let term = term.trim();
     if term.eq_ignore_ascii_case("true") { return true; }
     if term.eq_ignore_ascii_case("false") { return false; }
 
-    // contains(part, "literal")
+    // contains(part, "literal") -- check before generic paren stripping so the
+    // function call's own closing ')' is not consumed.
     if let Some(inner) = term.strip_prefix("contains(").and_then(|s| s.strip_suffix(')')) {
         if let Some((p, lit)) = inner.split_once(',') {
             let needle = lit.trim().trim_matches('"');
             return dsl_part(p, body, headers).contains(needle);
         }
     }
+
+    // Strip a wrapping paren pair only for the bare comparison path.
+    let term = term.trim_start_matches('(').trim_end_matches(')').trim();
 
     // Comparison: LHS OP RHS
     for op in ["==", "!=", "<=", ">=", "<", ">"] {
@@ -303,6 +315,11 @@ fn eval_dsl_term(term: &str, status: u16, body: &str, headers: &str) -> bool {
             };
             if let (Some(l), Ok(r)) = (lhs_num, rhs_lit.parse::<i64>()) {
                 return match op { "==" => l == r, "!=" => l != r, "<=" => l <= r, ">=" => l >= r, "<" => l < r, _ => l > r };
+            }
+            // A numeric LHS variable with a non-numeric RHS is a malformed/unsatisfiable
+            // term; never fall through to comparing it as a string against the whole body.
+            if lhs_num.is_some() {
+                return false;
             }
             // String comparison (body/header == "literal").
             let lhs_str = dsl_part(lhs, body, headers);

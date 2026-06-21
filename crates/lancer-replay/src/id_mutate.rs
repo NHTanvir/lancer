@@ -44,16 +44,21 @@ fn detect(url: &str, body: &str) -> Vec<IdCandidate> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for (loc, text) in [("url", url), ("body", body)] {
+        let mut uuid_ranges: Vec<std::ops::Range<usize>> = Vec::new();
         for m in uuid_re.find_iter(text) {
+            uuid_ranges.push(m.range());
             let v = m.as_str().to_string();
             if seen.insert(format!("{loc}:{v}")) {
                 out.push(IdCandidate { location: loc.into(), value: v, kind: "uuid".into() });
             }
         }
         for m in int_re.find_iter(text) {
+            // Skip integer runs that fall inside an already-detected UUID.
+            if uuid_ranges.iter().any(|r| m.start() < r.end && r.start < m.end()) {
+                continue;
+            }
             let v = m.as_str().to_string();
-            // Skip tiny / obviously-non-id numbers handled elsewhere; keep ≥ 1.
-            if v.len() >= 1 && seen.insert(format!("{loc}:{v}")) {
+            if seen.insert(format!("{loc}:{v}")) {
                 out.push(IdCandidate { location: loc.into(), value: v, kind: "int".into() });
             }
         }
@@ -90,18 +95,25 @@ fn mutations(c: &IdCandidate) -> Vec<String> {
 /// Build a request with `original` replaced by `mutated` in the chosen location.
 fn mutate_request(base: &HttpRequest, c: &IdCandidate, mutated: &str) -> HttpRequest {
     if c.location == "url" {
-        let new_url = base.url().replacen(&c.value, mutated, 1);
-        let method = base.method.0.clone();
-        if let Ok(mut req) = HttpRequest::builder(method.as_str(), &new_url) {
-            req.headers = base.headers.clone();
-            req.body = base.body.clone();
-            return req;
-        }
-        base.clone()
+        // Mutate only the path/query, never the whole reconstructed URL, so the
+        // scheme/host/port (carried in req.meta) can never be rewritten.
+        let mut req = base.clone();
+        req.path = base.path.replacen(&c.value, mutated, 1);
+        req
     } else {
         let mut req = base.clone();
-        let body: String = String::from_utf8_lossy(&base.body).replacen(&c.value, mutated, 1);
-        req.body = bytes::Bytes::from(body.into_bytes());
+        // Byte-level first-occurrence splice that preserves all original bytes
+        // (ID candidates are ASCII, so this is lossless for non-UTF-8 bodies).
+        let needle = c.value.as_bytes();
+        if let Some(pos) = base.body.windows(needle.len()).position(|w| w == needle) {
+            let mut new_body = Vec::with_capacity(base.body.len() + mutated.len());
+            new_body.extend_from_slice(&base.body[..pos]);
+            new_body.extend_from_slice(mutated.as_bytes());
+            new_body.extend_from_slice(&base.body[pos + needle.len()..]);
+            req.body = bytes::Bytes::from(new_body);
+        }
+        // else: candidate not found at byte level (shouldn't happen since it was
+        // detected from the body); leave body unchanged.
         req
     }
 }

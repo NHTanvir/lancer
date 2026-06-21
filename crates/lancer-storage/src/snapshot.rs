@@ -25,7 +25,7 @@ pub async fn run_snapshot_loop(
     }
 }
 
-pub async fn take_snapshot(_storage: &Storage, db_path: &Path, max_keep: u32) -> Result<PathBuf> {
+pub async fn take_snapshot(storage: &Storage, db_path: &Path, max_keep: u32) -> Result<PathBuf> {
     let ts = Utc::now().format("%Y%m%d-%H%M%S").to_string();
     let parent = db_path
         .parent()
@@ -33,6 +33,12 @@ pub async fn take_snapshot(_storage: &Storage, db_path: &Path, max_keep: u32) ->
     let snap_dir = parent.join(".lancer-snapshots");
     tokio::fs::create_dir_all(&snap_dir).await.ok();
     let dest = snap_dir.join(format!("{}-{ts}.bak", db_path.file_name().and_then(|s| s.to_str()).unwrap_or("project")));
+    // Flush WAL contents into the main DB file so the plain copy is consistent.
+    // TRUNCATE is best-effort: if writers are active it may not fully checkpoint,
+    // but it never corrupts and we still capture all flushable committed data.
+    let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(storage.pool())
+        .await;
     tokio::fs::copy(db_path, &dest).await.context("copy db")?;
     prune(&snap_dir, max_keep).await.ok();
     Ok(dest)

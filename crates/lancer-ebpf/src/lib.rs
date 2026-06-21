@@ -126,10 +126,30 @@ pub mod linux {
                             Ok(e) => e,
                             Err(_) => break,
                         };
+                        const EVENT_LEN: usize = 28; // u32*3 + [u8;16]
                         for b in buffers.iter().take(events.read) {
-                            if let Ok(f) = serde_json::from_slice::<CapturedFlow>(b) {
-                                flows.lock().push(f);
+                            if b.len() < EVENT_LEN {
+                                continue;
                             }
+                            let pid = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+                            let dir = u32::from_le_bytes([b[4], b[5], b[6], b[7]]);
+                            let payload_bytes =
+                                u32::from_le_bytes([b[8], b[9], b[10], b[11]]) as usize;
+                            let comm_raw = &b[12..28];
+                            let end = comm_raw
+                                .iter()
+                                .position(|&c| c == 0)
+                                .unwrap_or(comm_raw.len());
+                            let comm = String::from_utf8_lossy(&comm_raw[..end]).into_owned();
+                            let direction = if dir == 0 { Direction::Tx } else { Direction::Rx };
+                            flows.lock().push(CapturedFlow {
+                                pid,
+                                comm,
+                                src: String::new(), // probe does not currently capture endpoints
+                                dst: String::new(),
+                                direction,
+                                payload_bytes,
+                            });
                         }
                     }
                 });

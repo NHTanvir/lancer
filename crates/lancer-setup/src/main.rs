@@ -50,9 +50,17 @@ fn extract_payload() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let mut archive = zip::ZipArchive::new(cursor)?;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        let name = file.name().to_string();
-        let out = tmp.join(&name);
-        if name.ends_with('/') {
+        // Reject entries with ".." / absolute paths that would escape tmp (Zip Slip).
+        let safe = match file.enclosed_name() {
+            Some(p) => p,
+            None => continue,
+        };
+        let out = tmp.join(&safe);
+        // Belt-and-suspenders containment check.
+        if !out.starts_with(&tmp) {
+            continue;
+        }
+        if file.is_dir() {
             fs::create_dir_all(&out)?;
         } else {
             if let Some(parent) = out.parent() {

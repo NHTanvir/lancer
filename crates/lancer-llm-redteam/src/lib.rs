@@ -270,9 +270,17 @@ async fn gcg_stub(client: &reqwest::Client, req: &SessionRequest, session: &mut 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 pub async fn run_session(req: SessionRequest) -> Session {
+    // SECURITY: a bearer API key is attached to every outbound LLM call, so TLS
+    // certificate/hostname validation must stay enabled by default — otherwise an
+    // active network MITM could present a forged cert and capture the key. Opt out
+    // only via an explicit env var (for self-signed/local LLM endpoints).
+    let allow_insecure = matches!(
+        std::env::var("LANCER_LLM_ALLOW_INSECURE_TLS").ok().as_deref(),
+        Some("1") | Some("true")
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
-        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_certs(allow_insecure)
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
     let mut session = Session {

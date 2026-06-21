@@ -32,8 +32,33 @@ static WILDCARD_RX: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]\*['"]"#).unwra
 pub fn find_message_endpoints(body: &str) -> Vec<PostMessageEndpoint> {
     let mut out = Vec::new();
     let mut listener_buffer: Option<(usize, String)> = None;
+
+    // Emit a buffered listener, computing origin-validation over up to 9 lines
+    // starting at its 1-based line number.
+    let emit_listener = |out: &mut Vec<PostMessageEndpoint>, l: usize, snip: String| {
+        let block = body
+            .lines()
+            .skip(l - 1)
+            .take(9)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let validated = block.contains("event.origin") || block.contains(".origin ==");
+        out.push(PostMessageEndpoint {
+            kind: EndpointKind::Listener,
+            line: l,
+            snippet: snip,
+            wildcard_origin: false,
+            origin_validated: validated,
+        });
+    };
+
     for (line_idx, line) in body.lines().enumerate() {
         if LISTENER_RX.is_match(line) {
+            // Flush any still-pending listener before overwriting the slot,
+            // otherwise closely-spaced listeners would be silently dropped.
+            if let Some((l, snip)) = listener_buffer.take() {
+                emit_listener(&mut out, l, snip);
+            }
             listener_buffer = Some((line_idx + 1, line.trim().to_string()));
         }
         if SENDER_RX.is_match(line) {
@@ -45,37 +70,17 @@ pub fn find_message_endpoints(body: &str) -> Vec<PostMessageEndpoint> {
                 origin_validated: false,
             });
         }
-        if let Some((l, snip)) = &listener_buffer {
+        if let Some((l, _)) = listener_buffer {
             // Look at the next ~8 lines for origin validation.
-            if line_idx + 1 == *l + 8 {
-                let block = body
-                    .lines()
-                    .skip(*l - 1)
-                    .take(9)
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                let validated = block.contains("event.origin") || block.contains(".origin ==");
-                out.push(PostMessageEndpoint {
-                    kind: EndpointKind::Listener,
-                    line: *l,
-                    snippet: snip.clone(),
-                    wildcard_origin: false,
-                    origin_validated: validated,
-                });
-                listener_buffer = None;
+            if line_idx + 1 == l + 8 {
+                let (l, snip) = listener_buffer.take().unwrap();
+                emit_listener(&mut out, l, snip);
             }
         }
     }
     // flush remaining listener if file ended before lookahead
-    if let Some((l, snip)) = listener_buffer {
-        let block = body.lines().skip(l - 1).collect::<Vec<_>>().join("\n");
-        out.push(PostMessageEndpoint {
-            kind: EndpointKind::Listener,
-            line: l,
-            snippet: snip,
-            wildcard_origin: false,
-            origin_validated: block.contains("event.origin"),
-        });
+    if let Some((l, snip)) = listener_buffer.take() {
+        emit_listener(&mut out, l, snip);
     }
     out
 }

@@ -118,7 +118,9 @@ pub fn known_chains() -> Vec<ChainInfo> {
 // Collaborator OAST and for chain selection, without shipping a ready-made
 // worm.
 
-fn java_envelope(chain: &str, cmd: &str) -> Vec<u8> {
+fn java_envelope(chain: &str, cmd: &str) -> Result<Vec<u8>, String> {
+    let cmd_len = u16::try_from(cmd.len())
+        .map_err(|_| "command too long for TC_STRING (max 65535 bytes)".to_string())?;
     let mut buf = Vec::new();
     // ACED 0005 — Java serialization magic
     buf.extend_from_slice(&[0xac, 0xed, 0x00, 0x05]);
@@ -134,9 +136,9 @@ fn java_envelope(chain: &str, cmd: &str) -> Vec<u8> {
     buf.extend_from_slice(&[0x00, 0x00, 0x78, 0x70]);
     // Append the cmd as a TC_STRING.
     buf.push(0x74);
-    buf.extend_from_slice(&(cmd.len() as u16).to_be_bytes());
+    buf.extend_from_slice(&cmd_len.to_be_bytes());
     buf.extend_from_slice(cmd.as_bytes());
-    buf
+    Ok(buf)
 }
 
 fn dotnet_envelope(chain: &str, cmd: &str) -> Vec<u8> {
@@ -168,7 +170,7 @@ pub fn generate(req: &PayloadRequest) -> Result<GeneratedPayload, String> {
         .ok_or_else(|| format!("unknown chain: {}", req.chain))?;
 
     let bytes = match info.platform {
-        Platform::Java => java_envelope(&info.name, &req.cmd),
+        Platform::Java => java_envelope(&info.name, &req.cmd)?,
         Platform::DotNet => dotnet_envelope(&info.name, &req.cmd),
     };
 

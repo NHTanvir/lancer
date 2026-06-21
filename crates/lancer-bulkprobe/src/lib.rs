@@ -125,7 +125,10 @@ fn extract_title(body: &str) -> Option<String> {
     let lower = body.to_lowercase();
     let start = lower.find("<title>")? + 7;
     let end = start + lower[start..].find("</title>")?;
-    Some(body[start..end].trim().chars().take(120).collect())
+    // `start`/`end` are valid char boundaries within `lower`; slice `lower`, not
+    // `body`, because `to_lowercase()` is not length-preserving and offsets
+    // computed on `lower` may not be char boundaries in `body`.
+    Some(lower[start..end].trim().chars().take(120).collect())
 }
 
 // ── Single host probe ─────────────────────────────────────────────────────────
@@ -217,7 +220,7 @@ async fn probe_one(host: String, timeout_secs: u64) -> ProbeResult {
 
 /// Probe all hosts concurrently, up to `req.concurrency` at a time.
 pub async fn run_probes(req: ProbeRequest) -> Vec<ProbeResult> {
-    let concurrency = req.concurrency;
+    let concurrency = req.concurrency.max(1);
     let timeout = req.timeout_secs;
     futures::stream::iter(req.hosts)
         .map(move |h| probe_one(h, timeout))

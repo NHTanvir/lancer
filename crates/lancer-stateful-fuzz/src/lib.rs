@@ -150,6 +150,7 @@ fn extract_produces(op: &serde_json::Value) -> Vec<String> {
 /// Build sequences: an op that produces a field is followed by ops that consume that field.
 pub fn infer_sequences(ops: &[ApiOp], max: usize) -> Vec<Sequence> {
     let mut sequences = Vec::new();
+    if max == 0 { return sequences; }
     // Producers of "id"-like names
     static ID_LIKE: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| {
         Regex::new(r"(?i)\bid\b|_id$|^id$|uuid|token").unwrap()
@@ -188,8 +189,11 @@ async fn run_sequence(
         let mut path = op.path.clone();
         if let Some(id) = &produced_id {
             // Replace first `{...}` segment with the produced id.
-            if let (Some(s), Some(e)) = (path.find('{'), path.find('}')) {
-                path.replace_range(s..=e, id);
+            if let Some(s) = path.find('{') {
+                if let Some(rel) = path[s..].find('}') {
+                    let e = s + rel; // '}' is guaranteed to be at or after '{'
+                    path.replace_range(s..=e, id);
+                }
             }
         }
         let url = format!("{}{}", base_url.trim_end_matches('/'), path);

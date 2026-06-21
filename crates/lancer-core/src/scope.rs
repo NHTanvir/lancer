@@ -149,15 +149,37 @@ impl FromStr for ScopeRule {
             Some(i) => (rest[..i].to_string(), Some(rest[i..].to_string())),
             None => (rest, None),
         };
-        let (host, port) = match host_port.rfind(':') {
-            Some(i) => {
-                let h = host_port[..i].to_string();
-                let p = host_port[i + 1..]
-                    .parse::<u16>()
-                    .map_err(|_| Error::InvalidScope(format!("bad port in {s}")))?;
-                (h, Some(p))
+        let (host, port) = if host_port.starts_with('[') {
+            // Bracketed IPv6 literal: only a ':' AFTER the closing ']' is a port separator.
+            match host_port.find(']') {
+                Some(close) => {
+                    let h = host_port[..=close].to_string();
+                    let rest = &host_port[close + 1..];
+                    let port = match rest.strip_prefix(':') {
+                        Some(p) => Some(
+                            p.parse::<u16>()
+                                .map_err(|_| Error::InvalidScope(format!("bad port in {s}")))?,
+                        ),
+                        None if rest.is_empty() => None,
+                        None => return Err(Error::InvalidScope(format!("bad host in {s}"))),
+                    };
+                    (h, port)
+                }
+                None => {
+                    return Err(Error::InvalidScope(format!("unterminated IPv6 literal in {s}")))
+                }
             }
-            None => (host_port, None),
+        } else {
+            match host_port.rfind(':') {
+                Some(i) => {
+                    let h = host_port[..i].to_string();
+                    let p = host_port[i + 1..]
+                        .parse::<u16>()
+                        .map_err(|_| Error::InvalidScope(format!("bad port in {s}")))?;
+                    (h, Some(p))
+                }
+                None => (host_port, None),
+            }
         };
         Ok(ScopeRule {
             kind: ScopeRuleKind::Include,

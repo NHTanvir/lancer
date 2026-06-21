@@ -123,7 +123,9 @@ pub fn parse_kubernetes(body: &str) -> Result<AttackSurface> {
             if let Some(ports) = v.get("spec").and_then(|sp| sp.get("ports")).and_then(|p| p.as_sequence()) {
                 for p in ports {
                     if let Some(port) = p.get("port").and_then(|x| x.as_u64()) {
-                        s.exposed_ports.push(port as u16);
+                        if let Ok(p16) = u16::try_from(port) {
+                            s.exposed_ports.push(p16);
+                        }
                     }
                 }
             }
